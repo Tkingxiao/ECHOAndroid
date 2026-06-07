@@ -8,23 +8,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 object EchoColors {
-    val Night = Color(0xFF0B0B12)
-    val Ink = Color(0xFF181923)
-    val Slate = Color(0xFF303342)
-    val DeepBlue = Color(0xFF185A92)
+    // Roon 风格中性炭灰 + Shakespeare 蓝
+    val Night = Color(0xFF161618)
+    val Ink = Color(0xFF222226)
+    val Slate = Color(0xFF2E2E33)
+    val DeepBlue = Color(0xFF3E7BA8)
     val Brass = Color(0xFFE1A33A)
     val Coral = Color(0xFFD7675D)
-    val Sky = Color(0xFF67A8F2)
-    val Paper = Color(0xFFFBFBFE)
+    val Sky = Color(0xFF62B0D9)
+    val RoonBlue = Color(0xFF62B0D9)
+    val Paper = Color(0xFFF1F1F3)
     val Mist = Color(0xFFEEF0F6)
-    val Smoke = Color(0xFFC9CCD6)
+    val Smoke = Color(0xFFA8A8AE)
 }
 
 private val EchoDarkScheme = darkColorScheme(
-    primary = EchoColors.Sky,
-    onPrimary = EchoColors.Night,
-    secondary = EchoColors.Brass,
-    onSecondary = EchoColors.Night,
+    primary = EchoColors.RoonBlue,
+    onPrimary = Color(0xFF06121A),
+    secondary = EchoColors.RoonBlue,
+    onSecondary = Color(0xFF06121A),
     tertiary = EchoColors.Coral,
     background = EchoColors.Night,
     onBackground = EchoColors.Paper,
@@ -32,8 +34,8 @@ private val EchoDarkScheme = darkColorScheme(
     onSurface = EchoColors.Paper,
     surfaceVariant = EchoColors.Slate,
     onSurfaceVariant = EchoColors.Smoke,
-    outline = Color(0xFF6B7082),
-    outlineVariant = Color(0xFF3B3E4E),
+    outline = Color(0xFF4A4A52),
+    outlineVariant = Color(0xFF323238),
 )
 
 private val EchoLightScheme = lightColorScheme(
