@@ -18,6 +18,12 @@ rootProject.name = "ECHOAndroid"
 
 include(":app")
 include(":core:data")
+include(":core:model")
 include(":core:playback")
 include(":core:connect")
 include(":core:design")
+include(":feature:home")
+include(":feature:library")
+include(":feature:player")
+include(":feature:connect")
+include(":feature:settings")

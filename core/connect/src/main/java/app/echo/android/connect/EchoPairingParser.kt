@@ -1,6 +1,7 @@
 package app.echo.android.connect
 
 import android.net.Uri
+import app.echo.android.model.connect.EchoRemoteEndpoint
 
 object EchoPairingParser {
     fun parse(raw: String): EchoRemoteEndpoint? {

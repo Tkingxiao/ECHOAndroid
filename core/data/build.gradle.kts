@@ -21,6 +21,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:model"))
+
     implementation(libs.androidx.core.ktx)
     api(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
@@ -29,4 +31,6 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     ksp(libs.androidx.room.compiler)
+
+    testImplementation(libs.junit)
 }

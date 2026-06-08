@@ -8,8 +8,8 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [LibraryTrackEntity::class],
-    version = 2,
+    entities = [LibraryTrackEntity::class, LibraryTrackFtsEntity::class],
+    version = 5,
     exportSchema = true,
 )
 abstract class EchoLibraryDatabase : RoomDatabase() {
@@ -18,12 +18,92 @@ abstract class EchoLibraryDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): EchoLibraryDatabase =
             Room.databaseBuilder(context, EchoLibraryDatabase::class.java, "echo-library.db")
-                .addMigrations(Migration1To2)
+                .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
                 .build()
 
         private val Migration1To2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE library_tracks ADD COLUMN artworkUri TEXT")
+            }
+        }
+
+        private val Migration2To3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE library_tracks ADD COLUMN lastSeenScanRunId INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE library_tracks ADD COLUMN fingerprint TEXT")
+                db.execSQL("ALTER TABLE library_tracks ADD COLUMN normalizedTitle TEXT")
+                db.execSQL("ALTER TABLE library_tracks ADD COLUMN normalizedArtist TEXT")
+                db.execSQL("ALTER TABLE library_tracks ADD COLUMN normalizedAlbum TEXT")
+                db.execSQL(
+                    """
+                    UPDATE library_tracks
+                    SET normalizedTitle = lower(trim(title)),
+                        normalizedArtist = lower(trim(artist)),
+                        normalizedAlbum = CASE WHEN album IS NULL THEN NULL ELSE lower(trim(album)) END
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS index_library_tracks_source_lastSeenScanRunId
+                    ON library_tracks(source, lastSeenScanRunId)
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        private val Migration3To4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS library_tracks_fts
+                    USING FTS4(
+                        trackId TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        artist TEXT NOT NULL,
+                        album TEXT NOT NULL,
+                        albumArtist TEXT NOT NULL,
+                        normalizedText TEXT NOT NULL,
+                        tokenize=unicode61
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO library_tracks_fts(trackId, title, artist, album, albumArtist, normalizedText)
+                    SELECT id,
+                           title,
+                           artist,
+                           IFNULL(album, ''),
+                           IFNULL(albumArtist, ''),
+                           lower(trim(title || ' ' || artist || ' ' || IFNULL(album, '') || ' ' || IFNULL(albumArtist, '')))
+                    FROM library_tracks
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        private val Migration4To5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE library_tracks ADD COLUMN normalizedAlbumArtist TEXT")
+                db.execSQL(
+                    """
+                    UPDATE library_tracks
+                    SET normalizedAlbumArtist = CASE
+                        WHEN albumArtist IS NULL THEN NULL
+                        ELSE lower(trim(albumArtist))
+                    END
+                    """.trimIndent(),
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_library_tracks_normalizedTitle ON library_tracks(normalizedTitle)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_library_tracks_normalizedAlbum ON library_tracks(normalizedAlbum)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_library_tracks_normalizedArtist ON library_tracks(normalizedArtist)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_library_tracks_normalizedAlbumArtist ON library_tracks(normalizedAlbumArtist)")
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS index_library_tracks_normalizedAlbum_normalizedAlbumArtist
+                    ON library_tracks(normalizedAlbum, normalizedAlbumArtist)
+                    """.trimIndent(),
+                )
             }
         }
     }

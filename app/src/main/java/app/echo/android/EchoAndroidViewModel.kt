@@ -2,48 +2,52 @@ package app.echo.android
 
 import android.app.Application
 import android.content.ComponentName
-import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import androidx.paging.map
 import app.echo.android.data.EchoLibraryDatabase
 import app.echo.android.data.EchoLibraryRepository
-import app.echo.android.data.LibraryTrackEntity
 import app.echo.android.data.MediaStoreTrackScanner
-import app.echo.android.playback.EchoPlaybackDiagnostics
-import app.echo.android.playback.EchoPlaybackError
-import app.echo.android.playback.EchoRepeatMode
-import app.echo.android.playback.EchoPlaybackState
-import app.echo.android.playback.EchoPlaybackStatus
+import app.echo.android.data.toEchoTrack
+import app.echo.android.model.library.AlbumSummary
+import app.echo.android.model.library.ArtistSummary
+import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.LibraryScanPhase
+import app.echo.android.model.library.LibraryScanProgress
+import app.echo.android.model.library.LibraryStats
+import app.echo.android.model.playback.EchoAudioErrorKind
+import app.echo.android.model.playback.EchoPlaybackDiagnostics
+import app.echo.android.model.playback.EchoPlaybackError
+import app.echo.android.model.playback.EchoPlaybackState
+import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.playback.EchoPlaybackService
-import app.echo.android.playback.EchoTrackRef
+import app.echo.android.playback.toEchoPlaybackStatus
+import app.echo.android.playback.toMediaItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 
-data class LibraryScanUiState(
-    val isScanning: Boolean = false,
-    val lastScanCount: Int? = null,
-    val error: String? = null,
-)
-
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @UnstableApi
 class EchoAndroidViewModel(application: Application) : AndroidViewModel(application) {
     private val database = EchoLibraryDatabase.create(application)
@@ -55,34 +59,83 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     private val _libraryQuery = MutableStateFlow("")
     val libraryQuery: StateFlow<String> = _libraryQuery.asStateFlow()
 
-    val tracks: Flow<PagingData<LibraryTrackEntity>> =
+    private val debouncedLibraryQuery: Flow<String> =
         _libraryQuery
+            .map(String::trim)
+            .debounce(300L)
+            .distinctUntilChanged()
+
+    val tracks: Flow<PagingData<EchoTrack>> =
+        debouncedLibraryQuery
             .flatMapLatest { query -> repository.pagedTracks(query) }
+            .map { pagingData -> pagingData.map { it.toEchoTrack() } }
             .cachedIn(viewModelScope)
 
-    private val _scanState = MutableStateFlow(LibraryScanUiState())
-    val scanState: StateFlow<LibraryScanUiState> = _scanState.asStateFlow()
+    val albums: Flow<PagingData<AlbumSummary>> =
+        debouncedLibraryQuery
+            .flatMapLatest { query -> repository.pagedAlbums(query) }
+            .cachedIn(viewModelScope)
+
+    val artists: Flow<PagingData<ArtistSummary>> =
+        debouncedLibraryQuery
+            .flatMapLatest { query -> repository.pagedArtists(query) }
+            .cachedIn(viewModelScope)
+
+    val libraryStats: Flow<LibraryStats> = repository.observeLibraryStats()
+
+    val recommendedTracks: Flow<List<EchoTrack>> =
+        repository.observeRecommendedTracks()
+            .map { tracks -> tracks.map { it.toEchoTrack() } }
+
+    private val _scanState = MutableStateFlow(LibraryScanProgress())
+    val scanState: StateFlow<LibraryScanProgress> = _scanState.asStateFlow()
 
     private val _playbackStatus = MutableStateFlow(EchoPlaybackStatus())
     val playbackStatus: StateFlow<EchoPlaybackStatus> = _playbackStatus.asStateFlow()
 
     private var controller: MediaController? = null
     private var progressJob: Job? = null
+    private var scanJob: Job? = null
 
     init {
         connectController()
     }
 
     fun refreshLibrary() {
-        viewModelScope.launch {
-            _scanState.value = LibraryScanUiState(isScanning = true)
-            runCatching {
-                withContext(Dispatchers.IO) { repository.refreshMediaStoreSnapshot() }
-            }.onSuccess { count ->
-                _scanState.value = LibraryScanUiState(lastScanCount = count)
-            }.onFailure { error ->
-                _scanState.value = LibraryScanUiState(error = error.message ?: "曲库扫描失败")
+        if (scanJob?.isActive == true) return
+        scanJob = viewModelScope.launch {
+            try {
+                repository.refreshMediaStoreSnapshot()
+                    .collect { progress -> _scanState.value = progress }
+            } catch (error: CancellationException) {
+                _scanState.value = _scanState.value.copy(
+                    phase = LibraryScanPhase.Cancelled,
+                    currentTitle = null,
+                    error = null,
+                    isCompleted = true,
+                )
+                throw error
+            } catch (error: Throwable) {
+                _scanState.value = _scanState.value.copy(
+                    phase = LibraryScanPhase.Error,
+                    currentTitle = null,
+                    error = error.message ?: "曲库扫描失败",
+                    isCompleted = true,
+                )
             }
+        }
+    }
+
+    fun cancelScan() {
+        val job = scanJob
+        if (job?.isActive == true) {
+            job.cancel()
+            _scanState.value = _scanState.value.copy(
+                phase = LibraryScanPhase.Cancelled,
+                currentTitle = null,
+                error = null,
+                isCompleted = true,
+            )
         }
     }
 
@@ -90,7 +143,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         _libraryQuery.value = query
     }
 
-    fun play(track: LibraryTrackEntity) {
+    fun play(track: EchoTrack) {
         controller?.run {
             setMediaItem(track.toMediaItem())
             prepare()
@@ -98,13 +151,31 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun playQueue(queue: List<LibraryTrackEntity>, startIndex: Int) {
+    fun playQueue(queue: List<EchoTrack>, startIndex: Int) {
         if (queue.isEmpty()) return
         val safeStartIndex = startIndex.coerceIn(0, queue.lastIndex)
         controller?.run {
             setMediaItems(queue.map { it.toMediaItem() }, safeStartIndex, 0L)
             prepare()
             play()
+        }
+    }
+
+    fun playAlbum(albumKey: String) {
+        viewModelScope.launch {
+            val queue = withContext(Dispatchers.IO) {
+                repository.albumTracks(albumKey).map { it.toEchoTrack() }
+            }
+            if (queue.isNotEmpty()) playQueue(queue, 0)
+        }
+    }
+
+    fun playArtist(artistKey: String) {
+        viewModelScope.launch {
+            val queue = withContext(Dispatchers.IO) {
+                repository.artistTracks(artistKey).map { it.toEchoTrack() }
+            }
+            if (queue.isNotEmpty()) playQueue(queue, 0)
         }
     }
 
@@ -145,6 +216,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     override fun onCleared() {
+        scanJob?.cancel()
         progressJob?.cancel()
         controller?.removeListener(playerListener)
         controller?.release()
@@ -170,7 +242,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
                         state = EchoPlaybackState.Error,
                         diagnostics = EchoPlaybackDiagnostics(
                             lastError = EchoPlaybackError(
-                                kind = app.echo.android.playback.EchoAudioErrorKind.Unknown,
+                                kind = EchoAudioErrorKind.Unknown,
                                 message = error.message ?: "媒体控制器连接失败",
                                 recoverable = true,
                             ),
@@ -203,65 +275,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun updatePlaybackStatus(player: Player) {
-        val item = player.currentMediaItem
-        val metadata = item?.mediaMetadata
-        val track = item?.let {
-            EchoTrackRef(
-                id = it.mediaId,
-                uri = Uri.parse(it.localConfiguration?.uri?.toString().orEmpty()),
-                title = metadata?.title?.toString().orEmpty().ifBlank { "未知曲目" },
-                artist = metadata?.artist?.toString().orEmpty().ifBlank { "未知艺术家" },
-                album = metadata?.albumTitle?.toString(),
-                artworkUri = metadata?.artworkUri,
-                durationMs = player.duration.takeIf { duration -> duration > 0L } ?: 0L,
-            )
-        }
-        val duration = player.duration.takeIf { it > 0L } ?: track?.durationMs ?: 0L
-        _playbackStatus.value = EchoPlaybackStatus(
-            state = player.toEchoState(),
-            track = track,
-            positionMs = player.currentPosition.coerceAtLeast(0L),
-            durationMs = duration,
-            isPlaying = player.isPlaying,
-            repeatMode = player.repeatMode.toEchoRepeatMode(),
-            shuffleEnabled = player.shuffleModeEnabled,
-            diagnostics = EchoPlaybackDiagnostics(
-                outputRoute = "Media3 / AudioTrack",
-                bufferedMs = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0L),
-                requestToken = item?.mediaId?.hashCode()?.toLong() ?: 0L,
-                lastCommand = if (player.isPlaying) "play" else "idle",
-            ),
-        )
+        _playbackStatus.value = player.toEchoPlaybackStatus()
     }
-
-    private fun Player.toEchoState(): EchoPlaybackState = when {
-        playbackState == Player.STATE_IDLE && currentMediaItem == null -> EchoPlaybackState.Idle
-        playbackState == Player.STATE_IDLE -> EchoPlaybackState.Stopped
-        playbackState == Player.STATE_BUFFERING -> EchoPlaybackState.Buffering
-        playbackState == Player.STATE_ENDED -> EchoPlaybackState.Ended
-        isPlaying -> EchoPlaybackState.Playing
-        playWhenReady -> EchoPlaybackState.Loading
-        else -> EchoPlaybackState.Paused
-    }
-
-    private fun Int.toEchoRepeatMode(): EchoRepeatMode = when (this) {
-        Player.REPEAT_MODE_ALL -> EchoRepeatMode.All
-        Player.REPEAT_MODE_ONE -> EchoRepeatMode.One
-        else -> EchoRepeatMode.Off
-    }
-
-    private fun LibraryTrackEntity.toMediaItem(): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(id)
-            .setUri(contentUri)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setArtist(artist)
-                    .setAlbumTitle(album)
-                    .setAlbumArtist(albumArtist)
-                    .setArtworkUri(artworkUri?.let(Uri::parse))
-                    .build(),
-            )
-            .build()
 }

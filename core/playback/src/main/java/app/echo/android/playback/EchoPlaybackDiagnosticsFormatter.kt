@@ -1,5 +1,7 @@
 package app.echo.android.playback
 
+import app.echo.android.model.playback.EchoPlaybackDiagnostics
+
 fun EchoPlaybackDiagnostics.toReadableLines(): List<String> = buildList {
     add("route=$outputRoute")
     add("offload=$offloadActive")

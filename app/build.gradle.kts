@@ -27,9 +27,15 @@ android {
 
 dependencies {
     implementation(project(":core:data"))
+    implementation(project(":core:model"))
     implementation(project(":core:playback"))
     implementation(project(":core:connect"))
     implementation(project(":core:design"))
+    implementation(project(":feature:home"))
+    implementation(project(":feature:library"))
+    implementation(project(":feature:player"))
+    implementation(project(":feature:connect"))
+    implementation(project(":feature:settings"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
