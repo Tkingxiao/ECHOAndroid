@@ -65,6 +65,7 @@ internal fun AlbumDetailPage(
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(album.artworkUri, seedKey = album.albumKey)
+    val loadedTracks = tracks.itemSnapshotList.items
     Box(modifier = modifier.fillMaxSize()) {
         // 从封面提取的色调渐变，仅渲染在上半屏，下方融入页面底色
         Box(
@@ -98,7 +99,13 @@ internal fun AlbumDetailPage(
                     AlbumHero(album = album, palette = palette)
                     Spacer(Modifier.height(18.dp))
                     AlbumActionBar(palette = palette, onPlayAll = onPlayAll, onShuffle = onShuffle)
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(18.dp))
+                    AlbumDetailInsights(
+                        source = sourceInsight(loadedTracks),
+                        info = albumInfoInsight(album, loadedTracks),
+                        palette = palette,
+                    )
+                    Spacer(Modifier.height(22.dp))
                     AlbumTracksHeader(count = album.trackCount)
                     Spacer(Modifier.height(10.dp))
                 }
@@ -150,6 +157,7 @@ internal fun ArtistDetailPage(
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(artist.artworkUri, seedKey = artist.artistKey)
+    val loadedTracks = tracks.itemSnapshotList.items
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -182,7 +190,13 @@ internal fun ArtistDetailPage(
                     ArtistHero(artist = artist, palette = palette)
                     Spacer(Modifier.height(18.dp))
                     AlbumActionBar(palette = palette, onPlayAll = onPlayAll, onShuffle = onShuffle)
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(18.dp))
+                    AlbumDetailInsights(
+                        source = sourceInsight(loadedTracks),
+                        info = artistInfoInsight(artist, loadedTracks),
+                        palette = palette,
+                    )
+                    Spacer(Modifier.height(22.dp))
                     AlbumTracksHeader(count = artist.trackCount)
                     Spacer(Modifier.height(10.dp))
                 }
@@ -397,6 +411,69 @@ private fun AlbumActionBar(
 }
 
 @Composable
+private fun AlbumDetailInsights(
+    source: DetailInsight,
+    info: DetailInsight,
+    palette: ArtworkPalette,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        DetailInsightCard(
+            insight = source,
+            accent = palette.vibrant,
+            modifier = Modifier.weight(1f),
+        )
+        DetailInsightCard(
+            insight = info,
+            accent = palette.deep,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun DetailInsightCard(
+    insight: DetailInsight,
+    accent: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.62f))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.78f)), RoundedCornerShape(18.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text(
+            insight.title,
+            color = accent,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            insight.primary,
+            color = RoonInk,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            insight.secondary,
+            color = RoonMuted,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
 private fun AlbumTracksHeader(count: Int) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -415,6 +492,98 @@ private fun AlbumTracksHeader(count: Int) {
             style = MaterialTheme.typography.labelLarge,
         )
     }
+}
+
+private data class DetailInsight(
+    val title: String,
+    val primary: String,
+    val secondary: String,
+)
+
+private fun sourceInsight(tracks: List<EchoTrack>): DetailInsight {
+    val sourceLabel = tracks
+        .map { it.source.id }
+        .distinct()
+        .singleOrNull()
+        ?.let(::sourceLabel)
+        ?: if (tracks.isEmpty()) "本机媒体库" else "多来源"
+    val formats = tracks
+        .mapNotNull { formatMimeType(it.mimeType) }
+        .distinct()
+        .take(3)
+    val size = tracks.sumOf { it.sizeBytes }.takeIf { it > 0L }?.let(::formatFileSize)
+    val secondary = buildList {
+        if (formats.isNotEmpty()) add(formats.joinToString(" / "))
+        size?.let { add(it) }
+        if (isEmpty()) add("等待曲目信息")
+    }.joinToString(" · ")
+    return DetailInsight("来源", sourceLabel, secondary)
+}
+
+private fun albumInfoInsight(album: AlbumSummary, tracks: List<EchoTrack>): DetailInsight {
+    val primary = album.albumArtist ?: album.artist ?: "未知艺术家"
+    val year = album.year?.takeIf { it > 0 }?.toString()
+    val discs = tracks.mapNotNull { it.discNumber?.takeIf { disc -> disc > 0 } }.distinct().size
+    val secondary = buildList {
+        year?.let { add(it) }
+        add("${album.trackCount} 首")
+        if (discs > 1) add("$discs 碟")
+        if (album.durationMs > 0L) add(readableDuration(album.durationMs))
+    }.joinToString(" · ")
+    return DetailInsight("信息", primary, secondary)
+}
+
+private fun artistInfoInsight(artist: ArtistSummary, tracks: List<EchoTrack>): DetailInsight {
+    val formats = tracks.mapNotNull { formatMimeType(it.mimeType) }.distinct().take(2)
+    val primary = "${artist.albumCount.coerceAtLeast(0)} 张专辑"
+    val secondary = buildList {
+        add("${artist.trackCount} 首")
+        if (artist.durationMs > 0L) add(readableDuration(artist.durationMs))
+        if (formats.isNotEmpty()) add(formats.joinToString(" / "))
+    }.joinToString(" · ")
+    return DetailInsight("信息", primary, secondary)
+}
+
+private fun sourceLabel(sourceId: String): String = when (sourceId.lowercase()) {
+    "mediastore" -> "本机媒体库"
+    "unknown" -> "未知来源"
+    else -> sourceId
+}
+
+private fun formatMimeType(mimeType: String?): String? {
+    val raw = mimeType?.substringAfter("audio/", missingDelimiterValue = mimeType)
+        ?.substringBefore(";")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+    return when {
+        raw.equals("mpeg", ignoreCase = true) -> "MP3"
+        raw.equals("mp4", ignoreCase = true) || raw.equals("mp4a-latm", ignoreCase = true) -> "AAC"
+        raw.equals("x-wav", ignoreCase = true) || raw.equals("wav", ignoreCase = true) -> "WAV"
+        raw.equals("x-flac", ignoreCase = true) || raw.equals("flac", ignoreCase = true) -> "FLAC"
+        else -> raw.uppercase()
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes < 1024L) return "$bytes B"
+    val units = listOf("KB", "MB", "GB", "TB")
+    var value = bytes / 1024.0
+    var unitIndex = 0
+    while (value >= 1024.0 && unitIndex < units.lastIndex) {
+        value /= 1024.0
+        unitIndex += 1
+    }
+    return if (value >= 100.0) {
+        "${value.toInt()} ${units[unitIndex]}"
+    } else {
+        String.format("%.1f %s", value, units[unitIndex])
+    }
+}
+
+private fun readableDuration(durationMs: Long): String {
+    val minutes = (durationMs / 60000L).toInt()
+    return if (minutes >= 1) "$minutes 分钟" else formatDuration(durationMs)
 }
 
 @Composable

@@ -9,6 +9,7 @@ data class AlbumSummary(
     val trackCount: Int,
     val durationMs: Long,
     val year: Int?,
+    val addedAtSeconds: Long = 0L,
 )
 
 enum class AlbumSortMode {

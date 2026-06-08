@@ -1,5 +1,6 @@
 package app.echo.android
 
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -73,6 +74,7 @@ import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.LibraryStats
 
 private val DockMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
+private val LyricsDocumentMimeTypes = arrayOf("text/*", "application/xml", "application/octet-stream", "*/*")
 
 @Composable
 fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
@@ -88,17 +90,31 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val folderScanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let(viewModel::refreshLibraryFolder)
     }
+    val lyricsImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { lyricsUri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    lyricsUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            viewModel.importLyrics(lyricsUri)
+        }
+    }
 
     val remoteClient = remember { EchoRemoteClient() }
     val remoteStatus by remoteClient.status.collectAsStateWithLifecycle()
     val playbackStatus by viewModel.playbackStatus.collectAsStateWithLifecycle()
+    val lyricsState by viewModel.lyricsState.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle(LibraryStats())
+    val recentPlaybackAlbums by viewModel.recentPlaybackAlbums.collectAsStateWithLifecycle()
+    val recentPlaybackArtists by viewModel.recentPlaybackArtists.collectAsStateWithLifecycle()
+    val recentlyAddedAlbums by viewModel.recentlyAddedAlbums.collectAsStateWithLifecycle(emptyList())
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     val albums = viewModel.albums.collectAsLazyPagingItems()
     val artists = viewModel.artists.collectAsLazyPagingItems()
     val homeAlbumSnapshot = albums.itemSnapshotList.items
-    val homeRecentAlbums = homeAlbumSnapshot.take(12)
     var homeRecommendationSeed by remember { mutableIntStateOf(0) }
     val homeRecommendedAlbums = remember(homeRecommendationSeed, homeAlbumSnapshot.map(AlbumSummary::albumKey)) {
         homeAlbumSnapshot.shuffled().take(8)
@@ -183,8 +199,11 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 trackCount = libraryStats.trackCount,
                                 albumCount = libraryStats.albumCount,
                                 artistCount = libraryStats.artistCount,
-                                recentAlbums = homeRecentAlbums,
+                                recentPlayedAlbums = recentPlaybackAlbums,
+                                recentlyAddedAlbums = recentlyAddedAlbums,
                                 recommendedAlbums = homeRecommendedAlbums,
+                                topArtists = recentPlaybackArtists,
+                                favoriteAlbums = recentPlaybackAlbums.take(4),
                                 onPlayPause = viewModel::playPause,
                                 onNext = viewModel::skipNext,
                                 onPrevious = viewModel::skipPrevious,
@@ -197,6 +216,11 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onOpenAlbum = { album ->
                                     selectedArtist = null
                                     selectedAlbum = album
+                                    selectedTab = EchoTab.Library.ordinal
+                                },
+                                onOpenArtist = { artist ->
+                                    selectedAlbum = null
+                                    selectedArtist = artist
                                     selectedTab = EchoTab.Library.ordinal
                                 },
                                 onOpenLibrary = { selectedTab = EchoTab.Library.ordinal },
@@ -296,12 +320,30 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
             ) {
                 NowPlayingScreen(
                     status = playbackStatus,
+                    lyricsState = lyricsState,
                     onDismiss = { nowPlayingExpanded = false },
                     onPlayPause = viewModel::playPause,
                     onNext = viewModel::skipNext,
                     onPrevious = viewModel::skipPrevious,
                     onSeek = viewModel::seekTo,
                     onCyclePlayMode = viewModel::cyclePlayMode,
+                    onImportLyrics = { lyricsImportLauncher.launch(LyricsDocumentMimeTypes) },
+                    onOpenArtist = {
+                        viewModel.openCurrentPlaybackArtist { artist ->
+                            selectedAlbum = null
+                            selectedArtist = artist
+                            selectedTab = EchoTab.Library.ordinal
+                            nowPlayingExpanded = false
+                        }
+                    },
+                    onOpenAlbum = {
+                        viewModel.openCurrentPlaybackAlbum { album ->
+                            selectedArtist = null
+                            selectedAlbum = album
+                            selectedTab = EchoTab.Library.ordinal
+                            nowPlayingExpanded = false
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             }

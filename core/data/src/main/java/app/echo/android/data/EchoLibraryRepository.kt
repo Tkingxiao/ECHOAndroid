@@ -67,6 +67,10 @@ class EchoLibraryRepository(
         database.trackDao().observeRecommendedTracks(limit)
             .flowOn(Dispatchers.IO)
 
+    fun observeRecentlyAddedAlbums(limit: Int = RecentAlbumLimit): Flow<List<AlbumSummary>> =
+        database.trackDao().observeRecentlyAddedAlbums(limit)
+            .flowOn(Dispatchers.IO)
+
     fun pagedAlbums(
         query: String? = null,
         sort: AlbumSortMode = AlbumSortMode.Title,
@@ -122,6 +126,19 @@ class EchoLibraryRepository(
         )
         return withAnchorTrack(anchor, candidates, safeLimit)
     }
+
+    suspend fun albumSummaryForTrack(trackId: String): AlbumSummary? {
+        val track = database.trackDao().getTrackById(trackId) ?: return null
+        return database.trackDao().getAlbumSummary(track.albumKey())
+    }
+
+    suspend fun artistSummaryForTrack(trackId: String): ArtistSummary? {
+        val track = database.trackDao().getTrackById(trackId) ?: return null
+        return database.trackDao().getArtistSummary(track.artistKey())
+    }
+
+    suspend fun trackForLyrics(trackId: String): LibraryTrackEntity? =
+        database.trackDao().getTrackById(trackId)
 
     suspend fun albumTracksForPlayback(
         albumKey: String,
@@ -306,6 +323,16 @@ class EchoLibraryRepository(
         return (listOf(anchor) + candidates.filterNot { it.id == anchor.id }).take(limit)
     }
 
+    private fun LibraryTrackEntity.albumKey(): String =
+        "${normalizedAlbum.normalizedKeyFallback("未知专辑")}::" +
+            normalizedAlbumArtist.normalizedKeyFallback(normalizedArtist.normalizedKeyFallback("未知艺术家"))
+
+    private fun LibraryTrackEntity.artistKey(): String =
+        normalizedArtist.normalizedKeyFallback("未知艺术家")
+
+    private fun String?.normalizedKeyFallback(fallback: String): String =
+        this?.takeIf { it.isNotBlank() } ?: fallback
+
     private fun albumPlaybackQuery(albumKey: String, limit: Int): SimpleSQLiteQuery {
         val fallbackParts = albumKey.split("::", limit = 2)
         val fallbackAlbum = fallbackParts.getOrElse(0) { albumKey }
@@ -356,6 +383,7 @@ class EchoLibraryRepository(
         const val DatabaseBatchSize = 500
         const val ProgressEmitStride = 100
         const val RecommendedTrackLimit = 8
+        const val RecentAlbumLimit = 12
         const val TrackQueueLimit = 200
         const val AggregationQueueLimit = 500
     }

@@ -163,7 +163,8 @@ interface LibraryTrackDao {
                MAX(artworkUri) AS artworkUri,
                COUNT(*) AS trackCount,
                COALESCE(SUM(durationMs), 0) AS durationMs,
-               MIN(CASE WHEN year IS NOT NULL AND year > 0 THEN year ELSE NULL END) AS year
+               MIN(CASE WHEN year IS NOT NULL AND year > 0 THEN year ELSE NULL END) AS year,
+               MAX(dateModifiedSeconds) AS addedAtSeconds
         FROM library_tracks
         WHERE (:query IS NULL OR
                normalizedTitle LIKE '%' || lower(trim(:query)) || '%' OR
@@ -180,6 +181,33 @@ interface LibraryTrackDao {
         """,
     )
     fun pageAlbums(query: String?, sort: String): PagingSource<Int, AlbumSummary>
+
+    @Query(
+        """
+        SELECT (
+                   COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+                   '::' ||
+                   COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+               ) AS albumKey,
+               CASE WHEN album IS NULL OR trim(album) = '' THEN '未知专辑' ELSE album END AS title,
+               CASE
+                   WHEN albumArtist IS NOT NULL AND trim(albumArtist) != '' THEN albumArtist
+                   WHEN artist IS NOT NULL AND trim(artist) != '' THEN artist
+                   ELSE NULL
+               END AS albumArtist,
+               CASE WHEN artist IS NULL OR trim(artist) = '' THEN NULL ELSE artist END AS artist,
+               MAX(artworkUri) AS artworkUri,
+               COUNT(*) AS trackCount,
+               COALESCE(SUM(durationMs), 0) AS durationMs,
+               MIN(CASE WHEN year IS NOT NULL AND year > 0 THEN year ELSE NULL END) AS year,
+               MAX(dateModifiedSeconds) AS addedAtSeconds
+        FROM library_tracks
+        GROUP BY albumKey
+        ORDER BY addedAtSeconds DESC, title COLLATE NOCASE ASC
+        LIMIT :limit
+        """,
+    )
+    fun observeRecentlyAddedAlbums(limit: Int): Flow<List<AlbumSummary>>
 
     @Query(
         """
@@ -208,6 +236,57 @@ interface LibraryTrackDao {
         """,
     )
     fun pageArtists(query: String?, sort: String): PagingSource<Int, ArtistSummary>
+
+    @Query(
+        """
+        SELECT (
+                   COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+                   '::' ||
+                   COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+               ) AS albumKey,
+               CASE WHEN album IS NULL OR trim(album) = '' THEN '未知专辑' ELSE album END AS title,
+               CASE
+                   WHEN albumArtist IS NOT NULL AND trim(albumArtist) != '' THEN albumArtist
+                   WHEN artist IS NOT NULL AND trim(artist) != '' THEN artist
+                   ELSE NULL
+               END AS albumArtist,
+               CASE WHEN artist IS NULL OR trim(artist) = '' THEN NULL ELSE artist END AS artist,
+               MAX(artworkUri) AS artworkUri,
+               COUNT(*) AS trackCount,
+               COALESCE(SUM(durationMs), 0) AS durationMs,
+               MIN(CASE WHEN year IS NOT NULL AND year > 0 THEN year ELSE NULL END) AS year,
+               MAX(dateModifiedSeconds) AS addedAtSeconds
+        FROM library_tracks
+        WHERE (
+            COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+            '::' ||
+            COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+        ) = :albumKey
+        GROUP BY albumKey
+        LIMIT 1
+        """,
+    )
+    suspend fun getAlbumSummary(albumKey: String): AlbumSummary?
+
+    @Query(
+        """
+        SELECT COALESCE(NULLIF(normalizedArtist, ''), '未知艺术家') AS artistKey,
+               CASE WHEN artist IS NULL OR trim(artist) = '' THEN '未知艺术家' ELSE artist END AS name,
+               MAX(artworkUri) AS artworkUri,
+               COUNT(DISTINCT (
+                   COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+                   '::' ||
+                   COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+               )) AS albumCount,
+               COUNT(*) AS trackCount,
+               COALESCE(SUM(durationMs), 0) AS durationMs
+        FROM library_tracks
+        WHERE COALESCE(NULLIF(normalizedArtist, ''), '未知艺术家') = :artistKey
+        GROUP BY artistKey
+        LIMIT 1
+        """,
+    )
+    suspend fun getArtistSummary(artistKey: String): ArtistSummary?
 
     @Query(
         """

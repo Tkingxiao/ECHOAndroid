@@ -18,12 +18,15 @@ import app.echo.android.data.EchoLibraryRepository
 import app.echo.android.data.MediaStoreAudioFolder
 import app.echo.android.data.MediaStoreTrackScanner
 import app.echo.android.data.toEchoTrack
+import app.echo.android.lyrics.ImportedLyricsStore
+import app.echo.android.lyrics.LocalLyricsResolver
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
 import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibraryStats
+import app.echo.android.model.lyrics.EchoLyricsLoadState
 import app.echo.android.model.playback.EchoAudioErrorKind
 import app.echo.android.model.playback.EchoPlaybackDiagnostics
 import app.echo.android.model.playback.EchoPlaybackError
@@ -57,6 +60,8 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         database = database,
         scanner = MediaStoreTrackScanner(application.contentResolver),
     )
+    private val lyricsResolver = LocalLyricsResolver(application.contentResolver)
+    private val importedLyricsStore = ImportedLyricsStore(application)
 
     private val _libraryQuery = MutableStateFlow("")
     val libraryQuery: StateFlow<String> = _libraryQuery.asStateFlow()
@@ -89,6 +94,9 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         repository.observeRecommendedTracks()
             .map { tracks -> tracks.map { it.toEchoTrack() } }
 
+    val recentlyAddedAlbums: Flow<List<AlbumSummary>> =
+        repository.observeRecentlyAddedAlbums()
+
     fun albumTrackPaging(albumKey: String): Flow<PagingData<EchoTrack>> =
         repository.pagedAlbumTracks(albumKey)
             .map { pagingData -> pagingData.map { it.toEchoTrack() } }
@@ -104,10 +112,21 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _playbackStatus = MutableStateFlow(EchoPlaybackStatus())
     val playbackStatus: StateFlow<EchoPlaybackStatus> = _playbackStatus.asStateFlow()
+    private val _lyricsState = MutableStateFlow<EchoLyricsLoadState>(EchoLyricsLoadState.Idle)
+    val lyricsState: StateFlow<EchoLyricsLoadState> = _lyricsState.asStateFlow()
+    private val _recentPlaybackAlbums = MutableStateFlow<List<AlbumSummary>>(emptyList())
+    val recentPlaybackAlbums: StateFlow<List<AlbumSummary>> = _recentPlaybackAlbums.asStateFlow()
+    private val _recentPlaybackArtists = MutableStateFlow<List<ArtistSummary>>(emptyList())
+    val recentPlaybackArtists: StateFlow<List<ArtistSummary>> = _recentPlaybackArtists.asStateFlow()
 
     private var controller: MediaController? = null
     private var progressJob: Job? = null
     private var scanJob: Job? = null
+    private var lyricsJob: Job? = null
+    private var lastLyricsTrackId: String? = null
+    private var lastRecentPlaybackTrackId: String? = null
+    private val albumPlaybackCounts = mutableMapOf<String, Int>()
+    private val artistPlaybackCounts = mutableMapOf<String, Int>()
 
     init {
         connectController()
@@ -203,6 +222,26 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun openCurrentPlaybackAlbum(onFound: (AlbumSummary) -> Unit) {
+        val trackId = _playbackStatus.value.track?.id ?: return
+        viewModelScope.launch {
+            val album = withContext(Dispatchers.IO) {
+                repository.albumSummaryForTrack(trackId)
+            }
+            album?.let(onFound)
+        }
+    }
+
+    fun openCurrentPlaybackArtist(onFound: (ArtistSummary) -> Unit) {
+        val trackId = _playbackStatus.value.track?.id ?: return
+        viewModelScope.launch {
+            val artist = withContext(Dispatchers.IO) {
+                repository.artistSummaryForTrack(trackId)
+            }
+            artist?.let(onFound)
+        }
+    }
+
     fun playAlbum(albumKey: String) {
         viewModelScope.launch {
             val queue = withContext(Dispatchers.IO) {
@@ -281,37 +320,46 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * 单按钮循环切换播放顺序：顺序播放 → 列表循环 → 单曲循环 → 随机播放 → 顺序播放。
-     */
     fun cyclePlayMode() {
         controller?.run {
-            when {
-                !shuffleModeEnabled && repeatMode == Player.REPEAT_MODE_OFF -> {
-                    // 顺序播放 → 列表循环
-                    repeatMode = Player.REPEAT_MODE_ALL
-                }
-                !shuffleModeEnabled && repeatMode == Player.REPEAT_MODE_ALL -> {
-                    // 列表循环 → 单曲循环
-                    repeatMode = Player.REPEAT_MODE_ONE
-                }
-                !shuffleModeEnabled && repeatMode == Player.REPEAT_MODE_ONE -> {
-                    // 单曲循环 → 随机播放
-                    repeatMode = Player.REPEAT_MODE_ALL
-                    shuffleModeEnabled = true
-                }
-                else -> {
-                    // 随机播放 → 顺序播放
-                    shuffleModeEnabled = false
-                    repeatMode = Player.REPEAT_MODE_OFF
-                }
+            shuffleModeEnabled = false
+            repeatMode = if (repeatMode == Player.REPEAT_MODE_ONE) {
+                Player.REPEAT_MODE_OFF
+            } else {
+                Player.REPEAT_MODE_ONE
             }
             updatePlaybackStatus(this)
         }
     }
 
+    fun importLyrics(uri: Uri) {
+        val trackIdAtImport = _playbackStatus.value.track?.id
+        lastLyricsTrackId = trackIdAtImport
+        lyricsJob?.cancel()
+        _lyricsState.value = EchoLyricsLoadState.Loading
+        lyricsJob = viewModelScope.launch {
+            val state = withContext(Dispatchers.IO) {
+                runCatching {
+                    lyricsResolver.loadFromUri(uri)
+                        ?.takeIf { it.lines.isNotEmpty() }
+                        ?.also {
+                            if (trackIdAtImport != null) importedLyricsStore.bindLyrics(trackIdAtImport, uri)
+                        }
+                        ?.let(EchoLyricsLoadState::Ready)
+                        ?: EchoLyricsLoadState.Error("歌词文件为空，或不是支持的文本歌词格式")
+                }.getOrElse { error ->
+                    EchoLyricsLoadState.Error(error.message ?: "歌词导入失败")
+                }
+            }
+            if (_playbackStatus.value.track?.id == trackIdAtImport) {
+                _lyricsState.value = state
+            }
+        }
+    }
+
     override fun onCleared() {
         scanJob?.cancel()
+        lyricsJob?.cancel()
         progressJob?.cancel()
         controller?.removeListener(playerListener)
         controller?.release()
@@ -370,6 +418,62 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun updatePlaybackStatus(player: Player) {
-        _playbackStatus.value = player.toEchoPlaybackStatus()
+        val status = player.toEchoPlaybackStatus()
+        _playbackStatus.value = status
+        val trackId = status.track?.id
+        updateLyricsForTrack(trackId)
+        if (trackId != null && trackId != lastRecentPlaybackTrackId && (status.isPlaying || status.positionMs > 0L)) {
+            lastRecentPlaybackTrackId = trackId
+            viewModelScope.launch {
+                val album = withContext(Dispatchers.IO) {
+                    repository.albumSummaryForTrack(trackId)
+                }
+                val artist = withContext(Dispatchers.IO) {
+                    repository.artistSummaryForTrack(trackId)
+                }
+                album?.let { summary ->
+                    albumPlaybackCounts[summary.albumKey] = (albumPlaybackCounts[summary.albumKey] ?: 0) + 1
+                    _recentPlaybackAlbums.value = (listOf(summary) + _recentPlaybackAlbums.value)
+                        .distinctBy { it.albumKey }
+                        .sortedByDescending { albumPlaybackCounts[it.albumKey] ?: 0 }
+                        .take(12)
+                }
+                artist?.let { summary ->
+                    artistPlaybackCounts[summary.artistKey] = (artistPlaybackCounts[summary.artistKey] ?: 0) + 1
+                    _recentPlaybackArtists.value = (listOf(summary) + _recentPlaybackArtists.value)
+                        .distinctBy { it.artistKey }
+                        .sortedByDescending { artistPlaybackCounts[it.artistKey] ?: 0 }
+                        .take(8)
+                }
+            }
+        }
+    }
+
+    private fun updateLyricsForTrack(trackId: String?) {
+        if (trackId == lastLyricsTrackId) return
+        lastLyricsTrackId = trackId
+        lyricsJob?.cancel()
+        if (trackId == null) {
+            _lyricsState.value = EchoLyricsLoadState.Idle
+            return
+        }
+
+        _lyricsState.value = EchoLyricsLoadState.Loading
+        lyricsJob = viewModelScope.launch {
+            val state = withContext(Dispatchers.IO) {
+                runCatching {
+                    val track = repository.trackForLyrics(trackId) ?: return@withContext EchoLyricsLoadState.Missing
+                    val importedLyrics = importedLyricsStore.lyricsUriForTrack(trackId)
+                        ?.let(lyricsResolver::loadFromUri)
+                    (importedLyrics ?: lyricsResolver.loadForTrack(track))
+                        ?.takeIf { it.lines.isNotEmpty() }
+                        ?.let(EchoLyricsLoadState::Ready)
+                        ?: EchoLyricsLoadState.Missing
+                }.getOrElse { error ->
+                    EchoLyricsLoadState.Error(error.message ?: "歌词读取失败")
+                }
+            }
+            _lyricsState.value = state
+        }
     }
 }

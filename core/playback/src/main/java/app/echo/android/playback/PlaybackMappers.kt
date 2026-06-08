@@ -1,6 +1,8 @@
 package app.echo.android.playback
 
 import android.net.Uri
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import app.echo.android.model.library.EchoTrack
@@ -63,13 +65,74 @@ fun Player.toEchoPlaybackStatus(): EchoPlaybackStatus {
         isPlaying = isPlaying,
         repeatMode = repeatMode.toEchoRepeatMode(),
         shuffleEnabled = shuffleModeEnabled,
-        diagnostics = EchoPlaybackDiagnostics(
-            outputRoute = "Media3 / AudioTrack",
-            bufferedMs = (bufferedPosition - currentPosition).coerceAtLeast(0L),
-            requestToken = item?.mediaId?.hashCode()?.toLong() ?: 0L,
-            lastCommand = if (isPlaying) "play" else "idle",
-        ),
+        diagnostics = run {
+            val format = currentAudioFormat()
+            val bitDepth = format?.takeIf { it.pcmEncoding != Format.NO_VALUE }
+                ?.let { pcmBitDepth(it.pcmEncoding) }
+            val sampleRate = format?.sampleRate?.takeIf { it != Format.NO_VALUE }
+            val channels = format?.channelCount?.takeIf { it != Format.NO_VALUE }
+            val codec = codecLabel(format?.sampleMimeType)
+            val rawBitrate = listOf(format?.bitrate, format?.averageBitrate)
+                .firstOrNull { it != null && it != Format.NO_VALUE }
+            val bitrate = rawBitrate ?: run {
+                // PCM/WAV 等无内嵌码率时按 采样率×位深×声道 估算
+                if (codec == "PCM" && sampleRate != null && bitDepth != null && channels != null) {
+                    sampleRate * bitDepth * channels
+                } else {
+                    null
+                }
+            }
+            EchoPlaybackDiagnostics(
+                codec = codec,
+                sampleRateHz = sampleRate,
+                channelCount = channels,
+                bitDepth = bitDepth,
+                bitrate = bitrate,
+                outputRoute = "Media3 / AudioTrack",
+                bufferedMs = (bufferedPosition - currentPosition).coerceAtLeast(0L),
+                requestToken = item?.mediaId?.hashCode()?.toLong() ?: 0L,
+                lastCommand = if (isPlaying) "play" else "idle",
+            )
+        },
     )
+}
+
+private fun Player.currentAudioFormat(): Format? {
+    val groups = currentTracks.groups
+    for (group in groups) {
+        if (group.type == C.TRACK_TYPE_AUDIO) {
+            for (i in 0 until group.length) {
+                if (group.isTrackSelected(i)) return group.getTrackFormat(i)
+            }
+        }
+    }
+    return null
+}
+
+private fun codecLabel(mime: String?): String? {
+    if (mime.isNullOrBlank()) return null
+    return when {
+        mime.equals("audio/raw", ignoreCase = true) -> "PCM"
+        mime.contains("flac", ignoreCase = true) -> "FLAC"
+        mime.contains("alac", ignoreCase = true) -> "ALAC"
+        mime.contains("wav", ignoreCase = true) -> "WAV"
+        mime.contains("dsd", ignoreCase = true) || mime.contains("dsf", ignoreCase = true) -> "DSD"
+        mime.contains("mpeg", ignoreCase = true) || mime.contains("mp3", ignoreCase = true) -> "MP3"
+        mime.contains("mp4a", ignoreCase = true) || mime.contains("aac", ignoreCase = true) -> "AAC"
+        mime.contains("opus", ignoreCase = true) -> "Opus"
+        mime.contains("vorbis", ignoreCase = true) -> "Vorbis"
+        mime.contains("ape", ignoreCase = true) -> "APE"
+        else -> mime.substringAfter("audio/").uppercase()
+    }
+}
+
+private fun pcmBitDepth(pcmEncoding: Int): Int? = when (pcmEncoding) {
+    C.ENCODING_PCM_8BIT -> 8
+    C.ENCODING_PCM_16BIT, C.ENCODING_PCM_16BIT_BIG_ENDIAN -> 16
+    C.ENCODING_PCM_24BIT -> 24
+    C.ENCODING_PCM_32BIT -> 32
+    C.ENCODING_PCM_FLOAT -> 32
+    else -> null
 }
 
 fun Player.toEchoPlaybackState(): EchoPlaybackState = when {

@@ -82,6 +82,7 @@ import app.echo.android.design.RoonMuted
 import app.echo.android.design.formatDuration
 import app.echo.android.design.progressFraction
 import app.echo.android.model.library.AlbumSummary
+import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
@@ -92,8 +93,11 @@ fun HomeScreen(
     trackCount: Int,
     albumCount: Int,
     artistCount: Int,
-    recentAlbums: List<AlbumSummary>,
+    recentPlayedAlbums: List<AlbumSummary>,
+    recentlyAddedAlbums: List<AlbumSummary>,
     recommendedAlbums: List<AlbumSummary>,
+    topArtists: List<ArtistSummary>,
+    favoriteAlbums: List<AlbumSummary>,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -101,6 +105,7 @@ fun HomeScreen(
     onToggleShuffle: () -> Unit,
     onRefreshRecommendations: () -> Unit,
     onOpenAlbum: (AlbumSummary) -> Unit,
+    onOpenArtist: (ArtistSummary) -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenConnect: () -> Unit,
 ) {
@@ -129,7 +134,8 @@ fun HomeScreen(
             }
             Spacer(Modifier.height(if (compactViewport) 14.dp else 22.dp))
             RoonRecentActivitySection(
-                albums = recentAlbums,
+                recentPlayedAlbums = recentPlayedAlbums,
+                recentlyAddedAlbums = recentlyAddedAlbums,
                 onOpenAlbum = onOpenAlbum,
                 onOpenLibrary = onOpenLibrary,
             )
@@ -139,6 +145,18 @@ fun HomeScreen(
                 onRefresh = onRefreshRecommendations,
                 onOpenLibrary = onOpenLibrary,
                 onOpenAlbum = onOpenAlbum,
+            )
+            Spacer(Modifier.height(if (compactViewport) 14.dp else 20.dp))
+            HomeArtistRankingSection(
+                artists = topArtists,
+                onOpenArtist = onOpenArtist,
+                onOpenLibrary = onOpenLibrary,
+            )
+            Spacer(Modifier.height(if (compactViewport) 14.dp else 20.dp))
+            HomeFavoriteAlbumsSection(
+                albums = favoriteAlbums,
+                onOpenAlbum = onOpenAlbum,
+                onOpenLibrary = onOpenLibrary,
             )
             Spacer(Modifier.height(if (compactViewport) 180.dp else 212.dp))
         }

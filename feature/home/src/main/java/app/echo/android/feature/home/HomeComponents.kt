@@ -47,6 +47,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -82,10 +86,12 @@ import app.echo.android.design.RoonMuted
 import app.echo.android.design.formatDuration
 import app.echo.android.design.progressFraction
 import app.echo.android.model.library.AlbumSummary
+import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
+import java.util.Calendar
 
 @Composable
 internal fun LibraryOverview(
@@ -185,32 +191,23 @@ internal fun RoonHomeHeader(
 
 @Composable
 internal fun RoonRecentActivitySection(
-    albums: List<AlbumSummary>,
+    recentPlayedAlbums: List<AlbumSummary>,
+    recentlyAddedAlbums: List<AlbumSummary>,
     onOpenAlbum: (AlbumSummary) -> Unit,
     onOpenLibrary: () -> Unit,
 ) {
+    var selectedMode by remember { mutableStateOf(RecentActivityMode.Played) }
+    val albums = when (selectedMode) {
+        RecentActivityMode.Played -> recentPlayedAlbums
+        RecentActivityMode.Added -> recentlyAddedAlbums
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .shadow(
-                elevation = 16.dp,
-                shape = RoundedCornerShape(30.dp),
-                ambientColor = EchoAccentDeep.copy(alpha = 0.16f),
-                spotColor = EchoHomeBlue.copy(alpha = 0.14f),
-            )
             .clip(RoundedCornerShape(32.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color.White,
-                        EchoHomeMist,
-                        Color(0xFFEAF6FF),
-                        Color(0xFFEFEAFF),
-                    ),
-                ),
-            )
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(32.dp))
+            .background(Color.White.copy(alpha = 0.88f))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.92f)), RoundedCornerShape(32.dp))
             .padding(top = 18.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -227,7 +224,10 @@ internal fun RoonRecentActivitySection(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
-            RecentPlayedAlbumsTab()
+            RecentActivityTabs(
+                selectedMode = selectedMode,
+                onSelect = { selectedMode = it },
+            )
         }
         Row(
             modifier = Modifier
@@ -236,16 +236,78 @@ internal fun RoonRecentActivitySection(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (albums.isEmpty()) {
-                EmptyRecentAlbumsCard(onClick = onOpenLibrary)
+                RecentActivityEmptyAlbumCard(
+                    title = if (selectedMode == RecentActivityMode.Played) "\u6682\u65e0\u5df2\u64ad\u653e" else "\u6682\u65e0\u65b0\u589e\u4e13\u8f91",
+                    subtitle = if (selectedMode == RecentActivityMode.Played) "\u64ad\u653e\u4e13\u8f91\u540e\u663e\u793a" else "\u626b\u63cf\u66f2\u5e93\u540e\u663e\u793a",
+                    onClick = onOpenLibrary,
+                )
             } else {
                 albums.forEach { album ->
                     RecentAlbumCard(
                         album = album,
+                        mode = selectedMode,
                         onClick = { onOpenAlbum(album) },
                     )
                 }
             }
         }
+    }
+}
+
+internal enum class RecentActivityMode {
+    Played,
+    Added,
+}
+
+@Composable
+internal fun RecentActivityTabs(
+    selectedMode: RecentActivityMode,
+    onSelect: (RecentActivityMode) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color.White.copy(alpha = 0.94f),
+        border = BorderStroke(1.dp, EchoGlassBorder),
+    ) {
+        Row(
+            modifier = Modifier.padding(3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RecentActivityModeTab(
+                label = "\u5df2\u64ad\u653e",
+                selected = selectedMode == RecentActivityMode.Played,
+                onClick = { onSelect(RecentActivityMode.Played) },
+            )
+            RecentActivityModeTab(
+                label = "\u6dfb\u52a0\u4e8e",
+                selected = selectedMode == RecentActivityMode.Added,
+                onClick = { onSelect(RecentActivityMode.Added) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecentActivityModeTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (selected) EchoAccentDeep.copy(alpha = 0.16f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (selected) EchoAccentText else RoonMuted,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
     }
 }
 
@@ -277,6 +339,7 @@ internal fun RecentPlayedAlbumsTab() {
 @Composable
 internal fun RecentAlbumCard(
     album: AlbumSummary,
+    mode: RecentActivityMode,
     onClick: () -> Unit,
 ) {
     val artistLabel = album.albumArtist ?: album.artist ?: "未知艺人"
@@ -305,7 +368,7 @@ internal fun RecentAlbumCard(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            artistLabel,
+            recentAlbumSubtitle(album, mode, artistLabel),
             color = RoonMuted,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
@@ -315,8 +378,76 @@ internal fun RecentAlbumCard(
     }
 }
 
+private fun recentAlbumSubtitle(
+    album: AlbumSummary,
+    mode: RecentActivityMode,
+    artistLabel: String,
+): String {
+    val dateLabel = album.addedAtSeconds.takeIf { it > 0L }?.let(::formatAlbumDate)
+    return if (mode == RecentActivityMode.Added && dateLabel != null) {
+        "$artistLabel \u00b7 $dateLabel"
+    } else {
+        artistLabel
+    }
+}
+
+private fun formatAlbumDate(seconds: Long): String {
+    val calendar = Calendar.getInstance().apply {
+        timeInMillis = seconds * 1000L
+    }
+    return "${calendar.get(Calendar.MONTH) + 1}\u6708${calendar.get(Calendar.DAY_OF_MONTH)}\u65e5"
+}
+
 @Composable
-internal fun EmptyRecentAlbumsCard(onClick: () -> Unit) {
+private fun RecentActivityEmptyAlbumCard(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(160.dp)
+            .clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color.White.copy(alpha = 0.74f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Rounded.LibraryMusic,
+                contentDescription = null,
+                tint = EchoHomeBlue,
+                modifier = Modifier.size(34.dp),
+            )
+        }
+        Text(
+            title,
+            color = RoonInk,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+        Text(
+            subtitle,
+            color = RoonMuted,
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+internal fun EmptyRecentAlbumsCard(
+    title: String = "\u6682\u65e0\u4e13\u8f91",
+    subtitle: String = "\u626b\u63cf\u66f2\u5e93\u540e\u663e\u793a",
+    onClick: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .width(160.dp)
@@ -550,6 +681,197 @@ internal fun RecommendedAlbumCard(
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+@Composable
+internal fun HomeArtistRankingSection(
+    artists: List<ArtistSummary>,
+    onOpenArtist: (ArtistSummary) -> Unit,
+    onOpenLibrary: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(Color.White.copy(alpha = 0.90f))
+            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(26.dp))
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            "\u827a\u4eba\u6392\u884c\u699c",
+            color = RoonInk,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        if (artists.isEmpty()) {
+            EmptyRankingNotice(
+                title = "\u6682\u65e0\u6392\u884c\u6570\u636e",
+                subtitle = "\u64ad\u653e\u827a\u4eba\u6b4c\u66f2\u540e\u663e\u793a",
+                onClick = onOpenLibrary,
+            )
+        } else {
+            val maxTracks = artists.maxOf { it.trackCount.coerceAtLeast(1) }
+            artists.take(5).forEachIndexed { index, artist ->
+                ArtistRankRow(
+                    rank = index + 1,
+                    artist = artist,
+                    progress = artist.trackCount.coerceAtLeast(1).toFloat() / maxTracks.toFloat(),
+                    onClick = { onOpenArtist(artist) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistRankRow(
+    rank: Int,
+    artist: ArtistSummary,
+    progress: Float,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .background(if (rank == 1) EchoAccentDeep.copy(alpha = 0.06f) else Color.Transparent)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            rank.toString().padStart(2, '0'),
+            color = if (rank == 1) EchoAccentText else RoonMuted,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.width(34.dp),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                artist.name,
+                color = RoonInk,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "${artist.trackCount} \u9996 \u00b7 ${artistReadableDuration(artist.durationMs)}",
+                color = RoonMuted,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(EchoHomeMist),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress.coerceIn(0.08f, 1f))
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Brush.horizontalGradient(listOf(EchoAccent, EchoAccentDeep))),
+                )
+            }
+        }
+        Surface(
+            shape = RoundedCornerShape(99.dp),
+            color = Color.White.copy(alpha = 0.78f),
+            border = BorderStroke(1.dp, EchoGlassBorder),
+        ) {
+            Text(
+                "${artist.albumCount.coerceAtLeast(0)} \u4e13\u8f91",
+                color = RoonMuted,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun HomeFavoriteAlbumsSection(
+    albums: List<AlbumSummary>,
+    onOpenAlbum: (AlbumSummary) -> Unit,
+    onOpenLibrary: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(Color.White.copy(alpha = 0.90f))
+            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(26.dp))
+            .padding(top = 16.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            "\u4f60\u559c\u6b22\u7684\u4e13\u8f91",
+            color = RoonInk,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.padding(horizontal = 18.dp),
+        )
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            if (albums.isEmpty()) {
+                RecentActivityEmptyAlbumCard(
+                    title = "\u6682\u65e0\u504f\u597d\u4e13\u8f91",
+                    subtitle = "\u591a\u542c\u51e0\u5f20\u4e13\u8f91\u540e\u663e\u793a",
+                    onClick = onOpenLibrary,
+                )
+            } else {
+                albums.take(4).forEach { album ->
+                    RecommendedAlbumCard(
+                        album = album,
+                        onClick = { onOpenAlbum(album) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyRankingNotice(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(EchoHomeMist.copy(alpha = 0.55f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(title, color = RoonInk, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text(subtitle, color = RoonMuted, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+private fun artistReadableDuration(durationMs: Long): String {
+    val minutes = (durationMs / 60000L).toInt()
+    return if (minutes >= 1) "$minutes \u5206\u949f" else formatDuration(durationMs)
 }
 
 @Composable
