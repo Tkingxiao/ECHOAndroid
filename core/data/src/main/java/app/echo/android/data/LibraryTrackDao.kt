@@ -11,6 +11,7 @@ import androidx.room.Upsert
 import androidx.sqlite.db.SupportSQLiteQuery
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
+import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryStats
 import kotlinx.coroutines.flow.Flow
 
@@ -239,6 +240,35 @@ interface LibraryTrackDao {
 
     @Query(
         """
+        SELECT COALESCE(NULLIF(relativePath, ''), '') AS folderKey,
+               CASE WHEN relativePath IS NULL OR trim(relativePath) = '' THEN NULL ELSE relativePath END AS path,
+               COUNT(*) AS trackCount,
+               COUNT(DISTINCT (
+                   COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+                   '::' ||
+                   COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+               )) AS albumCount,
+               COUNT(DISTINCT COALESCE(NULLIF(normalizedArtist, ''), '未知艺术家')) AS artistCount,
+               COALESCE(SUM(durationMs), 0) AS durationMs,
+               COALESCE(SUM(sizeBytes), 0) AS totalSizeBytes,
+               MAX(dateModifiedSeconds) AS latestModifiedSeconds
+        FROM library_tracks
+        WHERE (:query IS NULL OR
+               relativePath LIKE '%' || trim(:query) || '%' OR
+               normalizedTitle LIKE '%' || lower(trim(:query)) || '%' OR
+               normalizedArtist LIKE '%' || lower(trim(:query)) || '%' OR
+               normalizedAlbum LIKE '%' || lower(trim(:query)) || '%' OR
+               normalizedAlbumArtist LIKE '%' || lower(trim(:query)) || '%')
+        GROUP BY folderKey
+        ORDER BY
+            CASE WHEN folderKey = '' THEN 1 ELSE 0 END,
+            path COLLATE NOCASE ASC
+        """,
+    )
+    fun pageFolders(query: String?): PagingSource<Int, FolderSummary>
+
+    @Query(
+        """
         SELECT (
                    COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
                    '::' ||
@@ -320,6 +350,20 @@ interface LibraryTrackDao {
     @Query(
         """
         SELECT * FROM library_tracks
+        WHERE (:folderKey = '' AND (relativePath IS NULL OR trim(relativePath) = ''))
+           OR relativePath = :folderKey
+        ORDER BY
+            album COLLATE NOCASE ASC,
+            CASE WHEN discNumber IS NULL THEN 0 ELSE discNumber END ASC,
+            CASE WHEN trackNumber IS NULL THEN 0 ELSE trackNumber END ASC,
+            title COLLATE NOCASE ASC
+        """,
+    )
+    fun pageTracksByFolder(folderKey: String): PagingSource<Int, LibraryTrackEntity>
+
+    @Query(
+        """
+        SELECT * FROM library_tracks
         WHERE (
             COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
             '::' ||
@@ -348,6 +392,21 @@ interface LibraryTrackDao {
         """,
     )
     suspend fun getTracksByArtist(artistKey: String): List<LibraryTrackEntity>
+
+    @Query(
+        """
+        SELECT * FROM library_tracks
+        WHERE (:folderKey = '' AND (relativePath IS NULL OR trim(relativePath) = ''))
+           OR relativePath = :folderKey
+        ORDER BY
+            album COLLATE NOCASE ASC,
+            CASE WHEN discNumber IS NULL THEN 0 ELSE discNumber END ASC,
+            CASE WHEN trackNumber IS NULL THEN 0 ELSE trackNumber END ASC,
+            title COLLATE NOCASE ASC
+        LIMIT :limit
+        """,
+    )
+    suspend fun getTracksByFolderForPlayback(folderKey: String, limit: Int): List<LibraryTrackEntity>
 
     @RawQuery
     suspend fun getArtistTracksForPlayback(query: SupportSQLiteQuery): List<LibraryTrackEntity>

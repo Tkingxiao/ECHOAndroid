@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,8 +50,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoAccent
-import app.echo.android.design.RoonInk
-import app.echo.android.design.RoonMuted
 import app.echo.android.design.progressFraction
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
@@ -71,6 +70,8 @@ fun MiniPlayer(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val scope = rememberCoroutineScope()
+    val scheme = MaterialTheme.colorScheme
+    val dark = isSystemInDarkTheme()
     val offsetX = remember { Animatable(0f) }
     var widthPx by remember { mutableStateOf(1f) }
     val canSwitch = onNext != null && onPrevious != null && status.track != null
@@ -88,14 +89,22 @@ fun MiniPlayer(
             .clip(shape)
             .background(
                 Brush.verticalGradient(
-                    listOf(
-                        Color.White,
-                        Color(0xFFFAFAFA),
-                        Color(0xFFF4F4F5),
-                    ),
+                    if (dark) {
+                        listOf(
+                            scheme.surface.copy(alpha = 0.96f),
+                            scheme.surfaceVariant.copy(alpha = 0.90f),
+                            scheme.surface.copy(alpha = 0.96f),
+                        )
+                    } else {
+                        listOf(
+                            Color.White,
+                            Color(0xFFFAFAFA),
+                            Color(0xFFF4F4F5),
+                        )
+                    },
                 ),
             )
-            .border(BorderStroke(1.dp, Color(0xFFE9E9EC)), shape)
+            .border(BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else Color(0xFFE9E9EC)), shape)
             .padding(start = 14.dp, top = 5.dp, end = 8.dp, bottom = 5.dp),
     ) {
         Row(
@@ -174,14 +183,14 @@ fun MiniPlayer(
                         maxLines = 1,
                         overflow = TextOverflow.Clip,
                         fontWeight = FontWeight.SemiBold,
-                        color = RoonInk,
+                        color = scheme.onSurface,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Text(
                         status.track?.artist ?: "就绪",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = RoonMuted,
+                        color = scheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -191,8 +200,8 @@ fun MiniPlayer(
                             .fillMaxWidth()
                             .height(2.dp)
                             .clip(RoundedCornerShape(99.dp)),
-                        color = Color(0xFFFF2D55).copy(alpha = 0.58f),
-                        trackColor = Color(0xFFE8E8EA),
+                        color = scheme.primary.copy(alpha = 0.78f),
+                        trackColor = scheme.outlineVariant.copy(alpha = if (dark) 0.44f else 0.90f),
                     )
                 }
             }
@@ -210,7 +219,7 @@ fun MiniPlayer(
                 Icon(
                     if (status.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                     contentDescription = "播放或暂停",
-                    tint = Color.Black.copy(alpha = 0.90f),
+                    tint = scheme.onSurface.copy(alpha = 0.90f),
                     modifier = Modifier.size(29.dp),
                 )
             }
@@ -225,7 +234,7 @@ fun MiniPlayer(
                     Icon(
                         Icons.Rounded.KeyboardArrowDown,
                         contentDescription = "隐藏底栏",
-                        tint = Color.Black.copy(alpha = 0.64f),
+                        tint = scheme.onSurfaceVariant.copy(alpha = 0.84f),
                         modifier = Modifier.size(26.dp),
                     )
                 }

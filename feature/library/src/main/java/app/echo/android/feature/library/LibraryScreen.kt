@@ -77,6 +77,7 @@ import app.echo.android.design.formatDuration
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanProgress
 
 internal enum class LibraryViewMode(
@@ -97,10 +98,13 @@ fun LibraryScreen(
     tracks: LazyPagingItems<EchoTrack>,
     albums: LazyPagingItems<AlbumSummary>,
     artists: LazyPagingItems<ArtistSummary>,
+    folders: LazyPagingItems<FolderSummary>,
     selectedAlbum: AlbumSummary?,
     selectedArtist: ArtistSummary?,
+    selectedFolder: FolderSummary?,
     albumDetailTracks: LazyPagingItems<EchoTrack>?,
     artistDetailTracks: LazyPagingItems<EchoTrack>?,
+    folderDetailTracks: LazyPagingItems<EchoTrack>?,
     onRequestPermission: () -> Unit,
     onScanFolder: () -> Unit,
     onScanAll: () -> Unit,
@@ -110,8 +114,10 @@ fun LibraryScreen(
     onShuffleAlbum: (AlbumSummary) -> Unit,
     onPlayArtist: (ArtistSummary) -> Unit,
     onShuffleArtist: (ArtistSummary) -> Unit,
+    onPlayFolder: (FolderSummary) -> Unit,
     onOpenAlbum: (AlbumSummary) -> Unit,
     onOpenArtist: (ArtistSummary) -> Unit,
+    onOpenFolder: (FolderSummary) -> Unit,
     onCloseDetail: () -> Unit,
 ) {
     var selectedModeIndex by remember { mutableIntStateOf(LibraryViewMode.Songs.ordinal) }
@@ -141,6 +147,20 @@ fun LibraryScreen(
             onBack = onCloseDetail,
             onPlayAll = { onPlayArtist(activeArtistDetail) },
             onShuffle = { onShuffleArtist(activeArtistDetail) },
+            onPlayTrack = onPlayTrack,
+            modifier = Modifier.fillMaxSize(),
+        )
+        return
+    }
+
+    val activeFolderDetail = selectedFolder
+    if (hasPermission && activeFolderDetail != null && folderDetailTracks != null) {
+        LibraryDetailPage(
+            title = folderDisplayName(activeFolderDetail),
+            subtitle = folderSubtitle(activeFolderDetail),
+            tracks = folderDetailTracks,
+            onBack = onCloseDetail,
+            onPlayAll = { onPlayFolder(activeFolderDetail) },
             onPlayTrack = onPlayTrack,
             modifier = Modifier.fillMaxSize(),
         )
@@ -203,9 +223,10 @@ fun LibraryScreen(
                             }
                         }
 
-                        LibraryViewMode.Folders -> LibraryPlaceholderPage(
-                            title = "文件夹视图",
-                            subtitle = "按存储路径浏览本机音乐会放在这里。",
+                        LibraryViewMode.Folders -> FolderList(
+                            folders = folders,
+                            onOpenFolder = onOpenFolder,
+                            modifier = Modifier.fillMaxSize(),
                         )
 
                         LibraryViewMode.Albums -> AlbumWall(

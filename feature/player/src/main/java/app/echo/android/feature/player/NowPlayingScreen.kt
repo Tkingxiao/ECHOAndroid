@@ -93,7 +93,6 @@ private val OnArtFaint = Color.White.copy(alpha = 0.28f)
 private val OnArtChip = Color.White.copy(alpha = 0.16f)
 
 private enum class NowPlayingPage {
-    Back,
     Cover,
     Lyrics,
 }
@@ -128,12 +127,6 @@ fun NowPlayingScreen(
     val lyricsPageOffset = (pagerState.currentPage - NowPlayingPage.Lyrics.ordinal) +
         pagerState.currentPageOffsetFraction
     val lyricsReveal = (1f - abs(lyricsPageOffset)).coerceIn(0f, 1f)
-
-    LaunchedEffect(pagerState.settledPage) {
-        if (pagerState.settledPage == NowPlayingPage.Back.ordinal) {
-            onDismiss()
-        }
-    }
 
     Box(modifier = modifier.fillMaxSize()) {
         BlurredArtworkBackground(
@@ -181,7 +174,6 @@ fun NowPlayingScreen(
                     .weight(1f),
             ) { page ->
                 when (NowPlayingPage.entries[page]) {
-                    NowPlayingPage.Back -> Spacer(Modifier.fillMaxSize())
                     NowPlayingPage.Cover -> NowPlayingCoverPage(
                         status = status,
                         positionMs = activePositionMs,
@@ -445,9 +437,9 @@ private fun LyricsLineList(
                         modifier = Modifier.fillMaxWidth(),
                         color = OnArt.copy(alpha = primaryAlpha),
                         style = if (active) {
-                            MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp, lineHeight = 40.sp)
+                            MaterialTheme.typography.headlineLarge.copy(fontSize = 32.sp, lineHeight = 38.sp)
                         } else {
-                            MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, lineHeight = 30.sp)
+                            MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, lineHeight = 28.sp)
                         },
                         fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
@@ -460,9 +452,9 @@ private fun LyricsLineList(
                             modifier = Modifier.fillMaxWidth(),
                             color = OnArt.copy(alpha = secondaryAlpha),
                             style = if (active) {
-                                MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp, lineHeight = 22.sp)
+                                MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 21.sp)
                             } else {
-                                MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp)
+                                MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 19.sp)
                             },
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
@@ -475,7 +467,7 @@ private fun LyricsLineList(
                             text = romanization,
                             modifier = Modifier.fillMaxWidth(),
                             color = OnArt.copy(alpha = secondaryAlpha * 0.82f),
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, lineHeight = 18.sp),
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
                             textAlign = TextAlign.Center,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,

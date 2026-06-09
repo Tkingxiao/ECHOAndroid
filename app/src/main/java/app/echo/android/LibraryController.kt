@@ -10,6 +10,7 @@ import app.echo.android.data.toEchoTrack
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibraryStats
@@ -60,6 +61,11 @@ internal class LibraryController(
             .flatMapLatest { query -> repository.pagedArtists(query) }
             .cachedIn(scope)
 
+    val folders: Flow<PagingData<FolderSummary>> =
+        debouncedLibraryQuery
+            .flatMapLatest { query -> repository.pagedFolders(query) }
+            .cachedIn(scope)
+
     val libraryStats: Flow<LibraryStats> = repository.observeLibraryStats()
 
     val recommendedTracks: Flow<List<EchoTrack>> =
@@ -84,6 +90,11 @@ internal class LibraryController(
 
     fun artistTrackPaging(artistKey: String): Flow<PagingData<EchoTrack>> =
         repository.pagedArtistTracks(artistKey)
+            .map { pagingData -> pagingData.map { it.toEchoTrack() } }
+            .cachedIn(scope)
+
+    fun folderTrackPaging(folderKey: String): Flow<PagingData<EchoTrack>> =
+        repository.pagedFolderTracks(folderKey)
             .map { pagingData -> pagingData.map { it.toEchoTrack() } }
             .cachedIn(scope)
 
@@ -172,6 +183,11 @@ internal class LibraryController(
     suspend fun artistTracksForPlayback(artistKey: String): List<EchoTrack> =
         withContext(Dispatchers.IO) {
             repository.artistTracksForPlayback(artistKey).map { it.toEchoTrack() }
+        }
+
+    suspend fun folderTracksForPlayback(folderKey: String): List<EchoTrack> =
+        withContext(Dispatchers.IO) {
+            repository.folderTracksForPlayback(folderKey).map { it.toEchoTrack() }
         }
 
     fun clear() {

@@ -57,11 +57,12 @@ fun EchoTrack.toEchoTrackRef(): EchoTrackRef =
 fun EchoTrack.toMediaItem(): MediaItem =
     toEchoTrackRef().toMediaItem()
 
-fun Player.toEchoPlaybackStatus(): EchoPlaybackStatus {
+fun Player.toEchoPlaybackStatus(
+    diagnostics: EchoPlaybackDiagnostics = toPlaybackDiagnosticsState().diagnostics,
+): EchoPlaybackStatus {
     val metadata = toPlaybackMetadataState()
     val position = toPlaybackPositionState()
     val controls = toPlaybackControlsState()
-    val diagnostics = toPlaybackDiagnosticsState().diagnostics
     return EchoPlaybackStatus(
         state = controls.state,
         track = metadata.track,
@@ -112,7 +113,9 @@ fun Player.toPlaybackControlsState(): PlaybackControlsState =
         canSeek = isCurrentMediaItemSeekable,
     )
 
-fun Player.toPlaybackDiagnosticsState(): PlaybackDiagnosticsState {
+fun Player.toPlaybackDiagnosticsState(
+    usbAudioStatus: EchoUsbAudioStatus = EchoUsbAudioStatus(),
+): PlaybackDiagnosticsState {
     val item = currentMediaItem
     val format = currentAudioFormat()
     val bitDepth = format?.takeIf { it.pcmEncoding != Format.NO_VALUE }
@@ -135,11 +138,10 @@ fun Player.toPlaybackDiagnosticsState(): PlaybackDiagnosticsState {
         channelCount = channels,
         bitDepth = bitDepth,
         bitrate = bitrate,
-        outputRoute = "Media3 / AudioTrack",
         bufferedMs = (bufferedPosition - currentPosition).coerceAtLeast(0L),
         requestToken = item?.mediaId?.hashCode()?.toLong() ?: 0L,
         lastCommand = if (isPlaying) "play" else "idle",
-    )
+    ).withUsbAudioStatus(usbAudioStatus)
     return PlaybackDiagnosticsState(
         diagnostics = diagnostics,
         lastError = diagnostics.lastError,

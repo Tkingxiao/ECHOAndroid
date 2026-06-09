@@ -60,6 +60,7 @@ fun DiagnosticsScreen(status: EchoPlaybackStatus) {
                 output = diagnostics.outputRoute,
                 offloadActive = diagnostics.offloadActive,
             )
+            UsbOutputPanel(status = status)
             CurrentStreamPanel(
                 status = status,
                 lastCommand = lastCommand,
@@ -69,4 +70,68 @@ fun DiagnosticsScreen(status: EchoPlaybackStatus) {
         }
     }
 }
+
+@Composable
+private fun UsbOutputPanel(status: EchoPlaybackStatus) {
+    val diagnostics = status.diagnostics
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.64f))
+            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.84f)), RoundedCornerShape(20.dp))
+            .padding(16.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            EchoSectionTitle(
+                "USB 输出",
+                if (diagnostics.usbConnected) "已连接" else "未连接",
+            )
+            UsbOutputLine("设备", diagnostics.usbDeviceName ?: "无 USB DAC")
+            UsbOutputLine(
+                "链路",
+                when {
+                    diagnostics.usbBitPerfectActive -> "bit-perfect active"
+                    diagnostics.usbBitPerfectSupported -> "支持 bit-perfect"
+                    diagnostics.usbConnected -> "Android mixer"
+                    else -> "Media3 / AudioTrack"
+                },
+            )
+            UsbOutputLine(
+                "采样率",
+                formatUsbSampleRates(diagnostics.usbSupportedSampleRates),
+            )
+            UsbOutputLine(
+                "请求",
+                diagnostics.usbLastRequestedSampleRateHz?.let { "${it}Hz" } ?: "未请求",
+            )
+            diagnostics.usbLastRequestError?.let { error ->
+                UsbOutputLine("回退", error.message)
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsbOutputLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = RoonMuted, style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.width(16.dp))
+        Text(
+            value,
+            color = RoonInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+private fun formatUsbSampleRates(sampleRates: List<Int>): String =
+    if (sampleRates.isEmpty()) {
+        "未上报"
+    } else {
+        sampleRates.take(6).joinToString(" / ") { "${it / 1000}k" } +
+            if (sampleRates.size > 6) " ..." else ""
+    }
 

@@ -18,12 +18,14 @@ import app.echo.android.model.playback.PlaybackDiagnosticsState
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
 import app.echo.android.playback.EchoPlaybackService
+import app.echo.android.playback.EchoUsbAudioMonitor
 import app.echo.android.playback.toEchoPlaybackStatus
 import app.echo.android.playback.toMediaItem
 import app.echo.android.playback.toPlaybackControlsState
 import app.echo.android.playback.toPlaybackDiagnosticsState
 import app.echo.android.playback.toPlaybackMetadataState
 import app.echo.android.playback.toPlaybackPositionState
+import app.echo.android.playback.withUsbAudioStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,8 +56,10 @@ internal class PlaybackController(
     private val _playbackDiagnostics = MutableStateFlow(PlaybackDiagnosticsState())
     val playbackDiagnostics: StateFlow<PlaybackDiagnosticsState> = _playbackDiagnostics.asStateFlow()
 
+    private val usbAudioMonitor = EchoUsbAudioMonitor(application)
     private var controller: MediaController? = null
     private var progressJob: Job? = null
+    private var usbAudioJob: Job? = null
     private var lastTrackId: String? = null
     private var lastActivatedTrackId: String? = null
 
@@ -63,10 +67,20 @@ internal class PlaybackController(
         get() = _playbackMetadata.value.track?.id
 
     init {
+        usbAudioMonitor.start()
+        startUsbAudioUpdates()
         connectController()
     }
 
+    fun setUsbExclusiveEnabled(enabled: Boolean) {
+        usbAudioMonitor.setExclusiveEnabled(enabled)
+        if (enabled) {
+            usbAudioMonitor.prepareForTrack(_playbackDiagnostics.value.diagnostics.sampleRateHz)
+        }
+    }
+
     fun play(track: EchoTrack) {
+        usbAudioMonitor.prepareForTrack(track.sampleRateHz)
         controller?.run {
             setMediaItem(track.toMediaItem())
             prepare()
@@ -77,6 +91,7 @@ internal class PlaybackController(
     fun playQueue(queue: List<EchoTrack>, startIndex: Int) {
         if (queue.isEmpty()) return
         val safeStartIndex = startIndex.coerceIn(0, queue.lastIndex)
+        usbAudioMonitor.prepareForTrack(queue[safeStartIndex].sampleRateHz)
         controller?.run {
             setMediaItems(queue.map { it.toMediaItem() }, safeStartIndex, 0L)
             prepare()
@@ -142,6 +157,8 @@ internal class PlaybackController(
 
     fun clear() {
         progressJob?.cancel()
+        usbAudioJob?.cancel()
+        usbAudioMonitor.stop()
         controller?.removeListener(playerListener)
         controller?.release()
     }
@@ -204,12 +221,21 @@ internal class PlaybackController(
         }
     }
 
+    private fun startUsbAudioUpdates() {
+        usbAudioJob?.cancel()
+        usbAudioJob = scope.launch {
+            usbAudioMonitor.status.collect { status ->
+                controller?.let(::updatePlaybackCore) ?: updateUsbDiagnostics(status)
+            }
+        }
+    }
+
     private fun updatePlaybackCore(player: Player) {
         val metadata = player.toPlaybackMetadataState()
         val controls = player.toPlaybackControlsState()
-        val diagnostics = player.toPlaybackDiagnosticsState()
+        val diagnostics = player.toPlaybackDiagnosticsState(usbAudioMonitor.status.value)
         val position = player.toPlaybackPositionState()
-        val status = player.toEchoPlaybackStatus()
+        val status = player.toEchoPlaybackStatus(diagnostics.diagnostics)
 
         updateState(_playbackMetadata, metadata)
         updateState(_playbackControls, controls)
@@ -226,6 +252,12 @@ internal class PlaybackController(
             lastActivatedTrackId = trackId
             onTrackActivated(trackId)
         }
+    }
+
+    private fun updateUsbDiagnostics(status: app.echo.android.playback.EchoUsbAudioStatus) {
+        val diagnostics = _playbackDiagnostics.value.diagnostics.withUsbAudioStatus(status)
+        updateState(_playbackDiagnostics, PlaybackDiagnosticsState(diagnostics, diagnostics.lastError))
+        updateState(_playbackStatus, _playbackStatus.value.copy(diagnostics = diagnostics))
     }
 
     private fun updatePlaybackPosition(player: Player) {

@@ -5,6 +5,16 @@ import app.echo.android.model.playback.EchoPlaybackDiagnostics
 fun EchoPlaybackDiagnostics.toReadableLines(): List<String> = buildList {
     add("route=$outputRoute")
     add("offload=$offloadActive")
+    add("usbExclusiveEnabled=$usbExclusiveEnabled")
+    add("usbConnected=$usbConnected")
+    usbDeviceName?.let { add("usbDevice=$it") }
+    add("usbBitPerfectSupported=$usbBitPerfectSupported")
+    add("usbBitPerfectActive=$usbBitPerfectActive")
+    if (usbSupportedSampleRates.isNotEmpty()) {
+        add("usbSupportedSampleRates=${usbSupportedSampleRates.joinToString(",")}")
+    }
+    usbLastRequestedSampleRateHz?.let { add("usbLastRequestedSampleRateHz=$it") }
+    usbLastRequestError?.let { add("usbLastRequestError=${it.kind}:${it.message}") }
     add("bufferedMs=$bufferedMs")
     add("requestToken=$requestToken")
     codec?.let { add("codec=$it") }

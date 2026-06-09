@@ -14,7 +14,8 @@ class LocalLyricsResolver(
 ) {
     fun loadForTrack(track: LibraryTrackEntity): EchoLyrics? {
         val candidates = buildCandidateNames(track)
-        return loadFromFileUri(track.contentUri, candidates)
+        return loadEmbeddedLyrics(track.contentUri)
+            ?: loadFromFileUri(track.contentUri, candidates)
             ?: loadFromMediaStore(track, candidates)
     }
 
@@ -49,6 +50,18 @@ class LocalLyricsResolver(
             ?.let { file ->
                 readText(file)?.let { text -> EchoLyricsParser.parse(text, sourceLabel = file.name) }
             }
+    }
+
+    private fun loadEmbeddedLyrics(contentUri: String): EchoLyrics? {
+        val uri = runCatching { Uri.parse(contentUri) }.getOrNull() ?: return null
+        val embeddedText = runCatching {
+            openLyricsInputStream(uri)?.use(EmbeddedLyricsReader::read)
+        }.getOrNull() ?: return null
+
+        return runCatching {
+            EchoLyricsParser.parse(embeddedText.text, sourceLabel = embeddedText.sourceLabel)
+        }.getOrNull()
+            ?.takeIf { it.lines.isNotEmpty() }
     }
 
     private fun loadFromMediaStore(track: LibraryTrackEntity, candidates: List<String>): EchoLyrics? {

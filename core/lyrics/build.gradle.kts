@@ -20,4 +20,5 @@ dependencies {
     implementation(project(":core:model"))
 
     testImplementation(libs.junit)
+    testImplementation(libs.json)
 }

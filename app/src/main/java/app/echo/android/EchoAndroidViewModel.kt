@@ -13,9 +13,11 @@ import app.echo.android.data.EchoSettingsStore
 import app.echo.android.data.MediaStoreTrackScanner
 import app.echo.android.lyrics.ImportedLyricsStore
 import app.echo.android.lyrics.LocalLyricsResolver
+import app.echo.android.lyrics.OnlineLyricsResolver
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.lyrics.EchoLyricsLoadState
@@ -48,6 +50,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     private val lyricsController = LyricsController(
         repository = repository,
         lyricsResolver = LocalLyricsResolver(application.contentResolver),
+        onlineLyricsResolver = OnlineLyricsResolver(),
         importedLyricsStore = ImportedLyricsStore(application),
         scope = viewModelScope,
     )
@@ -62,6 +65,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val tracks: Flow<PagingData<EchoTrack>> = libraryController.tracks
     val albums: Flow<PagingData<AlbumSummary>> = libraryController.albums
     val artists: Flow<PagingData<ArtistSummary>> = libraryController.artists
+    val folders: Flow<PagingData<FolderSummary>> = libraryController.folders
     val libraryStats: Flow<LibraryStats> = libraryController.libraryStats
     val recommendedTracks: Flow<List<EchoTrack>> = libraryController.recommendedTracks
     val recentlyAddedAlbums: Flow<List<AlbumSummary>> = libraryController.recentlyAddedAlbums
@@ -83,11 +87,23 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     private val albumPlaybackCounts = mutableMapOf<String, Int>()
     private val artistPlaybackCounts = mutableMapOf<String, Int>()
 
+    init {
+        viewModelScope.launch {
+            settingsStore.appSettings.collect { settings ->
+                lyricsController.setOnlineLyricsEnabled(settings.onlineLyricsEnabled, playbackController.currentTrackId)
+                playbackController.setUsbExclusiveEnabled(settings.usbExclusiveEnabled)
+            }
+        }
+    }
+
     fun albumTrackPaging(albumKey: String): Flow<PagingData<EchoTrack>> =
         libraryController.albumTrackPaging(albumKey)
 
     fun artistTrackPaging(artistKey: String): Flow<PagingData<EchoTrack>> =
         libraryController.artistTrackPaging(artistKey)
+
+    fun folderTrackPaging(folderKey: String): Flow<PagingData<EchoTrack>> =
+        libraryController.folderTrackPaging(folderKey)
 
     fun refreshLibrary() {
         libraryController.refreshLibrary()
@@ -155,6 +171,13 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     fun playArtist(artistKey: String) {
         viewModelScope.launch {
             val queue = libraryController.artistTracksForPlayback(artistKey)
+            if (queue.isNotEmpty()) playQueue(queue, 0)
+        }
+    }
+
+    fun playFolder(folderKey: String) {
+        viewModelScope.launch {
+            val queue = libraryController.folderTracksForPlayback(folderKey)
             if (queue.isNotEmpty()) playQueue(queue, 0)
         }
     }
@@ -230,6 +253,44 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     fun setShowLyricsControlDeck(enabled: Boolean) {
         updateSettings {
             setShowLyricsControlDeck(enabled)
+        }
+    }
+
+    fun setOnlineLyricsEnabled(enabled: Boolean) {
+        lyricsController.setOnlineLyricsEnabled(enabled, playbackController.currentTrackId)
+        updateSettings {
+            setOnlineLyricsEnabled(enabled)
+        }
+    }
+
+    fun setUsbExclusiveEnabled(enabled: Boolean) {
+        playbackController.setUsbExclusiveEnabled(enabled)
+        updateSettings {
+            setUsbExclusiveEnabled(enabled)
+        }
+    }
+
+    fun setCustomBackground(mode: String, uri: Uri?) {
+        updateSettings {
+            setCustomBackground(mode, uri?.toString())
+        }
+    }
+
+    fun setCustomBackgroundBlur(value: Float) {
+        updateSettings {
+            setCustomBackgroundBlur(value)
+        }
+    }
+
+    fun setCustomBackgroundBrightness(value: Float) {
+        updateSettings {
+            setCustomBackgroundBrightness(value)
+        }
+    }
+
+    fun setCustomBackgroundGlass(value: Float) {
+        updateSettings {
+            setCustomBackgroundGlass(value)
         }
     }
 

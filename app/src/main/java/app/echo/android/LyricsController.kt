@@ -2,8 +2,11 @@ package app.echo.android
 
 import android.net.Uri
 import app.echo.android.data.EchoLibraryRepository
+import app.echo.android.data.LibraryTrackEntity
+import app.echo.android.lyrics.EchoLyricsSearchRequest
 import app.echo.android.lyrics.ImportedLyricsStore
 import app.echo.android.lyrics.LocalLyricsResolver
+import app.echo.android.lyrics.OnlineLyricsResolver
 import app.echo.android.model.lyrics.EchoLyricLine
 import app.echo.android.model.lyrics.EchoLyricWord
 import app.echo.android.model.lyrics.EchoLyrics
@@ -21,6 +24,7 @@ import kotlin.coroutines.cancellation.CancellationException
 internal class LyricsController(
     private val repository: EchoLibraryRepository,
     private val lyricsResolver: LocalLyricsResolver,
+    private val onlineLyricsResolver: OnlineLyricsResolver,
     private val importedLyricsStore: ImportedLyricsStore,
     private val scope: CoroutineScope,
 ) {
@@ -30,6 +34,12 @@ internal class LyricsController(
     private var lyricsJob: Job? = null
     private var lastLyricsTrackId: String? = null
     private var currentLyricsUserOffsetMs: Long = 0L
+    @Volatile
+    private var onlineLyricsEnabled: Boolean = false
+    private val onlineLyricsCache = object : LinkedHashMap<String, EchoLyrics>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, EchoLyrics>?): Boolean =
+            size > MaxOnlineLyricsCacheEntries
+    }
 
     fun importLyrics(uri: Uri, currentTrackId: String?) {
         val trackIdAtImport = currentTrackId ?: lastLyricsTrackId
@@ -96,8 +106,16 @@ internal class LyricsController(
         }
     }
 
-    fun updateLyricsForTrack(trackId: String?) {
-        if (trackId == lastLyricsTrackId) return
+    fun setOnlineLyricsEnabled(enabled: Boolean, currentTrackId: String?) {
+        if (onlineLyricsEnabled == enabled) return
+        onlineLyricsEnabled = enabled
+        if (enabled && currentTrackId != null && _lyricsState.value is EchoLyricsLoadState.Missing) {
+            updateLyricsForTrack(currentTrackId, force = true)
+        }
+    }
+
+    fun updateLyricsForTrack(trackId: String?, force: Boolean = false) {
+        if (!force && trackId == lastLyricsTrackId) return
         lastLyricsTrackId = trackId
         lyricsJob?.cancel()
         if (trackId == null) {
@@ -117,7 +135,13 @@ internal class LyricsController(
                         val userOffsetMs = importedLyricsStore.lyricsOffsetForTrack(trackId)
                         val importedLyrics = importedLyricsStore.lyricsUriForTrack(trackId)
                             ?.let(lyricsResolver::loadFromUri)
-                        (importedLyrics ?: lyricsResolver.loadForTrack(track))
+                        val localLyrics = importedLyrics ?: lyricsResolver.loadForTrack(track)
+                        val onlineLyrics = if (localLyrics == null && onlineLyricsEnabled) {
+                            cachedOnlineLyrics(track)
+                        } else {
+                            null
+                        }
+                        (localLyrics ?: onlineLyrics)
                             ?.takeIf { it.lines.isNotEmpty() }
                             ?.withUserOffset(userOffsetMs)
                             ?.let(EchoLyricsLoadState::Ready)
@@ -142,6 +166,24 @@ internal class LyricsController(
         val state: EchoLyricsLoadState,
         val userOffsetMs: Long = 0L,
     )
+
+    private fun cachedOnlineLyrics(track: LibraryTrackEntity): EchoLyrics? {
+        val cacheKey = onlineLyricsCacheKey(track)
+        onlineLyricsCache[cacheKey]?.let { return it }
+        return onlineLyricsResolver.loadForTrack(track.toLyricsSearchRequest())
+            ?.also { onlineLyricsCache[cacheKey] = it }
+    }
+
+    private fun onlineLyricsCacheKey(track: LibraryTrackEntity): String =
+        listOf(track.id, track.title, track.artist, track.album.orEmpty(), track.durationMs).joinToString("|")
+
+    private fun LibraryTrackEntity.toLyricsSearchRequest(): EchoLyricsSearchRequest =
+        EchoLyricsSearchRequest(
+            title = title,
+            artist = artist,
+            album = album,
+            durationMs = durationMs,
+        )
 
     private fun EchoLyrics.withUserOffset(userOffsetMs: Long): EchoLyrics =
         if (userOffsetMs == 0L) {
@@ -177,4 +219,8 @@ internal class LyricsController(
         message?.takeIf { it.isNotBlank() }
             ?: javaClass.simpleName.takeIf { it.isNotBlank() }?.let { "$fallback: $it" }
             ?: fallback
+
+    private companion object {
+        const val MaxOnlineLyricsCacheEntries = 48
+    }
 }

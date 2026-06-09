@@ -85,6 +85,7 @@ import app.echo.android.design.formatDuration
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
 import kotlinx.coroutines.launch
@@ -135,6 +136,122 @@ internal fun LibraryPlaceholderPage(
         }
     }
 }
+
+@Composable
+internal fun FolderList(
+    folders: LazyPagingItems<FolderSummary>,
+    onOpenFolder: (FolderSummary) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (folders.loadState.refresh is LoadState.Loading) {
+        EmptyState("正在加载文件夹...")
+        return
+    }
+    if (folders.loadState.refresh is LoadState.Error) {
+        EmptyState("文件夹加载失败。")
+        return
+    }
+    if (folders.itemCount == 0) {
+        LibraryPlaceholderPage(
+            title = "文件夹视图",
+            subtitle = "当前曲库还没有可浏览的存储路径。",
+        )
+        return
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(bottom = LibraryBottomControlsPadding),
+    ) {
+        items(
+            count = folders.itemCount,
+            key = { index: Int -> folders.peek(index)?.folderKey ?: "folder-$index" },
+        ) { index: Int ->
+            folders[index]?.let { folder ->
+                FolderRow(
+                    folder = folder,
+                    onClick = { onOpenFolder(folder) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FolderRow(
+    folder: FolderSummary,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.66f))
+            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.84f)), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EchoIconBadge(Icons.Rounded.LibraryMusic)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    folderDisplayName(folder),
+                    color = RoonInk,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    folderPathLabel(folder),
+                    color = RoonMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                "${folder.trackCount} 首",
+                color = EchoAccentText,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+internal fun folderDisplayName(folder: FolderSummary): String =
+    folder.path
+        ?.trim('/')
+        ?.substringAfterLast('/')
+        ?.takeIf { it.isNotBlank() }
+        ?: "未知路径"
+
+internal fun folderSubtitle(folder: FolderSummary): String =
+    listOf(
+        "${folder.trackCount} 首",
+        "${folder.albumCount} 张专辑",
+        "${folder.artistCount} 位艺术家",
+        formatDuration(folder.durationMs),
+        formatByteSize(folder.totalSizeBytes),
+    ).joinToString(" · ")
+
+private fun folderPathLabel(folder: FolderSummary): String =
+    folder.path?.takeIf { it.isNotBlank() } ?: "MediaStore 未提供路径"
+
+private fun formatByteSize(bytes: Long): String =
+    when {
+        bytes >= 1024L * 1024L * 1024L -> "%.1f GB".format(bytes / (1024f * 1024f * 1024f))
+        bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / (1024f * 1024f))
+        bytes >= 1024L -> "%.1f KB".format(bytes / 1024f)
+        else -> "$bytes B"
+    }
 
 @Composable
 internal fun LibraryOverview(

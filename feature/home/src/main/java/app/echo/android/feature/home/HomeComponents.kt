@@ -341,7 +341,7 @@ internal fun RecentAlbumCard(
             .width(116.dp)
             .height(190.dp)
             .clickable(onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         ArtworkTile(
             artworkUri = album.artworkUri,
@@ -355,7 +355,6 @@ internal fun RecentAlbumCard(
         )
         Text(
             album.title,
-            modifier = Modifier.height(40.dp),
             color = RoonInk,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.ExtraBold,
@@ -647,7 +646,7 @@ internal fun RecommendedAlbumCard(
         modifier = Modifier
             .width(120.dp)
             .clickable(onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         ArtworkTile(
             artworkUri = album.artworkUri,

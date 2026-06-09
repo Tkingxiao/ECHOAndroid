@@ -57,7 +57,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import app.echo.android.connect.EchoRemoteClient
 import app.echo.android.design.EchoContentMaxWidth
-import app.echo.android.design.EchoGlassBackground
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoMobileTheme
 import app.echo.android.feature.connect.ConnectScreen
@@ -68,11 +67,13 @@ import app.echo.android.feature.player.NowPlayingScreen
 import app.echo.android.feature.settings.DiagnosticsScreen
 import app.echo.android.feature.settings.SettingsScreen
 import app.echo.android.data.EchoAppSettings
+import app.echo.android.data.EchoBackgroundMode
 import app.echo.android.model.connect.EchoRemoteCommand
 import app.echo.android.model.connect.EchoRemoteEndpoint
 import app.echo.android.model.connect.EchoRemotePlaybackState
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
+import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.playback.PlaybackPositionState
 import kotlinx.coroutines.launch
@@ -119,14 +120,29 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val folderScanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let(viewModel::refreshLibraryFolder)
     }
+    fun persistReadPermission(uri: android.net.Uri) {
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+    }
+    val backgroundImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { selectedUri ->
+            persistReadPermission(selectedUri)
+            viewModel.setCustomBackground(EchoBackgroundMode.Image, selectedUri)
+        }
+    }
+    val backgroundVideoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { selectedUri ->
+            persistReadPermission(selectedUri)
+            viewModel.setCustomBackground(EchoBackgroundMode.Video, selectedUri)
+        }
+    }
     val lyricsImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { lyricsUri ->
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    lyricsUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            }
+            persistReadPermission(lyricsUri)
             viewModel.importLyrics(lyricsUri)
         }
     }
@@ -145,6 +161,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     val albums = viewModel.albums.collectAsLazyPagingItems()
     val artists = viewModel.artists.collectAsLazyPagingItems()
+    val folders = viewModel.folders.collectAsLazyPagingItems()
     val homeAlbumSnapshot = albums.itemSnapshotList.items
     var homeRecommendationSeed by remember { mutableIntStateOf(0) }
     val homeRecommendedAlbums = remember(homeRecommendationSeed, homeAlbumSnapshot.map(AlbumSummary::albumKey)) {
@@ -152,19 +169,25 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     }
     var selectedAlbum by remember { mutableStateOf<AlbumSummary?>(null) }
     var selectedArtist by remember { mutableStateOf<ArtistSummary?>(null) }
+    var selectedFolder by remember { mutableStateOf<FolderSummary?>(null) }
     var detailReturnPage by remember { mutableStateOf<EchoPagerPage?>(null) }
     val selectedAlbumKey = selectedAlbum?.albumKey
     val selectedArtistKey = selectedArtist?.artistKey
+    val selectedFolderKey = selectedFolder?.folderKey
     val albumDetailTracks = selectedAlbumKey?.let { albumKey ->
         remember(albumKey) { viewModel.albumTrackPaging(albumKey) }.collectAsLazyPagingItems()
     }
     val artistDetailTracks = selectedArtistKey?.let { artistKey ->
         remember(artistKey) { viewModel.artistTrackPaging(artistKey) }.collectAsLazyPagingItems()
     }
+    val folderDetailTracks = selectedFolderKey?.let { folderKey ->
+        remember(folderKey) { viewModel.folderTrackPaging(folderKey) }.collectAsLazyPagingItems()
+    }
     var selectedTab by remember { mutableIntStateOf(EchoTab.Now.ordinal) }
     var bottomDockExpanded by remember { mutableStateOf(true) }
     var nowPlayingExpanded by remember { mutableStateOf(false) }
-    val libraryDetailOpen = selectedAlbum != null || selectedArtist != null
+    val libraryDetailOpen = selectedAlbum != null || selectedArtist != null || selectedFolder != null
+    val darkTheme = isSystemInDarkTheme()
 
     // 四个主页面横向滑动切换，与底部 dock 双向联动
     val tabPagerState = rememberPagerState(
@@ -182,6 +205,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     fun clearLibraryDetail() {
         selectedAlbum = null
         selectedArtist = null
+        selectedFolder = null
     }
     fun closeLibraryDetail() {
         val returnPage = detailReturnPage ?: EchoPagerPage.Library
@@ -221,9 +245,9 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         selectDockTab(EchoTab.Now)
     }
 
-    EchoMobileTheme(darkTheme = isSystemInDarkTheme()) {
+    EchoMobileTheme(darkTheme = darkTheme) {
         Box(Modifier.fillMaxSize()) {
-            EchoGlassBackground(Modifier.fillMaxSize())
+            EchoCustomBackground(settings = appSettings, modifier = Modifier.fillMaxSize())
             Box(
                 modifier = Modifier.fillMaxSize(),
             ) {
@@ -239,10 +263,13 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 tracks = tracks,
                                 albums = albums,
                                 artists = artists,
+                                folders = folders,
                                 selectedAlbum = selectedAlbum,
                                 selectedArtist = selectedArtist,
+                                selectedFolder = selectedFolder,
                                 albumDetailTracks = albumDetailTracks,
                                 artistDetailTracks = artistDetailTracks,
+                                folderDetailTracks = folderDetailTracks,
                                 onRequestPermission = { permissionLauncher.launch(permission) },
                                 onScanFolder = { folderScanLauncher.launch(null) },
                                 onScanAll = viewModel::refreshLibrary,
@@ -252,15 +279,24 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onShuffleAlbum = { album -> viewModel.shuffleAlbum(album.albumKey) },
                                 onPlayArtist = { artist -> viewModel.playArtist(artist.artistKey) },
                                 onShuffleArtist = { artist -> viewModel.shuffleArtist(artist.artistKey) },
+                                onPlayFolder = { folder -> viewModel.playFolder(folder.folderKey) },
                                 onOpenAlbum = { album ->
                                     detailReturnPage = EchoPagerPage.Library
                                     selectedArtist = null
+                                    selectedFolder = null
                                     selectedAlbum = album
                                 },
                                 onOpenArtist = { artist ->
                                     detailReturnPage = EchoPagerPage.Library
                                     selectedAlbum = null
+                                    selectedFolder = null
                                     selectedArtist = artist
+                                },
+                                onOpenFolder = { folder ->
+                                    detailReturnPage = EchoPagerPage.Library
+                                    selectedAlbum = null
+                                    selectedArtist = null
+                                    selectedFolder = folder
                                 },
                                 onCloseDetail = { closeLibraryDetail() },
                             )
@@ -287,12 +323,14 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onOpenAlbum = { album ->
                                     detailReturnPage = EchoPagerPage.Now
                                     selectedArtist = null
+                                    selectedFolder = null
                                     selectedAlbum = album
                                     selectDockTab(EchoTab.Library)
                                 },
                                 onOpenArtist = { artist ->
                                     detailReturnPage = EchoPagerPage.Now
                                     selectedAlbum = null
+                                    selectedFolder = null
                                     selectedArtist = artist
                                     selectDockTab(EchoTab.Library)
                                 },
@@ -309,10 +347,27 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 compactModeEnabled = appSettings.compactModeEnabled,
                                 pcHandoffEnabled = appSettings.pcHandoffEnabled,
                                 showLyricsControlDeck = appSettings.showLyricsControlDeck,
+                                onlineLyricsEnabled = appSettings.onlineLyricsEnabled,
+                                usbExclusiveEnabled = appSettings.usbExclusiveEnabled,
+                                customBackgroundMode = appSettings.customBackgroundMode,
+                                customBackgroundUri = appSettings.customBackgroundUri,
+                                customBackgroundBlur = appSettings.customBackgroundBlur,
+                                customBackgroundBrightness = appSettings.customBackgroundBrightness,
+                                customBackgroundGlass = appSettings.customBackgroundGlass,
                                 onDynamicArtworkEnabledChange = viewModel::setDynamicArtworkEnabled,
                                 onCompactModeEnabledChange = viewModel::setCompactModeEnabled,
                                 onPcHandoffEnabledChange = viewModel::setPcHandoffEnabled,
                                 onShowLyricsControlDeckChange = viewModel::setShowLyricsControlDeck,
+                                onOnlineLyricsEnabledChange = viewModel::setOnlineLyricsEnabled,
+                                onUsbExclusiveEnabledChange = viewModel::setUsbExclusiveEnabled,
+                                onPickImageBackground = { backgroundImageLauncher.launch(arrayOf("image/*")) },
+                                onPickVideoBackground = { backgroundVideoLauncher.launch(arrayOf("video/*")) },
+                                onClearCustomBackground = {
+                                    viewModel.setCustomBackground(EchoBackgroundMode.Default, null)
+                                },
+                                onCustomBackgroundBlurChange = viewModel::setCustomBackgroundBlur,
+                                onCustomBackgroundBrightnessChange = viewModel::setCustomBackgroundBrightness,
+                                onCustomBackgroundGlassChange = viewModel::setCustomBackgroundGlass,
                                 onOpenLibrary = { selectDockTab(EchoTab.Library) },
                                 onOpenConnect = { selectDockTab(EchoTab.Connect) },
                             )
@@ -404,8 +459,8 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                 visible = nowPlayingExpanded,
                 enter = slideInVertically(tween(durationMillis = 360, easing = DockMotionEasing)) { height -> height } +
                     fadeIn(tween(durationMillis = 220)),
-                exit = slideOutVertically(tween(durationMillis = 300, easing = DockMotionEasing)) { height -> height } +
-                    fadeOut(tween(durationMillis = 200)),
+                exit = slideOutVertically(tween(durationMillis = 180, easing = DockMotionEasing)) { height -> height / 10 } +
+                    fadeOut(tween(durationMillis = 140)),
             ) {
                 NowPlayingScreen(
                     status = playbackStatus,
@@ -424,6 +479,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                         viewModel.openCurrentPlaybackArtist { artist ->
                             detailReturnPage = EchoTab.entries[selectedTab].pagerPage
                             selectedAlbum = null
+                            selectedFolder = null
                             selectedArtist = artist
                             selectDockTab(EchoTab.Library)
                             nowPlayingExpanded = false
@@ -433,6 +489,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                         viewModel.openCurrentPlaybackAlbum { album ->
                             detailReturnPage = EchoTab.entries[selectedTab].pagerPage
                             selectedArtist = null
+                            selectedFolder = null
                             selectedAlbum = album
                             selectDockTab(EchoTab.Library)
                             nowPlayingExpanded = false
@@ -477,7 +534,7 @@ private fun ExpandedBottomControls(
         )
         BottomDock(
             selectedTab = selectedTab,
-            onLightSurface = true,
+            onLightSurface = !isSystemInDarkTheme(),
             onSelectTab = onSelectTab,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -529,6 +586,8 @@ private fun RoundDockButton(
     description: String,
     onClick: () -> Unit,
 ) {
+    val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+    val dark = isSystemInDarkTheme()
     Box(
         modifier = Modifier
             .size(48.dp)
@@ -539,15 +598,18 @@ private fun RoundDockButton(
                 spotColor = Color.Black.copy(alpha = 0.09f),
             )
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.92f))
-            .border(BorderStroke(1.dp, EchoGlassBorder), CircleShape)
+            .background(scheme.surface.copy(alpha = 0.92f))
+            .border(
+                BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else EchoGlassBorder),
+                CircleShape,
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = description,
-            tint = Color(0xFFFF2D55),
+            tint = scheme.primary,
             modifier = Modifier.size(24.dp),
         )
     }

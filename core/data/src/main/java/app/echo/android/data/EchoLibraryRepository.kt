@@ -9,6 +9,7 @@ import app.echo.android.model.library.AlbumSortMode
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSortMode
 import app.echo.android.model.library.ArtistSummary
+import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibrarySource
@@ -93,6 +94,14 @@ class EchoLibraryRepository(
             },
         ).flow
 
+    fun pagedFolders(query: String? = null): Flow<PagingData<FolderSummary>> =
+        Pager(
+            config = defaultPagingConfig(),
+            pagingSourceFactory = {
+                database.trackDao().pageFolders(query?.trim()?.takeIf { it.isNotBlank() })
+            },
+        ).flow
+
     fun pagedAlbumTracks(albumKey: String): Flow<PagingData<LibraryTrackEntity>> =
         Pager(
             config = defaultPagingConfig(),
@@ -103,6 +112,12 @@ class EchoLibraryRepository(
         Pager(
             config = defaultPagingConfig(),
             pagingSourceFactory = { database.trackDao().pageTracksByArtist(artistKey) },
+        ).flow
+
+    fun pagedFolderTracks(folderKey: String): Flow<PagingData<LibraryTrackEntity>> =
+        Pager(
+            config = defaultPagingConfig(),
+            pagingSourceFactory = { database.trackDao().pageTracksByFolder(folderKey) },
         ).flow
 
     suspend fun albumTracks(albumKey: String): List<LibraryTrackEntity> =
@@ -151,6 +166,12 @@ class EchoLibraryRepository(
         limit: Int = AggregationQueueLimit,
     ): List<LibraryTrackEntity> =
         database.trackDao().getArtistTracksForPlayback(artistPlaybackQuery(artistKey, limit.coerceAtLeast(1)))
+
+    suspend fun folderTracksForPlayback(
+        folderKey: String,
+        limit: Int = AggregationQueueLimit,
+    ): List<LibraryTrackEntity> =
+        database.trackDao().getTracksByFolderForPlayback(folderKey, limit.coerceAtLeast(1))
 
     fun refreshMediaStoreSnapshot(
         relativePathPrefix: String? = null,

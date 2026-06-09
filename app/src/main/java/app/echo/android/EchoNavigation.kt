@@ -2,6 +2,7 @@ package app.echo.android
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,10 +46,12 @@ fun BottomDock(
     onSelectTab: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val dark = isSystemInDarkTheme()
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFFEAF2FF)),
+            .background(if (dark) scheme.surface.copy(alpha = 0.96f) else Color(0xFFEAF2FF)),
     ) {
         Row(
             modifier = Modifier
@@ -80,15 +83,15 @@ private fun DockItem(
     modifier: Modifier = Modifier,
 ) {
     val iconColor = when {
-        selected && onLightSurface -> Color.Black
+        selected && onLightSurface -> MaterialTheme.colorScheme.onSurface
         selected -> Color.White
-        onLightSurface -> Color(0xFF9A9AA0)
+        onLightSurface -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> Color.White.copy(alpha = 0.62f)
     }
     val labelColor = when {
-        selected && onLightSurface -> Color.Black
+        selected && onLightSurface -> MaterialTheme.colorScheme.onSurface
         selected -> Color.White
-        onLightSurface -> Color(0xFF9A9AA0)
+        onLightSurface -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> Color.White.copy(alpha = 0.62f)
     }
     Box(
