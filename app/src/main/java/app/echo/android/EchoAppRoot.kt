@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -68,7 +67,7 @@ import app.echo.android.feature.player.MiniPlayer
 import app.echo.android.feature.player.NowPlayingScreen
 import app.echo.android.feature.settings.DiagnosticsScreen
 import app.echo.android.feature.settings.SettingsScreen
-import app.echo.android.data.EchoPlaybackSettings
+import app.echo.android.data.EchoAppSettings
 import app.echo.android.model.connect.EchoRemoteCommand
 import app.echo.android.model.connect.EchoRemoteEndpoint
 import app.echo.android.model.connect.EchoRemotePlaybackState
@@ -135,7 +134,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val remoteClient = remember { EchoRemoteClient() }
     val remoteStatus by remoteClient.status.collectAsStateWithLifecycle()
     val playbackStatus by viewModel.playbackStatus.collectAsStateWithLifecycle()
-    val playbackSettings by viewModel.playbackSettings.collectAsStateWithLifecycle(EchoPlaybackSettings())
+    val appSettings by viewModel.appSettings.collectAsStateWithLifecycle(EchoAppSettings())
     val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
     val lyricsState by viewModel.lyricsState.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
@@ -180,12 +179,27 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         }
     }
     fun selectDockTab(tab: EchoTab) = navigateToPage(tab.pagerPage)
+    fun clearLibraryDetail() {
+        selectedAlbum = null
+        selectedArtist = null
+    }
     fun closeLibraryDetail() {
         val returnPage = detailReturnPage ?: EchoPagerPage.Library
         detailReturnPage = null
-        selectedAlbum = null
-        selectedArtist = null
-        navigateToPage(returnPage)
+        if (returnPage == EchoPagerPage.Library) {
+            clearLibraryDetail()
+            return
+        }
+        returnPage.dockTab?.let { selectedTab = it.ordinal }
+        appScope.launch {
+            try {
+                if (tabPagerState.currentPage != returnPage.ordinal) {
+                    tabPagerState.animateScrollToPage(returnPage.ordinal)
+                }
+            } finally {
+                clearLibraryDetail()
+            }
+        }
     }
     LaunchedEffect(tabPagerState.settledPage) {
         EchoPagerPage.entries[tabPagerState.settledPage].dockTab?.let { settledTab ->
@@ -291,7 +305,13 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 trackCount = libraryStats.trackCount,
                                 albumCount = libraryStats.albumCount,
                                 artistCount = libraryStats.artistCount,
-                                showLyricsControlDeck = playbackSettings.showLyricsControlDeck,
+                                dynamicArtworkEnabled = appSettings.dynamicArtworkEnabled,
+                                compactModeEnabled = appSettings.compactModeEnabled,
+                                pcHandoffEnabled = appSettings.pcHandoffEnabled,
+                                showLyricsControlDeck = appSettings.showLyricsControlDeck,
+                                onDynamicArtworkEnabledChange = viewModel::setDynamicArtworkEnabled,
+                                onCompactModeEnabledChange = viewModel::setCompactModeEnabled,
+                                onPcHandoffEnabledChange = viewModel::setPcHandoffEnabled,
                                 onShowLyricsControlDeckChange = viewModel::setShowLyricsControlDeck,
                                 onOpenLibrary = { selectDockTab(EchoTab.Library) },
                                 onOpenConnect = { selectDockTab(EchoTab.Connect) },
@@ -326,8 +346,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(start = 14.dp, top = 8.dp, end = 14.dp, bottom = 18.dp),
+                        .padding(top = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     AnimatedContent(
@@ -360,9 +379,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onExpand = { nowPlayingExpanded = true },
                                 onNext = viewModel::skipNext,
                                 onPrevious = viewModel::skipPrevious,
-                                modifier = Modifier
-                                    .widthIn(max = EchoContentMaxWidth)
-                                    .fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         } else {
                             CompactBottomControls(
@@ -394,7 +411,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     status = playbackStatus,
                     positionState = playbackPosition,
                     lyricsState = lyricsState,
-                    showLyricsControlDeck = playbackSettings.showLyricsControlDeck,
+                    showLyricsControlDeck = appSettings.showLyricsControlDeck,
                     onDismiss = { nowPlayingExpanded = false },
                     onPlayPause = viewModel::playPause,
                     onNext = viewModel::skipNext,
@@ -445,7 +462,7 @@ private fun ExpandedBottomControls(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         MiniPlayer(
             status = status,
@@ -455,7 +472,9 @@ private fun ExpandedBottomControls(
             onExpand = onExpand,
             onNext = onNext,
             onPrevious = onPrevious,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .padding(horizontal = 4.dp)
+                .fillMaxWidth(),
         )
         BottomDock(
             selectedTab = selectedTab,

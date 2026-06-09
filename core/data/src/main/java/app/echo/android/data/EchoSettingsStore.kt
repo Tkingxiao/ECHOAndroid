@@ -10,20 +10,26 @@ import kotlinx.coroutines.flow.map
 
 private val Context.echoSettings by preferencesDataStore(name = "echo-settings")
 
-data class EchoPlaybackSettings(
+data class EchoAppSettings(
     val preferOffload: Boolean = true,
     val lastOutputRoute: String = "system",
+    val dynamicArtworkEnabled: Boolean = true,
+    val compactModeEnabled: Boolean = false,
+    val pcHandoffEnabled: Boolean = true,
     val showLyricsControlDeck: Boolean = false,
 )
 
 class EchoSettingsStore(
     private val context: Context,
 ) {
-    val playbackSettings: Flow<EchoPlaybackSettings> =
+    val appSettings: Flow<EchoAppSettings> =
         context.echoSettings.data.map { preferences ->
-            EchoPlaybackSettings(
+            EchoAppSettings(
                 preferOffload = preferences[Keys.PreferOffload] ?: true,
                 lastOutputRoute = preferences[Keys.LastOutputRoute] ?: "system",
+                dynamicArtworkEnabled = preferences[Keys.DynamicArtworkEnabled] ?: true,
+                compactModeEnabled = preferences[Keys.CompactModeEnabled] ?: false,
+                pcHandoffEnabled = preferences[Keys.PcHandoffEnabled] ?: true,
                 showLyricsControlDeck = preferences[Keys.ShowLyricsControlDeck] ?: false,
             )
         }
@@ -36,6 +42,18 @@ class EchoSettingsStore(
         context.echoSettings.edit { it[Keys.LastOutputRoute] = route }
     }
 
+    suspend fun setDynamicArtworkEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.DynamicArtworkEnabled] = enabled }
+    }
+
+    suspend fun setCompactModeEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.CompactModeEnabled] = enabled }
+    }
+
+    suspend fun setPcHandoffEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.PcHandoffEnabled] = enabled }
+    }
+
     suspend fun setShowLyricsControlDeck(enabled: Boolean) {
         context.echoSettings.edit { it[Keys.ShowLyricsControlDeck] = enabled }
     }
@@ -43,6 +61,9 @@ class EchoSettingsStore(
     private object Keys {
         val PreferOffload = booleanPreferencesKey("prefer_offload")
         val LastOutputRoute = stringPreferencesKey("last_output_route")
+        val DynamicArtworkEnabled = booleanPreferencesKey("dynamic_artwork_enabled")
+        val CompactModeEnabled = booleanPreferencesKey("compact_mode_enabled")
+        val PcHandoffEnabled = booleanPreferencesKey("pc_handoff_enabled")
         val ShowLyricsControlDeck = booleanPreferencesKey("show_lyrics_control_deck")
     }
 }

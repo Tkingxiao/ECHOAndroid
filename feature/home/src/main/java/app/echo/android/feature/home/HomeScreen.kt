@@ -156,7 +156,7 @@ fun HomeScreen(
                 onOpenAlbum = onOpenAlbum,
                 onOpenLibrary = onOpenLibrary,
             )
-            Spacer(Modifier.height(if (compactViewport) 180.dp else 212.dp))
+            Spacer(Modifier.height(if (compactViewport) 224.dp else 276.dp))
         }
     }
 }

@@ -69,7 +69,7 @@ fun MiniPlayer(
     onNext: (() -> Unit)? = null,
     onPrevious: (() -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(26.dp)
+    val shape = RoundedCornerShape(14.dp)
     val scope = rememberCoroutineScope()
     val offsetX = remember { Animatable(0f) }
     var widthPx by remember { mutableStateOf(1f) }

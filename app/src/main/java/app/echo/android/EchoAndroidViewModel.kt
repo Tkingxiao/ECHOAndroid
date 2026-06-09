@@ -8,7 +8,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.paging.PagingData
 import app.echo.android.data.EchoLibraryDatabase
 import app.echo.android.data.EchoLibraryRepository
-import app.echo.android.data.EchoPlaybackSettings
+import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoSettingsStore
 import app.echo.android.data.MediaStoreTrackScanner
 import app.echo.android.lyrics.ImportedLyricsStore
@@ -73,7 +73,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val playbackControls: StateFlow<PlaybackControlsState> = playbackController.playbackControls
     val playbackDiagnostics: StateFlow<PlaybackDiagnosticsState> = playbackController.playbackDiagnostics
     val lyricsState: StateFlow<EchoLyricsLoadState> = lyricsController.lyricsState
-    val playbackSettings: Flow<EchoPlaybackSettings> = settingsStore.playbackSettings
+    val appSettings: Flow<EchoAppSettings> = settingsStore.appSettings
 
     private val _recentPlaybackAlbums = MutableStateFlow<List<AlbumSummary>>(emptyList())
     val recentPlaybackAlbums: StateFlow<List<AlbumSummary>> = _recentPlaybackAlbums.asStateFlow()
@@ -209,10 +209,34 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         lyricsController.resetLyricsOffset(playbackController.currentTrackId)
     }
 
+    fun setDynamicArtworkEnabled(enabled: Boolean) {
+        updateSettings {
+            setDynamicArtworkEnabled(enabled)
+        }
+    }
+
+    fun setCompactModeEnabled(enabled: Boolean) {
+        updateSettings {
+            setCompactModeEnabled(enabled)
+        }
+    }
+
+    fun setPcHandoffEnabled(enabled: Boolean) {
+        updateSettings {
+            setPcHandoffEnabled(enabled)
+        }
+    }
+
     fun setShowLyricsControlDeck(enabled: Boolean) {
+        updateSettings {
+            setShowLyricsControlDeck(enabled)
+        }
+    }
+
+    private fun updateSettings(block: suspend EchoSettingsStore.() -> Unit) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                settingsStore.setShowLyricsControlDeck(enabled)
+                settingsStore.block()
             }
         }
     }

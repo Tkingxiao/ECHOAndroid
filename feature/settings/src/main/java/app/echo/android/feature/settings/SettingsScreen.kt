@@ -27,10 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,15 +54,18 @@ fun SettingsScreen(
     trackCount: Int,
     albumCount: Int,
     artistCount: Int,
+    dynamicArtworkEnabled: Boolean,
+    compactModeEnabled: Boolean,
+    pcHandoffEnabled: Boolean,
     showLyricsControlDeck: Boolean,
+    onDynamicArtworkEnabledChange: (Boolean) -> Unit,
+    onCompactModeEnabledChange: (Boolean) -> Unit,
+    onPcHandoffEnabledChange: (Boolean) -> Unit,
     onShowLyricsControlDeckChange: (Boolean) -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenConnect: () -> Unit,
 ) {
-    var dynamicArtwork by rememberSaveable { mutableStateOf(true) }
-    var compactMode by rememberSaveable { mutableStateOf(false) }
-    var pcHandoff by rememberSaveable { mutableStateOf(true) }
-    val sectionGap = if (compactMode) 8.dp else 14.dp
+    val sectionGap = if (compactModeEnabled) 8.dp else 14.dp
 
     PageChrome(
         title = "设置",
@@ -80,22 +79,22 @@ fun SettingsScreen(
                 trackCount = trackCount,
                 albumCount = albumCount,
                 artistCount = artistCount,
-                dynamicArtwork = dynamicArtwork,
+                dynamicArtwork = dynamicArtworkEnabled,
             )
             SettingsSectionCard(title = "界面") {
                 SettingsSwitchRow(
                     icon = Icons.Rounded.Palette,
                     title = "动态封面氛围",
                     detail = "播放页和迷你播放器跟随封面微调背景",
-                    checked = dynamicArtwork,
-                    onCheckedChange = { dynamicArtwork = it },
+                    checked = dynamicArtworkEnabled,
+                    onCheckedChange = onDynamicArtworkEnabledChange,
                 )
                 SettingsSwitchRow(
                     icon = Icons.Rounded.Speed,
                     title = "紧凑显示",
                     detail = "为小屏幕减少卡片间距",
-                    checked = compactMode,
-                    onCheckedChange = { compactMode = it },
+                    checked = compactModeEnabled,
+                    onCheckedChange = onCompactModeEnabledChange,
                 )
             }
             SettingsSectionCard(title = "播放") {
@@ -112,14 +111,14 @@ fun SettingsScreen(
                     icon = Icons.Rounded.Devices,
                     title = "PC 接力入口",
                     detail = "保留桌面端连接与远程控制入口",
-                    checked = pcHandoff,
-                    onCheckedChange = { pcHandoff = it },
+                    checked = pcHandoffEnabled,
+                    onCheckedChange = onPcHandoffEnabledChange,
                 )
                 SettingsActionRow(
                     icon = Icons.Rounded.Devices,
                     title = "连接 PC ECHO",
-                    detail = if (pcHandoff) "管理配对和远程播放状态" else "PC 接力入口已关闭",
-                    enabled = pcHandoff,
+                    detail = if (pcHandoffEnabled) "管理配对和远程播放状态" else "PC 接力入口已关闭",
+                    enabled = pcHandoffEnabled,
                     onClick = onOpenConnect,
                 )
             }

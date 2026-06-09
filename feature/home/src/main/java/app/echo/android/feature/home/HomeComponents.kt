@@ -1,10 +1,8 @@
 package app.echo.android.feature.home
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -199,16 +197,16 @@ internal fun RoonRecentActivitySection(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .clip(RoundedCornerShape(32.dp))
-            .background(Color.White.copy(alpha = 0.88f))
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.92f)), RoundedCornerShape(32.dp))
-            .padding(top = 18.dp, bottom = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color.White.copy(alpha = 0.90f))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.94f)), RoundedCornerShape(28.dp))
+            .padding(top = 16.dp, bottom = 15.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp),
+                .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -224,7 +222,8 @@ internal fun RoonRecentActivitySection(
             )
         }
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 18.dp),
+            modifier = Modifier.height(if (albums.isEmpty()) 220.dp else 190.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (albums.isEmpty()) {
@@ -331,7 +330,6 @@ internal fun RecentPlayedAlbumsTab() {
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 internal fun RecentAlbumCard(
     album: AlbumSummary,
     mode: RecentActivityMode,
@@ -340,9 +338,10 @@ internal fun RecentAlbumCard(
     val artistLabel = album.albumArtist ?: album.artist ?: "未知艺人"
     Column(
         modifier = Modifier
-            .width(124.dp)
+            .width(116.dp)
+            .height(190.dp)
             .clickable(onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         ArtworkTile(
             artworkUri = album.artworkUri,
@@ -351,21 +350,17 @@ internal fun RecentAlbumCard(
                 .aspectRatio(1f),
             accent = EchoAccent,
             showSignal = album.artworkUri == null,
-            cornerRadius = 2.dp,
+            cornerRadius = 8.dp,
             elevation = 0.dp,
         )
         Text(
             album.title,
-            modifier = Modifier.basicMarquee(
-                iterations = Int.MAX_VALUE,
-                initialDelayMillis = 900,
-                repeatDelayMillis = 1800,
-            ),
+            modifier = Modifier.height(40.dp),
             color = RoonInk,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.ExtraBold,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             recentAlbumSubtitle(album, mode, artistLabel),
@@ -414,7 +409,7 @@ private fun RecentActivityEmptyAlbumCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(Color.White.copy(alpha = 0.74f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -458,7 +453,7 @@ internal fun EmptyRecentAlbumsCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(Color.White.copy(alpha = 0.74f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -577,7 +572,7 @@ internal fun HomeAlbumRecommendationsSection(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .clip(RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(
                 Brush.linearGradient(
                     listOf(
@@ -587,14 +582,14 @@ internal fun HomeAlbumRecommendationsSection(
                     ),
                 ),
             )
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(26.dp))
-            .padding(top = 16.dp, bottom = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(24.dp))
+            .padding(top = 15.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(13.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp),
+                .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -606,24 +601,24 @@ internal fun HomeAlbumRecommendationsSection(
             )
             Surface(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .clickable(onClick = onRefresh),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 color = Color.White.copy(alpha = 0.94f),
                 border = BorderStroke(1.dp, EchoGlassBorder),
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = null, tint = RoonMuted, modifier = Modifier.size(16.dp))
-                    Text("刷新", color = RoonMuted, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Rounded.Refresh, contentDescription = null, tint = RoonMuted, modifier = Modifier.size(15.dp))
+                    Text("刷新", color = RoonMuted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 }
             }
         }
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 18.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (albums.isEmpty()) {
@@ -643,7 +638,6 @@ internal fun HomeAlbumRecommendationsSection(
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 internal fun RecommendedAlbumCard(
     album: AlbumSummary,
     onClick: () -> Unit,
@@ -651,7 +645,7 @@ internal fun RecommendedAlbumCard(
     val artistLabel = album.albumArtist ?: album.artist ?: "未知艺人"
     Column(
         modifier = Modifier
-            .width(122.dp)
+            .width(120.dp)
             .clickable(onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
@@ -662,21 +656,16 @@ internal fun RecommendedAlbumCard(
                 .aspectRatio(1f),
             accent = EchoAccentDeep,
             showSignal = album.artworkUri == null,
-            cornerRadius = 2.dp,
+            cornerRadius = 8.dp,
             elevation = 0.dp,
         )
         Text(
             album.title,
-            modifier = Modifier.basicMarquee(
-                iterations = Int.MAX_VALUE,
-                initialDelayMillis = 900,
-                repeatDelayMillis = 1800,
-            ),
             color = RoonInk,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.ExtraBold,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             artistLabel,

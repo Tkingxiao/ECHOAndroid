@@ -315,7 +315,7 @@ private fun ArtistHero(artist: ArtistSummary, palette: ArtworkPalette) {
                 .size(200.dp),
             accent = palette.vibrant,
             showSignal = artist.artworkUri == null,
-            cornerRadius = 100.dp,
+            cornerRadius = 0.dp,
             elevation = 22.dp,
         )
         Spacer(Modifier.height(20.dp))
@@ -385,7 +385,7 @@ private fun AlbumHero(
                 .size(232.dp),
             accent = palette.vibrant,
             showSignal = album.artworkUri == null,
-            cornerRadius = 22.dp,
+            cornerRadius = 0.dp,
             elevation = 22.dp,
         )
         Spacer(Modifier.height(20.dp))
