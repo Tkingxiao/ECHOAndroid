@@ -54,6 +54,7 @@ import app.echo.android.design.EchoPlaceholderLine
 import app.echo.android.design.EchoSectionTitle
 import app.echo.android.design.EchoSegmentChip
 import app.echo.android.design.EchoTextButton
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.PageChrome
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
@@ -72,6 +73,8 @@ fun ConnectScreen(
     onDisconnect: () -> Unit,
 ) {
     val connected = remoteState == EchoRemoteConnectionState.Connected
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     PageChrome(title = "连接", subtitle = "串流服务 · PC 联动", badge = "互联", scrollable = true) {
         EchoSectionTitle("音乐服务", "连接你的曲库来源")
         Spacer(Modifier.height(12.dp))
@@ -106,14 +109,17 @@ fun ConnectScreen(
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            Color.White.copy(alpha = 0.70f),
-                            EchoHomeMist.copy(alpha = 0.62f),
-                            EchoHomeBlue.copy(alpha = 0.08f),
+                            scheme.surface.copy(alpha = if (dark) 0.88f else 0.70f),
+                            if (dark) scheme.surfaceVariant.copy(alpha = 0.72f) else EchoHomeMist.copy(alpha = 0.62f),
+                            scheme.primary.copy(alpha = if (dark) 0.14f else 0.08f),
                         ),
                     ),
                 )
                 .border(
-                    BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.86f)),
+                    BorderStroke(
+                        1.dp,
+                        if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else EchoGlassBorder.copy(alpha = 0.86f),
+                    ),
                     RoundedCornerShape(20.dp),
                 ),
         ) {
@@ -139,7 +145,7 @@ fun ConnectScreen(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             pcTitle,
-                            color = RoonInk,
+                            color = scheme.onSurface,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium,
                             maxLines = 1,
@@ -147,7 +153,7 @@ fun ConnectScreen(
                         )
                         Text(
                             remoteConnectionLabel(remoteState),
-                            color = RoonMuted,
+                            color = scheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }

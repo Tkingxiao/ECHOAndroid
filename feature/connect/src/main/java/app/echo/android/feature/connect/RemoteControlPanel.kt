@@ -54,6 +54,7 @@ import app.echo.android.design.EchoPlaceholderLine
 import app.echo.android.design.EchoSectionTitle
 import app.echo.android.design.EchoSegmentChip
 import app.echo.android.design.EchoTextButton
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.PageChrome
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
@@ -71,6 +72,8 @@ internal fun ServiceCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -78,14 +81,17 @@ internal fun ServiceCard(
             .background(
                 Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.70f),
-                        brandColor.copy(alpha = if (locked) 0.06f else 0.12f),
-                        EchoHomeMist.copy(alpha = 0.28f),
+                        scheme.surface.copy(alpha = if (dark) 0.88f else 0.70f),
+                        brandColor.copy(alpha = if (locked) 0.08f else 0.14f),
+                        if (dark) scheme.surfaceVariant.copy(alpha = 0.56f) else EchoHomeMist.copy(alpha = 0.28f),
                     ),
                 ),
             )
             .border(
-                BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.86f)),
+                BorderStroke(
+                    1.dp,
+                    if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else EchoGlassBorder.copy(alpha = 0.86f),
+                ),
                 RoundedCornerShape(20.dp),
             )
             .clickable(enabled = !locked, onClick = onClick)
@@ -107,7 +113,7 @@ internal fun ServiceCard(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     name,
-                    color = RoonInk,
+                    color = scheme.onSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
@@ -115,7 +121,7 @@ internal fun ServiceCard(
                 )
                 Text(
                     subtitle,
-                    color = RoonMuted,
+                    color = scheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -132,13 +138,14 @@ internal fun ServiceStatusPill(
     active: Boolean,
     locked: Boolean,
 ) {
+    val scheme = MaterialTheme.colorScheme
     val background = when {
-        locked -> Color.White.copy(alpha = 0.52f)
+        locked -> scheme.surfaceVariant.copy(alpha = 0.52f)
         active -> Color(0xFF35C28E).copy(alpha = 0.22f)
         else -> EchoAccent.copy(alpha = 0.22f)
     }
     val foreground = when {
-        locked -> RoonMuted
+        locked -> scheme.onSurfaceVariant
         active -> Color(0xFF1A9B68)
         else -> EchoAccentText
     }
@@ -167,11 +174,16 @@ internal fun ServiceStatusPill(
 
 @Composable
 internal fun PcLinkStatusStrip(connected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
-        color = Color.White.copy(alpha = 0.56f),
-        border = BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.76f)),
+        color = scheme.surface.copy(alpha = if (dark) 0.82f else 0.56f),
+        border = BorderStroke(
+            1.dp,
+            if (dark) scheme.outlineVariant.copy(alpha = 0.54f) else EchoGlassBorder.copy(alpha = 0.76f),
+        ),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -234,10 +246,15 @@ internal fun RemoteNowPlaying(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = Color.White.copy(alpha = 0.58f),
-        border = BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.76f)),
+        color = scheme.surface.copy(alpha = if (dark) 0.82f else 0.58f),
+        border = BorderStroke(
+            1.dp,
+            if (dark) scheme.outlineVariant.copy(alpha = 0.54f) else EchoGlassBorder.copy(alpha = 0.76f),
+        ),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

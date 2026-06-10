@@ -85,6 +85,7 @@ import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
+import app.echo.android.model.playback.PlaybackHeatmapDay
 
 @Composable
 fun HomeScreen(
@@ -97,6 +98,7 @@ fun HomeScreen(
     recommendedAlbums: List<AlbumSummary>,
     topArtists: List<ArtistSummary>,
     favoriteAlbums: List<AlbumSummary>,
+    heatmapDays: List<PlaybackHeatmapDay>,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -153,6 +155,7 @@ fun HomeScreen(
             Spacer(Modifier.height(if (compactViewport) 14.dp else 20.dp))
             HomeFavoriteAlbumsSection(
                 albums = favoriteAlbums,
+                heatmapDays = heatmapDays,
                 onOpenAlbum = onOpenAlbum,
                 onOpenLibrary = onOpenLibrary,
             )

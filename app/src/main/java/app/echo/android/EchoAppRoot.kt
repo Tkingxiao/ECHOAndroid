@@ -2,9 +2,13 @@ package app.echo.android
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color as AndroidColor
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -39,6 +43,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +63,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import app.echo.android.connect.EchoRemoteClient
 import app.echo.android.design.EchoContentMaxWidth
 import app.echo.android.design.EchoGlassBorder
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.EchoMobileTheme
 import app.echo.android.feature.connect.ConnectScreen
 import app.echo.android.feature.home.HomeScreen
@@ -68,6 +74,8 @@ import app.echo.android.feature.settings.DiagnosticsScreen
 import app.echo.android.feature.settings.SettingsScreen
 import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoBackgroundMode
+import app.echo.android.data.EchoFontFamilyMode
+import app.echo.android.data.EchoThemeMode
 import app.echo.android.model.connect.EchoRemoteCommand
 import app.echo.android.model.connect.EchoRemoteEndpoint
 import app.echo.android.model.connect.EchoRemotePlaybackState
@@ -76,10 +84,19 @@ import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.playback.PlaybackPositionState
+import app.echo.android.design.echoFontFamilyForMode
+import java.time.LocalTime
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val DockMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
 private val LyricsDocumentMimeTypes = arrayOf("text/*", "application/xml", "application/octet-stream", "*/*")
+private val FontDocumentMimeTypes = arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream", "*/*")
+
+private enum class FontImportTarget {
+    Ui,
+    Lyrics,
+}
 
 private enum class EchoPagerPage {
     Settings,
@@ -140,6 +157,19 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
             viewModel.setCustomBackground(EchoBackgroundMode.Video, selectedUri)
         }
     }
+    var fontImportTarget by remember { mutableStateOf<FontImportTarget?>(null) }
+    val fontImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { selectedUri ->
+            persistReadPermission(selectedUri)
+            viewModel.setImportedFontUri(selectedUri)
+            when (fontImportTarget) {
+                FontImportTarget.Ui -> viewModel.setUiFontFamily(EchoFontFamilyMode.Imported)
+                FontImportTarget.Lyrics -> viewModel.setLyricsFontFamily(EchoFontFamilyMode.Imported)
+                null -> Unit
+            }
+        }
+        fontImportTarget = null
+    }
     val lyricsImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { lyricsUri ->
             persistReadPermission(lyricsUri)
@@ -151,12 +181,18 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val remoteStatus by remoteClient.status.collectAsStateWithLifecycle()
     val playbackStatus by viewModel.playbackStatus.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle(EchoAppSettings())
+    val lastFmState by viewModel.lastFmState.collectAsStateWithLifecycle()
+    val lastFmApiKey = appSettings.lastFmApiKey?.takeIf { it.isNotBlank() }
+        ?: LastFmApiConfig.apiKey.takeIf { it.isNotBlank() }
+    val lastFmSharedSecret = appSettings.lastFmSharedSecret?.takeIf { it.isNotBlank() }
+        ?: LastFmApiConfig.sharedSecret.takeIf { it.isNotBlank() }
     val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
     val lyricsState by viewModel.lyricsState.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle(LibraryStats())
     val recentPlaybackAlbums by viewModel.recentPlaybackAlbums.collectAsStateWithLifecycle()
     val recentPlaybackArtists by viewModel.recentPlaybackArtists.collectAsStateWithLifecycle()
+    val recentPlaybackHeatmap by viewModel.recentPlaybackHeatmap.collectAsStateWithLifecycle()
     val recentlyAddedAlbums by viewModel.recentlyAddedAlbums.collectAsStateWithLifecycle(emptyList())
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     val albums = viewModel.albums.collectAsLazyPagingItems()
@@ -187,7 +223,54 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     var bottomDockExpanded by remember { mutableStateOf(true) }
     var nowPlayingExpanded by remember { mutableStateOf(false) }
     val libraryDetailOpen = selectedAlbum != null || selectedArtist != null || selectedFolder != null
-    val darkTheme = isSystemInDarkTheme()
+    val systemDarkTheme = isSystemInDarkTheme()
+    var currentMinuteOfDay by remember { mutableIntStateOf(currentMinuteNow()) }
+    LaunchedEffect(appSettings.scheduledDarkModeEnabled) {
+        if (appSettings.scheduledDarkModeEnabled) {
+            while (true) {
+                currentMinuteOfDay = currentMinuteNow()
+                delay(60_000L)
+            }
+        } else {
+            currentMinuteOfDay = currentMinuteNow()
+        }
+    }
+    val darkTheme = remember(
+        systemDarkTheme,
+        currentMinuteOfDay,
+        appSettings.themeMode,
+        appSettings.scheduledDarkModeEnabled,
+        appSettings.scheduledDarkStartMinute,
+        appSettings.scheduledDarkEndMinute,
+    ) {
+        resolveDarkTheme(
+            systemDarkTheme = systemDarkTheme,
+            themeMode = appSettings.themeMode,
+            scheduledDarkModeEnabled = appSettings.scheduledDarkModeEnabled,
+            scheduledStartMinute = appSettings.scheduledDarkStartMinute,
+            scheduledEndMinute = appSettings.scheduledDarkEndMinute,
+            currentMinute = currentMinuteOfDay,
+        )
+    }
+    val importedFontFamily = rememberImportedFontFamily(appSettings.importedFontUri)
+    val uiFontFamily = echoFontFamilyForMode(appSettings.uiFontFamily, importedFontFamily)
+    val lyricsFontFamily = echoFontFamilyForMode(appSettings.lyricsFontFamily, importedFontFamily)
+    val activity = context as? ComponentActivity
+
+    SideEffect {
+        activity?.enableEdgeToEdge(
+            statusBarStyle = if (darkTheme) {
+                SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+            },
+            navigationBarStyle = if (darkTheme) {
+                SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+            },
+        )
+    }
 
     // 四个主页面横向滑动切换，与底部 dock 双向联动
     val tabPagerState = rememberPagerState(
@@ -245,7 +328,12 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         selectDockTab(EchoTab.Now)
     }
 
-    EchoMobileTheme(darkTheme = darkTheme) {
+    EchoMobileTheme(
+        darkTheme = darkTheme,
+        fontFamily = uiFontFamily,
+        fontScale = appSettings.uiFontScale,
+        densityScale = appSettings.uiDensityScale,
+    ) {
         Box(Modifier.fillMaxSize()) {
             EchoCustomBackground(settings = appSettings, modifier = Modifier.fillMaxSize())
             Box(
@@ -311,6 +399,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 recommendedAlbums = homeRecommendedAlbums,
                                 topArtists = recentPlaybackArtists,
                                 favoriteAlbums = recentPlaybackAlbums.take(4),
+                                heatmapDays = recentPlaybackHeatmap,
                                 onPlayPause = viewModel::playPause,
                                 onNext = viewModel::skipNext,
                                 onPrevious = viewModel::skipPrevious,
@@ -354,6 +443,25 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 customBackgroundBlur = appSettings.customBackgroundBlur,
                                 customBackgroundBrightness = appSettings.customBackgroundBrightness,
                                 customBackgroundGlass = appSettings.customBackgroundGlass,
+                                uiFontFamily = appSettings.uiFontFamily,
+                                uiFontScale = appSettings.uiFontScale,
+                                uiDensityScale = appSettings.uiDensityScale,
+                                lyricsFontFamily = appSettings.lyricsFontFamily,
+                                lyricsFontScale = appSettings.lyricsFontScale,
+                                importedFontUri = appSettings.importedFontUri,
+                                themeMode = appSettings.themeMode,
+                                scheduledDarkModeEnabled = appSettings.scheduledDarkModeEnabled,
+                                scheduledDarkStartMinute = appSettings.scheduledDarkStartMinute,
+                                scheduledDarkEndMinute = appSettings.scheduledDarkEndMinute,
+                                lastFmEnabled = appSettings.lastFmEnabled,
+                                lastFmUsername = appSettings.lastFmUsername,
+                                lastFmApiKey = lastFmApiKey,
+                                lastFmSharedSecret = lastFmSharedSecret,
+                                lastFmSessionKey = appSettings.lastFmSessionKey,
+                                lastFmStatusLabel = lastFmState.lastMessage,
+                                lastFmErrorLabel = lastFmState.lastError,
+                                lastFmApiKeyLocked = LastFmApiConfig.hasApiKey,
+                                lastFmSharedSecretLocked = LastFmApiConfig.hasSharedSecret,
                                 onDynamicArtworkEnabledChange = viewModel::setDynamicArtworkEnabled,
                                 onCompactModeEnabledChange = viewModel::setCompactModeEnabled,
                                 onPcHandoffEnabledChange = viewModel::setPcHandoffEnabled,
@@ -368,6 +476,39 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onCustomBackgroundBlurChange = viewModel::setCustomBackgroundBlur,
                                 onCustomBackgroundBrightnessChange = viewModel::setCustomBackgroundBrightness,
                                 onCustomBackgroundGlassChange = viewModel::setCustomBackgroundGlass,
+                                onUiFontFamilyChange = viewModel::setUiFontFamily,
+                                onUiFontScaleChange = viewModel::setUiFontScale,
+                                onUiDensityScaleChange = viewModel::setUiDensityScale,
+                                onLyricsFontFamilyChange = viewModel::setLyricsFontFamily,
+                                onLyricsFontScaleChange = viewModel::setLyricsFontScale,
+                                onImportUiFont = {
+                                    fontImportTarget = FontImportTarget.Ui
+                                    fontImportLauncher.launch(FontDocumentMimeTypes)
+                                },
+                                onImportLyricsFont = {
+                                    fontImportTarget = FontImportTarget.Lyrics
+                                    fontImportLauncher.launch(FontDocumentMimeTypes)
+                                },
+                                onClearImportedFont = {
+                                    viewModel.setImportedFontUri(null)
+                                },
+                                onThemeModeChange = viewModel::setThemeMode,
+                                onScheduledDarkModeEnabledChange = viewModel::setScheduledDarkModeEnabled,
+                                onScheduledDarkStartMinuteChange = viewModel::setScheduledDarkStartMinute,
+                                onScheduledDarkEndMinuteChange = viewModel::setScheduledDarkEndMinute,
+                                onLastFmEnabledChange = viewModel::setLastFmEnabled,
+                                onConnectLastFm = viewModel::connectLastFm,
+                                onDisconnectLastFm = viewModel::disconnectLastFm,
+                                onOpenLastFmApiAccounts = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(
+                                                Intent.ACTION_VIEW,
+                                                android.net.Uri.parse("https://www.last.fm/api/accounts"),
+                                            ),
+                                        )
+                                    }
+                                },
                                 onOpenLibrary = { selectDockTab(EchoTab.Library) },
                                 onOpenConnect = { selectDockTab(EchoTab.Connect) },
                             )
@@ -427,6 +568,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                             ExpandedBottomControls(
                                 status = playbackStatus,
                                 positionState = playbackPosition,
+                                darkTheme = darkTheme,
                                 selectedTab = selectedTab,
                                 onPlayPause = viewModel::playPause,
                                 onHideDock = { bottomDockExpanded = false },
@@ -467,6 +609,8 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     positionState = playbackPosition,
                     lyricsState = lyricsState,
                     showLyricsControlDeck = appSettings.showLyricsControlDeck,
+                    lyricsFontFamily = lyricsFontFamily,
+                    lyricsFontScale = appSettings.lyricsFontScale,
                     onDismiss = { nowPlayingExpanded = false },
                     onPlayPause = viewModel::playPause,
                     onNext = viewModel::skipNext,
@@ -506,6 +650,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
 private fun ExpandedBottomControls(
     status: app.echo.android.model.playback.EchoPlaybackStatus,
     positionState: PlaybackPositionState,
+    darkTheme: Boolean,
     selectedTab: Int,
     onPlayPause: () -> Unit,
     onHideDock: () -> Unit,
@@ -516,7 +661,7 @@ private fun ExpandedBottomControls(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.background(if (darkTheme) Color(0xFF17181E) else Color.Transparent),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
@@ -534,7 +679,7 @@ private fun ExpandedBottomControls(
         )
         BottomDock(
             selectedTab = selectedTab,
-            onLightSurface = !isSystemInDarkTheme(),
+            onLightSurface = !darkTheme,
             onSelectTab = onSelectTab,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -587,7 +732,7 @@ private fun RoundDockButton(
     onClick: () -> Unit,
 ) {
     val scheme = androidx.compose.material3.MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = Modifier
             .size(48.dp)
@@ -612,5 +757,43 @@ private fun RoundDockButton(
             tint = scheme.primary,
             modifier = Modifier.size(24.dp),
         )
+    }
+}
+
+private fun currentMinuteNow(): Int {
+    val now = LocalTime.now()
+    return now.hour * 60 + now.minute
+}
+
+private fun resolveDarkTheme(
+    systemDarkTheme: Boolean,
+    themeMode: String,
+    scheduledDarkModeEnabled: Boolean,
+    scheduledStartMinute: Int,
+    scheduledEndMinute: Int,
+    currentMinute: Int,
+): Boolean {
+    if (scheduledDarkModeEnabled && isMinuteInScheduledWindow(currentMinute, scheduledStartMinute, scheduledEndMinute)) {
+        return true
+    }
+    return when (themeMode) {
+        EchoThemeMode.Light -> false
+        EchoThemeMode.Dark -> true
+        else -> systemDarkTheme
+    }
+}
+
+private fun isMinuteInScheduledWindow(
+    currentMinute: Int,
+    startMinute: Int,
+    endMinute: Int,
+): Boolean {
+    val current = currentMinute.coerceIn(0, 23 * 60 + 59)
+    val start = startMinute.coerceIn(0, 23 * 60 + 59)
+    val end = endMinute.coerceIn(0, 23 * 60 + 59)
+    return when {
+        start == end -> false
+        start < end -> current in start until end
+        else -> current >= start || current < end
     }
 }

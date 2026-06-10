@@ -78,6 +78,7 @@ import app.echo.android.design.EchoIconBadge
 import app.echo.android.design.EchoPanel
 import app.echo.android.design.EchoTextButton
 import app.echo.android.design.EmptyState
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.PageChrome
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
@@ -90,11 +91,35 @@ import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
 import kotlinx.coroutines.launch
 
+private data class LibraryGlassColors(
+    val surface: Color,
+    val elevatedSurface: Color,
+    val border: Color,
+    val content: Color,
+    val muted: Color,
+)
+
+@Composable
+private fun rememberLibraryGlassColors(): LibraryGlassColors {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    return remember(scheme, dark) {
+        LibraryGlassColors(
+            surface = if (dark) scheme.surface.copy(alpha = 0.72f) else Color.White.copy(alpha = 0.66f),
+            elevatedSurface = if (dark) scheme.surfaceVariant.copy(alpha = 0.54f) else Color.White.copy(alpha = 0.62f),
+            border = if (dark) scheme.outlineVariant.copy(alpha = 0.50f) else EchoGlassBorder.copy(alpha = 0.84f),
+            content = if (dark) scheme.onSurface else RoonInk,
+            muted = if (dark) scheme.onSurfaceVariant.copy(alpha = 0.90f) else RoonMuted,
+        )
+    }
+}
+
 @Composable
 internal fun LibraryPagerTabs(
     selectedMode: LibraryViewMode,
     onSelectMode: (LibraryViewMode) -> Unit,
 ) {
+    val colors = rememberLibraryGlassColors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -111,7 +136,7 @@ internal fun LibraryPagerTabs(
                     .clip(RoundedCornerShape(16.dp))
                     .clickable { onSelectMode(mode) }
                     .padding(horizontal = 4.dp, vertical = 8.dp),
-                color = if (selected) EchoAccentText else RoonMuted,
+                color = if (selected) EchoAccentText else colors.muted,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
@@ -125,18 +150,18 @@ internal fun LibraryPlaceholderPage(
     title: String,
     subtitle: String,
 ) {
+    val colors = rememberLibraryGlassColors()
     EchoPanel(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             EchoIconBadge(Icons.Rounded.LibraryMusic)
-            Text(title, color = RoonInk, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = RoonMuted, style = MaterialTheme.typography.bodyMedium)
+            Text(title, color = colors.content, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = colors.muted, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
-
 @Composable
 internal fun FolderList(
     folders: LazyPagingItems<FolderSummary>,
@@ -177,18 +202,18 @@ internal fun FolderList(
         }
     }
 }
-
 @Composable
 private fun FolderRow(
     folder: FolderSummary,
     onClick: () -> Unit,
 ) {
+    val colors = rememberLibraryGlassColors()
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.66f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.84f)), RoundedCornerShape(16.dp))
+            .background(colors.surface)
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 11.dp),
     ) {
@@ -201,7 +226,7 @@ private fun FolderRow(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     folderDisplayName(folder),
-                    color = RoonInk,
+                    color = colors.content,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -209,7 +234,7 @@ private fun FolderRow(
                 )
                 Text(
                     folderPathLabel(folder),
-                    color = RoonMuted,
+                    color = colors.muted,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -259,6 +284,7 @@ internal fun LibraryOverview(
     albumCount: Int,
     artistCount: Int,
 ) {
+    val colors = rememberLibraryGlassColors()
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -266,13 +292,13 @@ internal fun LibraryOverview(
             .background(
                 Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.72f),
-                        EchoHomeMist.copy(alpha = 0.60f),
-                        EchoAccentDeep.copy(alpha = 0.08f),
+                        colors.surface,
+                        colors.elevatedSurface,
+                        EchoAccentDeep.copy(alpha = if (LocalEchoDarkTheme.current) 0.18f else 0.08f),
                     ),
                 ),
             )
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.86f)), RoundedCornerShape(22.dp))
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(22.dp))
             .padding(14.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -289,9 +315,10 @@ internal fun LibraryMetric(
     value: String,
     modifier: Modifier = Modifier,
 ) {
+    val colors = rememberLibraryGlassColors()
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(value, color = RoonInk, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(label, color = RoonMuted, style = MaterialTheme.typography.labelMedium)
+        Text(value, color = colors.content, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(label, color = colors.muted, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -300,12 +327,13 @@ internal fun LibraryViewSwitcher(
     selectedMode: LibraryViewMode,
     onSelectMode: (LibraryViewMode) -> Unit,
 ) {
+    val colors = rememberLibraryGlassColors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White.copy(alpha = 0.54f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.74f)), RoundedCornerShape(18.dp))
+            .background(colors.elevatedSurface)
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(18.dp))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -324,13 +352,13 @@ internal fun LibraryViewSwitcher(
                 Icon(
                     mode.icon,
                     contentDescription = mode.label,
-                    tint = if (selected) EchoAccentText else RoonMuted,
+                    tint = if (selected) EchoAccentText else colors.muted,
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     mode.label,
-                    color = if (selected) RoonInk else RoonMuted,
+                    color = if (selected) colors.content else colors.muted,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                     maxLines = 1,
@@ -347,13 +375,14 @@ internal fun LibraryViewModeMenu(
     onSelectMode: (LibraryViewMode) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val colors = rememberLibraryGlassColors()
     Box {
         Box(
             modifier = Modifier
                 .size(42.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(alpha = 0.62f))
-                .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(14.dp))
+                .background(colors.elevatedSurface)
+                .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(14.dp))
                 .clickable { expanded = true },
             contentAlignment = Alignment.Center,
         ) {
@@ -367,14 +396,14 @@ internal fun LibraryViewModeMenu(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
         ) {
             LibraryViewMode.entries.forEach { mode ->
                 DropdownMenuItem(
                     text = {
                         Text(
                             mode.label,
-                            color = if (mode == selectedMode) EchoHomeBlue else RoonInk,
+                            color = if (mode == selectedMode) EchoHomeBlue else colors.content,
                             fontWeight = if (mode == selectedMode) FontWeight.Bold else FontWeight.SemiBold,
                         )
                     },
@@ -382,7 +411,7 @@ internal fun LibraryViewModeMenu(
                         Icon(
                             mode.icon,
                             contentDescription = null,
-                            tint = if (mode == selectedMode) EchoHomeBlue else RoonMuted,
+                            tint = if (mode == selectedMode) EchoHomeBlue else colors.muted,
                         )
                     },
                     onClick = {
@@ -437,6 +466,7 @@ internal fun AlbumWallCard(
     onClick: () -> Unit,
 ) {
     val artistLabel = album.albumArtist ?: album.artist ?: "未知艺术家"
+    val colors = rememberLibraryGlassColors()
     Column(
         modifier = Modifier
             .clickable(onClick = onClick)
@@ -453,8 +483,8 @@ internal fun AlbumWallCard(
             cornerRadius = 14.dp,
             elevation = 8.dp,
         )
-        Text(album.title, color = RoonInk, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text("$artistLabel / ${album.trackCount} 首", color = RoonMuted, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(album.title, color = colors.content, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text("$artistLabel / ${album.trackCount} 首", color = colors.muted, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -501,6 +531,7 @@ internal fun ArtistWallCard(
 ) {
     // 每位艺人按标识生成稳定柔和的取色，呼应详情页（同步、无额外位图解码）
     val palette = remember(artist.artistKey) { ArtworkPalette.fromSeed(artist.artistKey) }
+    val colors = rememberLibraryGlassColors()
     Column(
         modifier = Modifier
             .clickable(onClick = onClick)
@@ -514,7 +545,7 @@ internal fun ArtistWallCard(
         )
         Text(
             artist.name,
-            color = RoonInk,
+            color = colors.content,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             maxLines = 2,
@@ -523,7 +554,7 @@ internal fun ArtistWallCard(
         )
         Text(
             "${artist.albumCount} 张专辑 · ${artist.trackCount} 首",
-            color = RoonMuted,
+            color = colors.muted,
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
         )
@@ -583,6 +614,7 @@ internal fun LibraryScanStatus(
     scanState: LibraryScanProgress,
     onCancelScan: () -> Unit,
 ) {
+    val colors = rememberLibraryGlassColors()
     EchoPanel(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -597,7 +629,7 @@ internal fun LibraryScanStatus(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = scanPhaseLabel(scanState.phase),
-                        color = RoonInk,
+                        color = colors.content,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -605,7 +637,7 @@ internal fun LibraryScanStatus(
                         text = scanState.currentTitle
                             ?.takeIf { it.isNotBlank() }
                             ?: "正在增量索引本机音乐",
-                        color = RoonMuted,
+                        color = colors.muted,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -651,6 +683,7 @@ private fun scanPhaseLabel(phase: LibraryScanPhase): String =
 
 @Composable
 internal fun LibraryScanResultBanner(scanState: LibraryScanProgress) {
+    val colors = rememberLibraryGlassColors()
     val message = when (scanState.phase) {
         LibraryScanPhase.Completed -> "扫描完成：${scanState.scannedCount} 首，新增 ${scanState.insertedCount}，更新 ${scanState.updatedCount}，删除 ${scanState.deletedCount}"
         LibraryScanPhase.Cancelled -> "扫描已取消，已保留现有曲库。"
@@ -663,7 +696,7 @@ internal fun LibraryScanResultBanner(scanState: LibraryScanProgress) {
         Text(
             text = message,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            color = if (scanState.phase == LibraryScanPhase.Error) Color(0xFFE0796E) else RoonMuted,
+            color = if (scanState.phase == LibraryScanPhase.Error) Color(0xFFE0796E) else colors.muted,
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -671,6 +704,7 @@ internal fun LibraryScanResultBanner(scanState: LibraryScanProgress) {
 
 @Composable
 internal fun LibraryBootstrapState() {
+    val colors = rememberLibraryGlassColors()
     EchoPanel(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -679,10 +713,10 @@ internal fun LibraryBootstrapState() {
         ) {
             EchoIconBadge(Icons.Rounded.LibraryMusic)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("暂无本机歌曲", color = RoonInk, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("暂无本机歌曲", color = colors.content, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
                     "点右上角扫描本机音乐。",
-                    color = RoonMuted,
+                    color = colors.muted,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -700,6 +734,7 @@ internal fun LibraryDetailPage(
     onPlayTrack: (EchoTrack) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = rememberLibraryGlassColors()
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -717,7 +752,7 @@ internal fun LibraryDetailPage(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             title,
-                            color = RoonInk,
+                            color = colors.content,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -726,7 +761,7 @@ internal fun LibraryDetailPage(
                         subtitle?.takeIf { it.isNotBlank() }?.let { value ->
                             Text(
                                 value,
-                                color = RoonMuted,
+                                color = colors.muted,
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -751,81 +786,3 @@ internal fun LibraryDetailPage(
         }
     }
 }
-
-@Composable
-internal fun TrackList(
-    tracks: LazyPagingItems<EchoTrack>,
-    onPlayTrack: (EchoTrack) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(bottom = LibraryBottomControlsPadding),
-    ) {
-        items(
-            count = tracks.itemCount,
-            key = { index: Int -> tracks.peek(index)?.id ?: "track-$index" },
-        ) { index: Int ->
-            tracks[index]?.let { track ->
-                TrackRow(
-                    track = track,
-                    onClick = { onPlayTrack(track) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun TrackRow(
-    track: EchoTrack,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.66f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.84f)), RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            ArtworkTile(track.artworkUri, Modifier.size(50.dp), accent = EchoAccent, cornerRadius = 13.dp)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    track.title,
-                    color = RoonInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    trackSubtitle(track),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = RoonMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Text(
-                formatDuration(track.durationMs),
-                color = RoonMuted,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-    }
-}
-
-internal fun trackSubtitle(track: EchoTrack): String =
-    listOf(track.artist, track.album)
-        .mapNotNull { value -> value?.takeIf { it.isNotBlank() } }
-        .ifEmpty { listOf("本机音频") }
-        .joinToString(" / ")
-
-private val LibraryBottomControlsPadding = 150.dp

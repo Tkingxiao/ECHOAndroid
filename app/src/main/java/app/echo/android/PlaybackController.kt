@@ -2,6 +2,7 @@ package app.echo.android
 
 import android.app.Application
 import android.content.ComponentName
+import androidx.media3.common.MediaItem
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -60,8 +61,10 @@ internal class PlaybackController(
     private var controller: MediaController? = null
     private var progressJob: Job? = null
     private var usbAudioJob: Job? = null
+    private var usbTransitionJob: Job? = null
     private var lastTrackId: String? = null
     private var lastActivatedTrackId: String? = null
+    private val sampleRatesByMediaId = mutableMapOf<String, Int?>()
 
     val currentTrackId: String?
         get() = _playbackMetadata.value.track?.id
@@ -80,6 +83,8 @@ internal class PlaybackController(
     }
 
     fun play(track: EchoTrack) {
+        sampleRatesByMediaId.clear()
+        sampleRatesByMediaId[track.id] = track.sampleRateHz
         usbAudioMonitor.prepareForTrack(track.sampleRateHz)
         controller?.run {
             setMediaItem(track.toMediaItem())
@@ -91,6 +96,8 @@ internal class PlaybackController(
     fun playQueue(queue: List<EchoTrack>, startIndex: Int) {
         if (queue.isEmpty()) return
         val safeStartIndex = startIndex.coerceIn(0, queue.lastIndex)
+        sampleRatesByMediaId.clear()
+        queue.forEach { track -> sampleRatesByMediaId[track.id] = track.sampleRateHz }
         usbAudioMonitor.prepareForTrack(queue[safeStartIndex].sampleRateHz)
         controller?.run {
             setMediaItems(queue.map { it.toMediaItem() }, safeStartIndex, 0L)
@@ -158,6 +165,7 @@ internal class PlaybackController(
     fun clear() {
         progressJob?.cancel()
         usbAudioJob?.cancel()
+        usbTransitionJob?.cancel()
         usbAudioMonitor.stop()
         controller?.removeListener(playerListener)
         controller?.release()
@@ -202,6 +210,10 @@ internal class PlaybackController(
     }
 
     private val playerListener = object : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            prepareUsbForMediaItemTransition(mediaItem)
+        }
+
         override fun onEvents(player: Player, events: Player.Events) {
             updatePlaybackCore(player)
         }
@@ -258,6 +270,25 @@ internal class PlaybackController(
         val diagnostics = _playbackDiagnostics.value.diagnostics.withUsbAudioStatus(status)
         updateState(_playbackDiagnostics, PlaybackDiagnosticsState(diagnostics, diagnostics.lastError))
         updateState(_playbackStatus, _playbackStatus.value.copy(diagnostics = diagnostics))
+    }
+
+    private fun prepareUsbForMediaItemTransition(mediaItem: MediaItem?) {
+        val sampleRateHz = mediaItem?.mediaId?.let(sampleRatesByMediaId::get)
+        if (!usbAudioMonitor.status.value.exclusiveEnabled) {
+            usbAudioMonitor.prepareForTrack(sampleRateHz)
+            return
+        }
+        val mediaController = controller ?: return
+        usbTransitionJob?.cancel()
+        usbTransitionJob = scope.launch {
+            val previousVolume = mediaController.volume
+            mediaController.volume = 0f
+            usbAudioMonitor.prepareForTrack(sampleRateHz)
+            delay(90L)
+            if (controller === mediaController) {
+                mediaController.volume = previousVolume
+            }
+        }
     }
 
     private fun updatePlaybackPosition(player: Player) {

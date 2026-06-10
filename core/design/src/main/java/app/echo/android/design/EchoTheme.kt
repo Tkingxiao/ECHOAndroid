@@ -6,9 +6,16 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.unit.sp
 
 object EchoColors {
     // Roon 风格中性炭灰 + Shakespeare 蓝
@@ -57,36 +64,75 @@ private val EchoLightScheme = lightColorScheme(
     outlineVariant = Color(0xFFDDE0EA),
 )
 
-private val EchoReadableFontFamily = FontFamily.SansSerif
+val LocalEchoDensityScale = staticCompositionLocalOf { 1f }
+val LocalEchoDarkTheme = staticCompositionLocalOf { false }
 
-private val EchoTypography = Typography().let { typography ->
+private val EchoOutfitFontFamily = FontFamily(Font(R.font.outfit))
+
+fun echoFontFamilyForMode(
+    mode: String,
+    importedFontFamily: FontFamily? = null,
+): FontFamily = when (mode) {
+    "outfit" -> EchoOutfitFontFamily
+    "serif" -> FontFamily.Serif
+    "monospace" -> FontFamily.Monospace
+    "imported" -> importedFontFamily ?: FontFamily.SansSerif
+    else -> FontFamily.SansSerif
+}
+
+private fun echoTypography(
+    fontFamily: FontFamily,
+    fontScale: Float,
+): Typography = Typography().let { typography ->
     typography.copy(
-        displayLarge = typography.displayLarge.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.SemiBold),
-        displayMedium = typography.displayMedium.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.SemiBold),
-        displaySmall = typography.displaySmall.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.SemiBold),
-        headlineLarge = typography.headlineLarge.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.SemiBold),
-        headlineMedium = typography.headlineMedium.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.SemiBold),
-        headlineSmall = typography.headlineSmall.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.SemiBold),
-        titleLarge = typography.titleLarge.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.SemiBold),
-        titleMedium = typography.titleMedium.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.Medium),
-        titleSmall = typography.titleSmall.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.Medium),
-        bodyLarge = typography.bodyLarge.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.Normal),
-        bodyMedium = typography.bodyMedium.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.Normal),
-        bodySmall = typography.bodySmall.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.Normal),
-        labelLarge = typography.labelLarge.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.Medium),
-        labelMedium = typography.labelMedium.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.Medium),
-        labelSmall = typography.labelSmall.copy(fontFamily = EchoReadableFontFamily, fontWeight = FontWeight.Medium),
+        displayLarge = typography.displayLarge.echoFont(fontFamily, FontWeight.SemiBold, fontScale),
+        displayMedium = typography.displayMedium.echoFont(fontFamily, FontWeight.SemiBold, fontScale),
+        displaySmall = typography.displaySmall.echoFont(fontFamily, FontWeight.SemiBold, fontScale),
+        headlineLarge = typography.headlineLarge.echoFont(fontFamily, FontWeight.SemiBold, fontScale),
+        headlineMedium = typography.headlineMedium.echoFont(fontFamily, FontWeight.SemiBold, fontScale),
+        headlineSmall = typography.headlineSmall.echoFont(fontFamily, FontWeight.SemiBold, fontScale),
+        titleLarge = typography.titleLarge.echoFont(fontFamily, FontWeight.SemiBold, fontScale),
+        titleMedium = typography.titleMedium.echoFont(fontFamily, FontWeight.Medium, fontScale),
+        titleSmall = typography.titleSmall.echoFont(fontFamily, FontWeight.Medium, fontScale),
+        bodyLarge = typography.bodyLarge.echoFont(fontFamily, FontWeight.Normal, fontScale),
+        bodyMedium = typography.bodyMedium.echoFont(fontFamily, FontWeight.Normal, fontScale),
+        bodySmall = typography.bodySmall.echoFont(fontFamily, FontWeight.Normal, fontScale),
+        labelLarge = typography.labelLarge.echoFont(fontFamily, FontWeight.Medium, fontScale),
+        labelMedium = typography.labelMedium.echoFont(fontFamily, FontWeight.Medium, fontScale),
+        labelSmall = typography.labelSmall.echoFont(fontFamily, FontWeight.Medium, fontScale),
     )
 }
+
+private fun TextStyle.echoFont(
+    fontFamily: FontFamily,
+    fontWeight: FontWeight,
+    fontScale: Float,
+): TextStyle = copy(
+    fontFamily = fontFamily,
+    fontWeight = fontWeight,
+    fontSize = fontSize.scale(fontScale),
+    lineHeight = lineHeight.scale(fontScale),
+)
+
+private fun TextUnit.scale(scale: Float): TextUnit =
+    if (isSpecified) (value * scale).sp else this
 
 @Composable
 fun EchoMobileTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    fontFamily: FontFamily = FontFamily.SansSerif,
+    fontScale: Float = 1f,
+    densityScale: Float = 1f,
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) EchoDarkScheme else EchoLightScheme,
-        typography = EchoTypography,
-        content = content,
-    )
+    CompositionLocalProvider(
+        LocalEchoDensityScale provides densityScale.coerceIn(0.90f, 1.12f),
+        LocalEchoDarkTheme provides darkTheme,
+    ) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) EchoDarkScheme else EchoLightScheme,
+            typography = echoTypography(fontFamily, fontScale.coerceIn(0.88f, 1.18f)),
+            content = content,
+        )
+    }
 }

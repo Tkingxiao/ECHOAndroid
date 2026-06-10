@@ -2,7 +2,6 @@ package app.echo.android
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.echo.android.design.LocalEchoDarkTheme
 
 enum class EchoTab(
     val label: String,
@@ -46,12 +46,11 @@ fun BottomDock(
     onSelectTab: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val dark = isSystemInDarkTheme()
-    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(if (dark) scheme.surface.copy(alpha = 0.96f) else Color(0xFFEAF2FF)),
+            .background(if (dark) Color(0xFF17181E) else Color(0xFFEAF2FF)),
     ) {
         Row(
             modifier = Modifier

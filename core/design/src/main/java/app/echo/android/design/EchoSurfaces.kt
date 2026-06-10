@@ -31,12 +31,14 @@ fun EchoPanel(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.92f))
+            .background(scheme.surface.copy(alpha = if (dark) 0.82f else 0.92f))
             .border(
-                BorderStroke(1.dp, Color.White.copy(alpha = 0.96f)),
+                BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.96f)),
                 RoundedCornerShape(20.dp),
             ),
     ) {
@@ -88,15 +90,17 @@ fun EchoInfoChip(
     value: String,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        color = Color.White.copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f)),
+        color = scheme.surface.copy(alpha = if (dark) 0.78f else 0.92f),
+        border = BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.56f) else Color.White.copy(alpha = 0.96f)),
     ) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, color = Color(0xFF25242A))
+            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = scheme.primary)
+            Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
         }
     }
 }
@@ -108,24 +112,26 @@ fun EchoMetricTile(
     modifier: Modifier = Modifier,
     detail: String? = null,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        color = Color.White.copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f)),
+        color = scheme.surface.copy(alpha = if (dark) 0.78f else 0.92f),
+        border = BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.56f) else Color.White.copy(alpha = 0.96f)),
     ) {
         Column(
             Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, color = Color(0xFF25242A))
+            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = scheme.primary)
+            Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, color = scheme.onSurface)
             if (detail != null) {
                 Text(
                     detail,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = Color(0xFF6D6D73),
+                    color = scheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -139,27 +145,29 @@ fun EchoSegmentChip(
     selected: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
         color = if (selected) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+            scheme.primary.copy(alpha = if (dark) 0.18f else 0.14f)
         } else {
-            Color.White.copy(alpha = 0.92f)
+            scheme.surface.copy(alpha = if (dark) 0.78f else 0.92f)
         },
         border = BorderStroke(
             1.dp,
             if (selected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                scheme.primary.copy(alpha = if (dark) 0.26f else 0.18f)
             } else {
-                Color.White.copy(alpha = 0.96f)
+                if (dark) scheme.outlineVariant.copy(alpha = 0.56f) else Color.White.copy(alpha = 0.96f)
             },
         ),
     ) {
         Text(
             label,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            color = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF6D6D73),
+            color = if (selected) scheme.primary else scheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -173,9 +181,10 @@ fun EchoSectionTitle(
     subtitle: String,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF25242A))
-        Text(subtitle, color = Color(0xFF6D6D73), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+        Text(subtitle, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -184,15 +193,17 @@ fun EchoPlaceholderLine(
     text: String,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
-        color = Color.White.copy(alpha = 0.90f),
+        color = scheme.surface.copy(alpha = if (dark) 0.78f else 0.90f),
     ) {
         Text(
             text,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            color = Color(0xFF6D6D73),
+            color = scheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

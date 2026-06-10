@@ -42,9 +42,33 @@ import app.echo.android.design.EchoAccent
 import app.echo.android.design.EchoAccentDeep
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoHomeBlue
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
 import app.echo.android.model.library.LibraryScanProgress
+
+private data class ScanGlassColors(
+    val surface: Color,
+    val optionSurface: Color,
+    val border: Color,
+    val content: Color,
+    val muted: Color,
+)
+
+@Composable
+private fun rememberScanGlassColors(): ScanGlassColors {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    return remember(scheme, dark) {
+        ScanGlassColors(
+            surface = if (dark) scheme.surface.copy(alpha = 0.88f) else Color.White.copy(alpha = 0.96f),
+            optionSurface = if (dark) scheme.surfaceVariant.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.74f),
+            border = if (dark) scheme.outlineVariant.copy(alpha = 0.54f) else EchoGlassBorder,
+            content = if (dark) scheme.onSurface else RoonInk,
+            muted = if (dark) scheme.onSurfaceVariant.copy(alpha = 0.90f) else RoonMuted,
+        )
+    }
+}
 
 @Composable
 internal fun LibraryScanAction(
@@ -56,6 +80,7 @@ internal fun LibraryScanAction(
     onCancelScan: () -> Unit,
 ) {
     var showScanOptions by remember { mutableStateOf(false) }
+    val colors = rememberScanGlassColors()
     val description = when {
         !hasPermission -> "授权音乐权限"
         scanState.isScanning -> "取消扫描曲库"
@@ -66,8 +91,8 @@ internal fun LibraryScanAction(
         modifier = Modifier
             .size(42.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.62f))
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(14.dp))
+            .background(colors.optionSurface)
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(14.dp))
             .clickable(
                 onClick = when {
                     !hasPermission -> onRequestPermission
@@ -108,12 +133,13 @@ private fun LibraryScanOptionsDialog(
     onScanFolder: () -> Unit,
     onScanAll: () -> Unit,
 ) {
+    val colors = rememberScanGlassColors()
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
-            color = Color.White.copy(alpha = 0.96f),
-            border = BorderStroke(1.dp, EchoGlassBorder),
+            color = colors.surface,
+            border = BorderStroke(1.dp, colors.border),
             tonalElevation = 0.dp,
         ) {
             Column(
@@ -128,18 +154,18 @@ private fun LibraryScanOptionsDialog(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             text = "扫描曲库",
-                            color = RoonInk,
+                            color = colors.content,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
                             text = "选择本次索引范围",
-                            color = RoonMuted,
+                            color = colors.muted,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Rounded.Close, contentDescription = "关闭", tint = RoonMuted)
+                        Icon(Icons.Rounded.Close, contentDescription = "关闭", tint = colors.muted)
                     }
                 }
 
@@ -170,6 +196,7 @@ private fun LibraryScanOption(
     onClick: () -> Unit,
     accent: Color,
 ) {
+    val colors = rememberScanGlassColors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -184,8 +211,8 @@ private fun LibraryScanOption(
         Surface(
             modifier = Modifier.size(42.dp),
             shape = RoundedCornerShape(14.dp),
-            color = Color.White.copy(alpha = 0.74f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.88f)),
+            color = colors.optionSurface,
+            border = BorderStroke(1.dp, colors.border),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
@@ -194,7 +221,7 @@ private fun LibraryScanOption(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 text = title,
-                color = RoonInk,
+                color = colors.content,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -202,7 +229,7 @@ private fun LibraryScanOption(
             )
             Text(
                 text = subtitle,
-                color = RoonMuted,
+                color = colors.muted,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

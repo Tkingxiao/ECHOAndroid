@@ -30,6 +30,7 @@ import app.echo.android.design.EchoAccentText
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoHomeBlue
 import app.echo.android.design.EchoHomeMist
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.EchoPlaceholderLine
 import app.echo.android.design.EchoSectionTitle
 import app.echo.android.design.PageChrome
@@ -74,12 +75,20 @@ fun DiagnosticsScreen(status: EchoPlaybackStatus) {
 @Composable
 private fun UsbOutputPanel(status: EchoPlaybackStatus) {
     val diagnostics = status.diagnostics
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.64f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.84f)), RoundedCornerShape(20.dp))
+            .background(scheme.surface.copy(alpha = if (dark) 0.86f else 0.64f))
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else EchoGlassBorder.copy(alpha = 0.84f),
+                ),
+                RoundedCornerShape(20.dp),
+            )
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -114,12 +123,13 @@ private fun UsbOutputPanel(status: EchoPlaybackStatus) {
 
 @Composable
 private fun UsbOutputLine(label: String, value: String) {
+    val scheme = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = RoonMuted, style = MaterialTheme.typography.bodyMedium)
+        Text(label, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.width(16.dp))
         Text(
             value,
-            color = RoonInk,
+            color = scheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontWeight = FontWeight.SemiBold,

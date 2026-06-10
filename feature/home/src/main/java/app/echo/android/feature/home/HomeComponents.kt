@@ -54,6 +54,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -62,6 +63,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoAccent
@@ -82,6 +84,7 @@ import app.echo.android.design.EchoSoftLine
 import app.echo.android.design.AmbientPlanet
 import app.echo.android.design.GlassIconButton
 import app.echo.android.design.GlassSurface
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
 import app.echo.android.design.formatDuration
@@ -92,7 +95,49 @@ import app.echo.android.model.library.EchoTrack
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
+import app.echo.android.model.playback.PlaybackHeatmapDay
 import java.util.Calendar
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
+
+private const val HomeHeatmapWeeks = 12
+
+@Composable
+private fun homePanelColor(lightAlpha: Float = 0.90f): Color {
+    val scheme = MaterialTheme.colorScheme
+    return if (LocalEchoDarkTheme.current) scheme.surface.copy(alpha = 0.86f) else Color.White.copy(alpha = lightAlpha)
+}
+
+@Composable
+private fun homePanelBorder(lightAlpha: Float = 0.94f): BorderStroke {
+    val scheme = MaterialTheme.colorScheme
+    return BorderStroke(
+        1.dp,
+        if (LocalEchoDarkTheme.current) scheme.outlineVariant.copy(alpha = 0.58f) else Color.White.copy(alpha = lightAlpha),
+    )
+}
+
+@Composable
+private fun homePanelBrush(): Brush {
+    val scheme = MaterialTheme.colorScheme
+    return Brush.linearGradient(
+        if (LocalEchoDarkTheme.current) {
+            listOf(
+                scheme.surface.copy(alpha = 0.92f),
+                scheme.surfaceVariant.copy(alpha = 0.78f),
+                scheme.primary.copy(alpha = 0.12f),
+            )
+        } else {
+            listOf(
+                Color.White,
+                EchoHomeMist,
+                Color(0xFFEFEAFF),
+            )
+        },
+    )
+}
 
 @Composable
 internal fun LibraryOverview(
@@ -104,16 +149,8 @@ internal fun LibraryOverview(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color.White,
-                        EchoHomeMist,
-                        Color(0xFFEFEAFF),
-                    ),
-                ),
-            )
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(22.dp))
+            .background(homePanelBrush())
+            .border(homePanelBorder(), RoundedCornerShape(22.dp))
             .padding(14.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -130,9 +167,10 @@ internal fun LibraryMetric(
     value: String,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(value, color = RoonInk, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(label, color = RoonMuted, style = MaterialTheme.typography.labelMedium)
+        Text(value, color = scheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(label, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -141,6 +179,7 @@ internal fun RoonHomeHeader(
     status: EchoPlaybackStatus,
     compact: Boolean,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -156,16 +195,16 @@ internal fun RoonHomeHeader(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                color = Color.White.copy(alpha = 0.94f),
-                border = BorderStroke(1.dp, EchoGlassBorder),
+                color = homePanelColor(0.94f),
+                border = homePanelBorder(0.88f),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Rounded.Search, contentDescription = null, tint = RoonMuted, modifier = Modifier.size(20.dp))
-                    Text("搜索本机音乐、专辑、歌手", color = RoonMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Icon(Icons.Rounded.Search, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    Text("搜索本机音乐、专辑、歌手", color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             if (false) {
@@ -188,6 +227,7 @@ internal fun RoonRecentActivitySection(
     onOpenAlbum: (AlbumSummary) -> Unit,
     onOpenLibrary: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     var selectedMode by remember { mutableStateOf(RecentActivityMode.Played) }
     val albums = when (selectedMode) {
         RecentActivityMode.Played -> recentPlayedAlbums
@@ -198,8 +238,8 @@ internal fun RoonRecentActivitySection(
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(Color.White.copy(alpha = 0.90f))
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.94f)), RoundedCornerShape(28.dp))
+            .background(homePanelColor(0.90f))
+            .border(homePanelBorder(0.94f), RoundedCornerShape(28.dp))
             .padding(top = 16.dp, bottom = 15.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -212,7 +252,7 @@ internal fun RoonRecentActivitySection(
         ) {
             Text(
                 "最近活动",
-                color = RoonInk,
+                color = scheme.onSurface,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
@@ -259,8 +299,8 @@ internal fun RecentActivityTabs(
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = Color.White.copy(alpha = 0.94f),
-        border = BorderStroke(1.dp, EchoGlassBorder),
+        color = homePanelColor(0.94f),
+        border = homePanelBorder(0.84f),
     ) {
         Row(
             modifier = Modifier.padding(3.dp),
@@ -286,17 +326,18 @@ private fun RecentActivityModeTab(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(9.dp))
-            .background(if (selected) EchoAccentDeep.copy(alpha = 0.16f) else Color.Transparent)
+            .background(if (selected) scheme.primary.copy(alpha = 0.16f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            color = if (selected) EchoAccentText else RoonMuted,
+            color = if (selected) scheme.primary else scheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -335,6 +376,7 @@ internal fun RecentAlbumCard(
     mode: RecentActivityMode,
     onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     val artistLabel = album.albumArtist ?: album.artist ?: "未知艺人"
     Column(
         modifier = Modifier
@@ -355,7 +397,7 @@ internal fun RecentAlbumCard(
         )
         Text(
             album.title,
-            color = RoonInk,
+            color = scheme.onSurface,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.ExtraBold,
             maxLines = 2,
@@ -363,7 +405,7 @@ internal fun RecentAlbumCard(
         )
         Text(
             recentAlbumSubtitle(album, mode, artistLabel),
-            color = RoonMuted,
+            color = scheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -398,6 +440,7 @@ private fun RecentActivityEmptyAlbumCard(
     subtitle: String,
     onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .width(160.dp)
@@ -409,7 +452,7 @@ private fun RecentActivityEmptyAlbumCard(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color.White.copy(alpha = 0.74f)),
+                .background(homePanelColor(0.74f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -421,14 +464,14 @@ private fun RecentActivityEmptyAlbumCard(
         }
         Text(
             title,
-            color = RoonInk,
+            color = scheme.onSurface,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
         )
         Text(
             subtitle,
-            color = RoonMuted,
+            color = scheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -442,6 +485,7 @@ internal fun EmptyRecentAlbumsCard(
     subtitle: String = "\u626b\u63cf\u66f2\u5e93\u540e\u663e\u793a",
     onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .width(160.dp)
@@ -453,7 +497,7 @@ internal fun EmptyRecentAlbumsCard(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color.White.copy(alpha = 0.74f)),
+                .background(homePanelColor(0.74f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -567,21 +611,14 @@ internal fun HomeAlbumRecommendationsSection(
     onOpenLibrary: () -> Unit,
     onOpenAlbum: (AlbumSummary) -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color.White,
-                        EchoHomeMist,
-                        Color(0xFFEFEAFF),
-                    ),
-                ),
-            )
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(24.dp))
+            .background(homePanelBrush())
+            .border(homePanelBorder(), RoundedCornerShape(24.dp))
             .padding(top = 15.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp),
     ) {
@@ -594,7 +631,7 @@ internal fun HomeAlbumRecommendationsSection(
         ) {
             Text(
                 "为你推荐",
-                color = RoonInk,
+                color = scheme.onSurface,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.ExtraBold,
             )
@@ -603,16 +640,16 @@ internal fun HomeAlbumRecommendationsSection(
                     .clip(RoundedCornerShape(16.dp))
                     .clickable(onClick = onRefresh),
                 shape = RoundedCornerShape(16.dp),
-                color = Color.White.copy(alpha = 0.94f),
-                border = BorderStroke(1.dp, EchoGlassBorder),
+                color = homePanelColor(0.94f),
+                border = homePanelBorder(0.84f),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = null, tint = RoonMuted, modifier = Modifier.size(15.dp))
-                    Text("刷新", color = RoonMuted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Rounded.Refresh, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
+                    Text("刷新", color = scheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -641,6 +678,7 @@ internal fun RecommendedAlbumCard(
     album: AlbumSummary,
     onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     val artistLabel = album.albumArtist ?: album.artist ?: "未知艺人"
     Column(
         modifier = Modifier
@@ -660,7 +698,7 @@ internal fun RecommendedAlbumCard(
         )
         Text(
             album.title,
-            color = RoonInk,
+            color = scheme.onSurface,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.ExtraBold,
             maxLines = 2,
@@ -668,7 +706,7 @@ internal fun RecommendedAlbumCard(
         )
         Text(
             artistLabel,
-            color = RoonMuted,
+            color = scheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -683,19 +721,20 @@ internal fun HomeArtistRankingSection(
     onOpenArtist: (ArtistSummary) -> Unit,
     onOpenLibrary: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(26.dp))
-            .background(Color.White.copy(alpha = 0.90f))
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(26.dp))
+            .background(homePanelColor(0.90f))
+            .border(homePanelBorder(), RoundedCornerShape(26.dp))
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
             "\u827a\u4eba\u6392\u884c\u699c",
-            color = RoonInk,
+            color = scheme.onSurface,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.ExtraBold,
         )
@@ -726,6 +765,7 @@ private fun ArtistRankRow(
     progress: Float,
     onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -738,7 +778,7 @@ private fun ArtistRankRow(
     ) {
         Text(
             rank.toString().padStart(2, '0'),
-            color = if (rank == 1) EchoAccentText else RoonMuted,
+            color = if (rank == 1) scheme.primary else scheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.ExtraBold,
             modifier = Modifier.width(34.dp),
@@ -749,7 +789,7 @@ private fun ArtistRankRow(
         ) {
             Text(
                 artist.name,
-                color = RoonInk,
+                color = scheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
@@ -757,7 +797,7 @@ private fun ArtistRankRow(
             )
             Text(
                 "${artist.trackCount} \u9996 \u00b7 ${artistReadableDuration(artist.durationMs)}",
-                color = RoonMuted,
+                color = scheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -768,7 +808,7 @@ private fun ArtistRankRow(
                     .fillMaxWidth()
                     .height(4.dp)
                     .clip(RoundedCornerShape(99.dp))
-                    .background(EchoHomeMist),
+                    .background(scheme.surfaceVariant.copy(alpha = 0.52f)),
             ) {
                 Box(
                     modifier = Modifier
@@ -781,12 +821,12 @@ private fun ArtistRankRow(
         }
         Surface(
             shape = RoundedCornerShape(99.dp),
-            color = Color.White.copy(alpha = 0.78f),
-            border = BorderStroke(1.dp, EchoGlassBorder),
+            color = homePanelColor(0.78f),
+            border = homePanelBorder(0.76f),
         ) {
             Text(
                 "${artist.albumCount.coerceAtLeast(0)} \u4e13\u8f91",
-                color = RoonMuted,
+                color = scheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -799,22 +839,24 @@ private fun ArtistRankRow(
 @Composable
 internal fun HomeFavoriteAlbumsSection(
     albums: List<AlbumSummary>,
+    heatmapDays: List<PlaybackHeatmapDay>,
     onOpenAlbum: (AlbumSummary) -> Unit,
     onOpenLibrary: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(26.dp))
-            .background(Color.White.copy(alpha = 0.90f))
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(26.dp))
+            .background(homePanelColor(0.90f))
+            .border(homePanelBorder(), RoundedCornerShape(26.dp))
             .padding(top = 16.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
             "\u4f60\u559c\u6b22\u7684\u4e13\u8f91",
-            color = RoonInk,
+            color = scheme.onSurface,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.ExtraBold,
             modifier = Modifier.padding(horizontal = 18.dp),
@@ -840,8 +882,236 @@ internal fun HomeFavoriteAlbumsSection(
                 }
             }
         }
+        FavoriteAlbumHeatmap(days = heatmapDays)
     }
 }
+
+@Composable
+private fun FavoriteAlbumHeatmap(days: List<PlaybackHeatmapDay>) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    val heatmap = remember(days) { buildFavoriteHeatmap(days) }
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 18.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (dark) scheme.surfaceVariant.copy(alpha = 0.42f) else EchoHomeMist.copy(alpha = 0.52f))
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (dark) scheme.outlineVariant.copy(alpha = 0.48f) else EchoGlassBorder,
+                ),
+                RoundedCornerShape(8.dp),
+            )
+            .padding(11.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "近 12 周播放热力图",
+                color = scheme.onSurface,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "${heatmap.activeWeeks} 周活跃",
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val weekCount = heatmap.weeks.size
+            val labelWidth = 22.dp
+            val cellGap = 3.dp
+            val cellSize = ((maxWidth - labelWidth - cellGap * weekCount) / weekCount)
+                .coerceIn(8.dp, 14.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(cellGap), verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.width(labelWidth))
+                    heatmap.weeks.forEach { week ->
+                        Text(
+                            text = week.monthLabel,
+                            color = scheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            modifier = Modifier.width(cellSize),
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(
+                        modifier = Modifier.width(labelWidth),
+                        verticalArrangement = Arrangement.spacedBy(cellGap),
+                    ) {
+                        HeatmapWeekdayLabel("一", cellSize)
+                        HeatmapWeekdayLabel("", cellSize)
+                        HeatmapWeekdayLabel("三", cellSize)
+                        HeatmapWeekdayLabel("", cellSize)
+                        HeatmapWeekdayLabel("五", cellSize)
+                        HeatmapWeekdayLabel("", cellSize)
+                        HeatmapWeekdayLabel("", cellSize)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(cellGap)) {
+                        heatmap.weeks.forEach { week ->
+                            Column(verticalArrangement = Arrangement.spacedBy(cellGap)) {
+                                week.days.forEach { day ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(cellSize)
+                                            .alpha(if (day.isFuture) 0.42f else 1f)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(heatmapLevelColor(day.level))
+                                            .border(
+                                                BorderStroke(
+                                                    1.dp,
+                                                    if (dark) scheme.outlineVariant.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.58f),
+                                                ),
+                                                RoundedCornerShape(3.dp),
+                                            ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "少",
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.width(5.dp))
+            (0..4).forEach { level ->
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(heatmapLevelColor(level))
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                if (dark) scheme.outlineVariant.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.58f),
+                            ),
+                            RoundedCornerShape(2.dp),
+                        ),
+                )
+                Spacer(Modifier.width(3.dp))
+            }
+            Text(
+                "多",
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeatmapWeekdayLabel(label: String, size: Dp) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .width(22.dp)
+            .height(size),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Text(
+            label,
+            color = scheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
+private data class FavoriteHeatmap(
+    val weeks: List<FavoriteHeatmapWeek>,
+    val activeWeeks: Int,
+)
+
+private data class FavoriteHeatmapWeek(
+    val monthLabel: String,
+    val days: List<FavoriteHeatmapCell>,
+)
+
+private data class FavoriteHeatmapCell(
+    val isFuture: Boolean,
+    val level: Int,
+)
+
+private fun buildFavoriteHeatmap(days: List<PlaybackHeatmapDay>): FavoriteHeatmap {
+    val today = LocalDate.now()
+    val currentWeekStart = today.with(DayOfWeek.MONDAY)
+    val firstWeekStart = currentWeekStart.minusWeeks(HomeHeatmapWeeks - 1L)
+    val activityByDay = days.associateBy { it.epochDay }
+    val maxCount = activityByDay.values.maxOfOrNull { it.playCount }?.coerceAtLeast(1) ?: 1
+    val weeks = List(HomeHeatmapWeeks) { weekIndex ->
+        val weekStart = firstWeekStart.plusWeeks(weekIndex.toLong())
+        FavoriteHeatmapWeek(
+            monthLabel = monthLabelForWeek(weekStart, weekIndex),
+            days = List(7) { dayIndex ->
+                val date = weekStart.plusDays(dayIndex.toLong())
+                val count = activityByDay[date.toEpochDay()]?.playCount ?: 0
+                FavoriteHeatmapCell(
+                    isFuture = date.isAfter(today),
+                    level = if (date.isAfter(today)) 0 else heatmapLevel(count, maxCount),
+                )
+            },
+        )
+    }
+    return FavoriteHeatmap(
+        weeks = weeks,
+        activeWeeks = weeks.count { week -> week.days.any { it.level > 0 } },
+    )
+}
+
+private fun monthLabelForWeek(weekStart: LocalDate, weekIndex: Int): String {
+    val showLabel = weekIndex == 0 || weekStart.dayOfMonth <= 7
+    return if (showLabel) {
+        weekStart.month.getDisplayName(TextStyle.SHORT, Locale.CHINA)
+    } else {
+        ""
+    }
+}
+
+private fun heatmapLevel(count: Int, maxCount: Int): Int {
+    if (count <= 0) return 0
+    val ratio = count.toFloat() / maxCount.toFloat()
+    return when {
+        ratio >= 0.8f -> 4
+        ratio >= 0.55f -> 3
+        ratio >= 0.25f -> 2
+        else -> 1
+    }
+}
+
+private fun heatmapLevelColor(level: Int): Color =
+    when (level) {
+        1 -> EchoHomeBlue.copy(alpha = 0.24f)
+        2 -> EchoAccent.copy(alpha = 0.44f)
+        3 -> EchoAccentDeep.copy(alpha = 0.62f)
+        4 -> EchoHomeBlueDeep.copy(alpha = 0.88f)
+        else -> Color.White.copy(alpha = 0.72f)
+    }
 
 @Composable
 private fun EmptyRankingNotice(

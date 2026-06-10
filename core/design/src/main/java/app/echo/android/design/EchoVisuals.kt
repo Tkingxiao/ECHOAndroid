@@ -87,11 +87,16 @@ fun GlassSurface(
     alpha: Float = 0.16f,
     content: @Composable () -> Unit,
 ) {
+    val dark = LocalEchoDarkTheme.current
+    val scheme = MaterialTheme.colorScheme
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(28.dp),
-        color = Color.White.copy(alpha = alpha),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.32f)),
+        color = if (dark) scheme.surface.copy(alpha = (alpha + 0.54f).coerceAtMost(0.84f)) else Color.White.copy(alpha = alpha),
+        border = BorderStroke(
+            1.dp,
+            if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.32f),
+        ),
         content = { content() },
     )
 }
@@ -105,7 +110,7 @@ fun GlassIconButton(
     GlassSurface(modifier = Modifier.size(46.dp)) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             IconButton(onClick = onClick) {
-                Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(25.dp))
+                Icon(icon, contentDescription = description, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(25.dp))
             }
         }
     }
@@ -113,13 +118,22 @@ fun GlassIconButton(
 
 @Composable
 fun EchoGlassBackground(modifier: Modifier = Modifier) {
+    val dark = LocalEchoDarkTheme.current
     // Roon 风格：平面中性炭灰，极克制的顶部冷光，无光斑、无星点
     val baseGradient = Brush.verticalGradient(
-        listOf(
-            EchoBgTop,
-            EchoBgMid,
-            EchoBgBottom,
-        ),
+        if (dark) {
+            listOf(
+                Color(0xFF0D0F14),
+                Color(0xFF151821),
+                Color(0xFF10131A),
+            )
+        } else {
+            listOf(
+                EchoBgTop,
+                EchoBgMid,
+                EchoBgBottom,
+            )
+        },
     )
     Canvas(modifier = modifier.background(baseGradient)) {
         val w = size.width
@@ -127,21 +141,21 @@ fun EchoGlassBackground(modifier: Modifier = Modifier) {
         // 顶部一抹极淡的 Roon 蓝冷光，给纯黑一点层次
         drawRect(
             brush = Brush.radialGradient(
-                colors = listOf(EchoHomeBlue.copy(alpha = 0.22f), Color.Transparent),
+                colors = listOf(EchoHomeBlue.copy(alpha = if (dark) 0.12f else 0.22f), Color.Transparent),
                 center = Offset(w * 0.08f, h * 0.18f),
                 radius = h * 0.40f,
             ),
         )
         drawRect(
             brush = Brush.radialGradient(
-                colors = listOf(EchoAccentDeep.copy(alpha = 0.18f), Color.Transparent),
+                colors = listOf(EchoAccentDeep.copy(alpha = if (dark) 0.10f else 0.18f), Color.Transparent),
                 center = Offset(w * 0.92f, h * 0.28f),
                 radius = h * 0.46f,
             ),
         )
         drawRect(
             brush = Brush.radialGradient(
-                colors = listOf(Color(0xFFFFC7E3).copy(alpha = 0.18f), Color.Transparent),
+                colors = listOf(Color(0xFFFFC7E3).copy(alpha = if (dark) 0.06f else 0.18f), Color.Transparent),
                 center = Offset(w * 0.40f, h * 0.78f),
                 radius = h * 0.44f,
             ),
@@ -182,38 +196,50 @@ fun PageChrome(
 ) {
     key(title) {
         val configuration = LocalConfiguration.current
+        val densityScale = LocalEchoDensityScale.current
+        val dark = LocalEchoDarkTheme.current
+        val scheme = MaterialTheme.colorScheme
         val compactChrome = configuration.screenHeightDp < 620 ||
             configuration.screenWidthDp > configuration.screenHeightDp
         val contentScroll = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier
+        val chromeGradient = if (dark) {
+            Brush.verticalGradient(
+                listOf(
+                    scheme.background.copy(alpha = 0.96f),
+                    scheme.surface.copy(alpha = 0.90f),
+                    Color(0xFF10131A).copy(alpha = 0.96f),
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.66f),
+                    EchoHomeMist.copy(alpha = 0.78f),
+                    Color(0xFFEAF2FF).copy(alpha = 0.86f),
+                ),
+            )
+        }
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.66f),
-                            EchoHomeMist.copy(alpha = 0.78f),
-                            Color(0xFFEAF2FF).copy(alpha = 0.86f),
-                        ),
-                    ),
-                )
+                .background(chromeGradient)
                 .statusBarsPadding(),
         ) {
-            val horizontalPadding = if (maxWidth >= 720.dp) 28.dp else 16.dp
+            val horizontalPadding = ((if (maxWidth >= 720.dp) 28f else 16f) * densityScale).dp
             val topPadding = when {
-                compactHeader -> 2.dp
-                compactChrome -> 8.dp
-                else -> 14.dp
+                compactHeader -> (2f * densityScale).dp
+                compactChrome -> (8f * densityScale).dp
+                else -> (14f * densityScale).dp
             }
             val headerGap = when {
-                compactHeader -> 4.dp
-                compactChrome -> 6.dp
-                else -> 8.dp
+                compactHeader -> (4f * densityScale).dp
+                compactChrome -> (6f * densityScale).dp
+                else -> (8f * densityScale).dp
             }
             val contentGap = when {
-                compactHeader -> 4.dp
-                compactChrome -> 8.dp
-                else -> 12.dp
+                compactHeader -> (4f * densityScale).dp
+                compactChrome -> (8f * densityScale).dp
+                else -> (12f * densityScale).dp
             }
             val titleStyle = when {
                 compactHeader -> MaterialTheme.typography.headlineMedium
@@ -236,7 +262,7 @@ fun PageChrome(
                     if (showBrand) {
                         Text("ECHO 移动端", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     } else {
-                        Text(title, style = titleStyle, fontWeight = FontWeight.Bold, color = RoonInk)
+                        Text(title, style = titleStyle, fontWeight = FontWeight.Bold, color = scheme.onSurface)
                     }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -244,14 +270,17 @@ fun PageChrome(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color.White.copy(alpha = 0.56f),
-                            border = BorderStroke(1.dp, EchoGlassBorder),
+                            color = scheme.surface.copy(alpha = if (dark) 0.72f else 0.56f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (dark) scheme.outlineVariant.copy(alpha = 0.62f) else EchoGlassBorder,
+                            ),
                         ) {
                             Text(
                                 badge,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = RoonInk,
+                                color = scheme.onSurface,
                             )
                         }
                         actions()
@@ -259,10 +288,10 @@ fun PageChrome(
                 }
                 if (showBrand) {
                     Spacer(Modifier.height(headerGap))
-                    Text(title, style = titleStyle, fontWeight = FontWeight.Bold, color = RoonInk)
+                    Text(title, style = titleStyle, fontWeight = FontWeight.Bold, color = scheme.onSurface)
                 }
                 if (subtitle != null) {
-                    Text(subtitle, color = RoonMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(subtitle, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 Spacer(Modifier.height(contentGap))
                 content()
@@ -311,7 +340,7 @@ fun EmptyState(message: String) {
         Text(
             text = message,
             modifier = Modifier.padding(18.dp),
-            color = RoonMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

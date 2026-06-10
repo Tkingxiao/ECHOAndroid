@@ -1,3 +1,20 @@
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.isFile) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun lastFmBuildValue(name: String, fallback: String = ""): String {
+    val value = providers.gradleProperty(name).orNull
+        ?: providers.environmentVariable(name).orNull
+        ?: localProperties.getProperty(name)
+        ?: fallback
+    return value.replace("\\", "\\\\").replace("\"", "\\\"")
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -13,10 +30,21 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0-foundation"
+        buildConfigField(
+            "String",
+            "LASTFM_API_KEY",
+            "\"${lastFmBuildValue("LASTFM_API_KEY", "c9badea6f4f4d280800653b9458d3dbd")}\"",
+        )
+        buildConfigField(
+            "String",
+            "LASTFM_SHARED_SECRET",
+            "\"${lastFmBuildValue("LASTFM_SHARED_SECRET")}\"",
+        )
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {

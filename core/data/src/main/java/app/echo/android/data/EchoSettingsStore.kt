@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -25,12 +26,41 @@ data class EchoAppSettings(
     val customBackgroundBlur: Float = 32f,
     val customBackgroundBrightness: Float = 0.72f,
     val customBackgroundGlass: Float = 0.62f,
+    val uiFontFamily: String = EchoFontFamilyMode.System,
+    val uiFontScale: Float = 1f,
+    val uiDensityScale: Float = 1f,
+    val lyricsFontFamily: String = EchoFontFamilyMode.System,
+    val lyricsFontScale: Float = 1f,
+    val importedFontUri: String? = null,
+    val themeMode: String = EchoThemeMode.System,
+    val scheduledDarkModeEnabled: Boolean = false,
+    val scheduledDarkStartMinute: Int = 22 * 60,
+    val scheduledDarkEndMinute: Int = 7 * 60,
+    val lastFmEnabled: Boolean = false,
+    val lastFmApiKey: String? = null,
+    val lastFmSharedSecret: String? = null,
+    val lastFmUsername: String? = null,
+    val lastFmSessionKey: String? = null,
 )
 
 object EchoBackgroundMode {
     const val Default = "default"
     const val Image = "image"
     const val Video = "video"
+}
+
+object EchoFontFamilyMode {
+    const val System = "system"
+    const val Outfit = "outfit"
+    const val Serif = "serif"
+    const val Monospace = "monospace"
+    const val Imported = "imported"
+}
+
+object EchoThemeMode {
+    const val System = "system"
+    const val Light = "light"
+    const val Dark = "dark"
 }
 
 class EchoSettingsStore(
@@ -52,6 +82,21 @@ class EchoSettingsStore(
                 customBackgroundBlur = (preferences[Keys.CustomBackgroundBlur] ?: 32f).coerceIn(0f, 80f),
                 customBackgroundBrightness = (preferences[Keys.CustomBackgroundBrightness] ?: 0.72f).coerceIn(0.35f, 1.15f),
                 customBackgroundGlass = (preferences[Keys.CustomBackgroundGlass] ?: 0.62f).coerceIn(0.18f, 0.90f),
+                uiFontFamily = preferences[Keys.UiFontFamily] ?: EchoFontFamilyMode.System,
+                uiFontScale = (preferences[Keys.UiFontScale] ?: 1f).coerceIn(0.88f, 1.18f),
+                uiDensityScale = (preferences[Keys.UiDensityScale] ?: 1f).coerceIn(0.90f, 1.12f),
+                lyricsFontFamily = preferences[Keys.LyricsFontFamily] ?: EchoFontFamilyMode.System,
+                lyricsFontScale = (preferences[Keys.LyricsFontScale] ?: 1f).coerceIn(0.82f, 1.28f),
+                importedFontUri = preferences[Keys.ImportedFontUri],
+                themeMode = preferences[Keys.ThemeMode] ?: EchoThemeMode.System,
+                scheduledDarkModeEnabled = preferences[Keys.ScheduledDarkModeEnabled] ?: false,
+                scheduledDarkStartMinute = (preferences[Keys.ScheduledDarkStartMinute] ?: 22 * 60).coerceIn(0, 23 * 60 + 59),
+                scheduledDarkEndMinute = (preferences[Keys.ScheduledDarkEndMinute] ?: 7 * 60).coerceIn(0, 23 * 60 + 59),
+                lastFmEnabled = preferences[Keys.LastFmEnabled] ?: false,
+                lastFmApiKey = preferences[Keys.LastFmApiKey],
+                lastFmSharedSecret = preferences[Keys.LastFmSharedSecret],
+                lastFmUsername = preferences[Keys.LastFmUsername],
+                lastFmSessionKey = preferences[Keys.LastFmSessionKey],
             )
         }
 
@@ -110,6 +155,85 @@ class EchoSettingsStore(
         context.echoSettings.edit { it[Keys.CustomBackgroundGlass] = value.coerceIn(0.18f, 0.90f) }
     }
 
+    suspend fun setUiFontFamily(value: String) {
+        context.echoSettings.edit { it[Keys.UiFontFamily] = value }
+    }
+
+    suspend fun setUiFontScale(value: Float) {
+        context.echoSettings.edit { it[Keys.UiFontScale] = value.coerceIn(0.88f, 1.18f) }
+    }
+
+    suspend fun setUiDensityScale(value: Float) {
+        context.echoSettings.edit { it[Keys.UiDensityScale] = value.coerceIn(0.90f, 1.12f) }
+    }
+
+    suspend fun setLyricsFontFamily(value: String) {
+        context.echoSettings.edit { it[Keys.LyricsFontFamily] = value }
+    }
+
+    suspend fun setLyricsFontScale(value: Float) {
+        context.echoSettings.edit { it[Keys.LyricsFontScale] = value.coerceIn(0.82f, 1.28f) }
+    }
+
+    suspend fun setImportedFontUri(uri: String?) {
+        context.echoSettings.edit {
+            if (uri.isNullOrBlank()) {
+                it.remove(Keys.ImportedFontUri)
+                if (it[Keys.UiFontFamily] == EchoFontFamilyMode.Imported) {
+                    it[Keys.UiFontFamily] = EchoFontFamilyMode.System
+                }
+                if (it[Keys.LyricsFontFamily] == EchoFontFamilyMode.Imported) {
+                    it[Keys.LyricsFontFamily] = EchoFontFamilyMode.System
+                }
+            } else {
+                it[Keys.ImportedFontUri] = uri
+            }
+        }
+    }
+
+    suspend fun setThemeMode(value: String) {
+        context.echoSettings.edit { it[Keys.ThemeMode] = value }
+    }
+
+    suspend fun setScheduledDarkModeEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.ScheduledDarkModeEnabled] = enabled }
+    }
+
+    suspend fun setScheduledDarkStartMinute(value: Int) {
+        context.echoSettings.edit { it[Keys.ScheduledDarkStartMinute] = value.coerceIn(0, 23 * 60 + 59) }
+    }
+
+    suspend fun setScheduledDarkEndMinute(value: Int) {
+        context.echoSettings.edit { it[Keys.ScheduledDarkEndMinute] = value.coerceIn(0, 23 * 60 + 59) }
+    }
+
+    suspend fun setLastFmEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.LastFmEnabled] = enabled }
+    }
+
+    suspend fun setLastFmCredentials(
+        apiKey: String,
+        sharedSecret: String,
+        username: String,
+        sessionKey: String,
+    ) {
+        context.echoSettings.edit {
+            it[Keys.LastFmApiKey] = apiKey.trim()
+            it[Keys.LastFmSharedSecret] = sharedSecret.trim()
+            it[Keys.LastFmUsername] = username.trim()
+            it[Keys.LastFmSessionKey] = sessionKey.trim()
+            it[Keys.LastFmEnabled] = true
+        }
+    }
+
+    suspend fun clearLastFmCredentials() {
+        context.echoSettings.edit {
+            it[Keys.LastFmEnabled] = false
+            it.remove(Keys.LastFmUsername)
+            it.remove(Keys.LastFmSessionKey)
+        }
+    }
+
     private object Keys {
         val PreferOffload = booleanPreferencesKey("prefer_offload")
         val LastOutputRoute = stringPreferencesKey("last_output_route")
@@ -124,5 +248,20 @@ class EchoSettingsStore(
         val CustomBackgroundBlur = floatPreferencesKey("custom_background_blur")
         val CustomBackgroundBrightness = floatPreferencesKey("custom_background_brightness")
         val CustomBackgroundGlass = floatPreferencesKey("custom_background_glass")
+        val UiFontFamily = stringPreferencesKey("ui_font_family")
+        val UiFontScale = floatPreferencesKey("ui_font_scale")
+        val UiDensityScale = floatPreferencesKey("ui_density_scale")
+        val LyricsFontFamily = stringPreferencesKey("lyrics_font_family")
+        val LyricsFontScale = floatPreferencesKey("lyrics_font_scale")
+        val ImportedFontUri = stringPreferencesKey("imported_font_uri")
+        val ThemeMode = stringPreferencesKey("theme_mode")
+        val ScheduledDarkModeEnabled = booleanPreferencesKey("scheduled_dark_mode_enabled")
+        val ScheduledDarkStartMinute = intPreferencesKey("scheduled_dark_start_minute")
+        val ScheduledDarkEndMinute = intPreferencesKey("scheduled_dark_end_minute")
+        val LastFmEnabled = booleanPreferencesKey("lastfm_enabled")
+        val LastFmApiKey = stringPreferencesKey("lastfm_api_key")
+        val LastFmSharedSecret = stringPreferencesKey("lastfm_shared_secret")
+        val LastFmUsername = stringPreferencesKey("lastfm_username")
+        val LastFmSessionKey = stringPreferencesKey("lastfm_session_key")
     }
 }

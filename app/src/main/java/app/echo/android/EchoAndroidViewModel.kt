@@ -24,8 +24,10 @@ import app.echo.android.model.lyrics.EchoLyricsLoadState
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.PlaybackControlsState
 import app.echo.android.model.playback.PlaybackDiagnosticsState
+import app.echo.android.model.playback.PlaybackHeatmapDay
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +62,11 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         onTrackChanged = lyricsController::updateLyricsForTrack,
         onTrackActivated = ::recordRecentPlayback,
     )
+    private val lastFmClient = LastFmClient()
+    private val lastFmController = LastFmScrobbleController(
+        scope = viewModelScope,
+        client = lastFmClient,
+    )
 
     val libraryQuery: StateFlow<String> = libraryController.libraryQuery
     val tracks: Flow<PagingData<EchoTrack>> = libraryController.tracks
@@ -78,20 +85,32 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val playbackDiagnostics: StateFlow<PlaybackDiagnosticsState> = playbackController.playbackDiagnostics
     val lyricsState: StateFlow<EchoLyricsLoadState> = lyricsController.lyricsState
     val appSettings: Flow<EchoAppSettings> = settingsStore.appSettings
+    val lastFmState: StateFlow<LastFmUiState> = lastFmController.uiState
 
     private val _recentPlaybackAlbums = MutableStateFlow<List<AlbumSummary>>(emptyList())
     val recentPlaybackAlbums: StateFlow<List<AlbumSummary>> = _recentPlaybackAlbums.asStateFlow()
     private val _recentPlaybackArtists = MutableStateFlow<List<ArtistSummary>>(emptyList())
     val recentPlaybackArtists: StateFlow<List<ArtistSummary>> = _recentPlaybackArtists.asStateFlow()
+    private val _recentPlaybackHeatmap = MutableStateFlow<List<PlaybackHeatmapDay>>(emptyList())
+    val recentPlaybackHeatmap: StateFlow<List<PlaybackHeatmapDay>> = _recentPlaybackHeatmap.asStateFlow()
 
     private val albumPlaybackCounts = mutableMapOf<String, Int>()
     private val artistPlaybackCounts = mutableMapOf<String, Int>()
+    private val playbackHeatmapCounts = mutableMapOf<Long, Int>()
 
     init {
+        lastFmController.start(
+            settingsFlow = settingsStore.appSettings,
+            playbackStatus = playbackController.playbackStatus,
+            playbackPosition = playbackController.playbackPosition,
+        )
         viewModelScope.launch {
             settingsStore.appSettings.collect { settings ->
                 lyricsController.setOnlineLyricsEnabled(settings.onlineLyricsEnabled, playbackController.currentTrackId)
                 playbackController.setUsbExclusiveEnabled(settings.usbExclusiveEnabled)
+                if (settings.lastFmEnabled && !settings.lastFmUsername.isNullOrBlank()) {
+                    lastFmController.setConnected(settings.lastFmUsername.orEmpty())
+                }
             }
         }
     }
@@ -294,6 +313,123 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setUiFontFamily(value: String) {
+        updateSettings {
+            setUiFontFamily(value)
+        }
+    }
+
+    fun setUiFontScale(value: Float) {
+        updateSettings {
+            setUiFontScale(value)
+        }
+    }
+
+    fun setUiDensityScale(value: Float) {
+        updateSettings {
+            setUiDensityScale(value)
+        }
+    }
+
+    fun setLyricsFontFamily(value: String) {
+        updateSettings {
+            setLyricsFontFamily(value)
+        }
+    }
+
+    fun setLyricsFontScale(value: Float) {
+        updateSettings {
+            setLyricsFontScale(value)
+        }
+    }
+
+    fun setImportedFontUri(uri: Uri?) {
+        updateSettings {
+            setImportedFontUri(uri?.toString())
+        }
+    }
+
+    fun setThemeMode(value: String) {
+        updateSettings {
+            setThemeMode(value)
+        }
+    }
+
+    fun setScheduledDarkModeEnabled(enabled: Boolean) {
+        updateSettings {
+            setScheduledDarkModeEnabled(enabled)
+        }
+    }
+
+    fun setScheduledDarkStartMinute(value: Int) {
+        updateSettings {
+            setScheduledDarkStartMinute(value)
+        }
+    }
+
+    fun setScheduledDarkEndMinute(value: Int) {
+        updateSettings {
+            setScheduledDarkEndMinute(value)
+        }
+    }
+
+    fun setLastFmEnabled(enabled: Boolean) {
+        updateSettings {
+            setLastFmEnabled(enabled)
+        }
+    }
+
+    fun connectLastFm(
+        apiKey: String,
+        sharedSecret: String,
+        username: String,
+        password: String,
+    ) {
+        viewModelScope.launch {
+            val resolvedApiKey = apiKey.ifBlank { LastFmApiConfig.apiKey }
+            val resolvedSharedSecret = sharedSecret.ifBlank { LastFmApiConfig.sharedSecret }
+            if (resolvedApiKey.isBlank()) {
+                lastFmController.setError("Missing Last.fm API key")
+                return@launch
+            }
+            if (resolvedSharedSecret.isBlank()) {
+                lastFmController.setError("Missing Last.fm shared secret")
+                return@launch
+            }
+            lastFmController.setConnecting()
+            val result = withContext(Dispatchers.IO) {
+                lastFmClient.authenticate(
+                    apiKey = resolvedApiKey,
+                    sharedSecret = resolvedSharedSecret,
+                    username = username,
+                    password = password,
+                )
+            }
+            result
+                .onSuccess { session ->
+                    withContext(Dispatchers.IO) {
+                        settingsStore.setLastFmCredentials(
+                            apiKey = resolvedApiKey,
+                            sharedSecret = resolvedSharedSecret,
+                            username = session.username,
+                            sessionKey = session.sessionKey,
+                        )
+                    }
+                    lastFmController.setConnected(session.username)
+                }
+                .onFailure { error ->
+                    lastFmController.setError(error.message ?: "Unknown Last.fm auth error")
+                }
+        }
+    }
+
+    fun disconnectLastFm() {
+        lastFmController.setDisconnected()
+        updateSettings {
+            clearLastFmCredentials()
+        }
+    }
+
     private fun updateSettings(block: suspend EchoSettingsStore.() -> Unit) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
@@ -306,12 +442,14 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         libraryController.clear()
         lyricsController.clear()
         playbackController.clear()
+        lastFmController.clear()
         database.close()
         super.onCleared()
     }
 
     private fun recordRecentPlayback(trackId: String) {
         viewModelScope.launch {
+            recordPlaybackHeatmapTick()
             val album = withContext(Dispatchers.IO) {
                 repository.albumSummaryForTrack(trackId)
             }
@@ -333,5 +471,24 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
                     .take(8)
             }
         }
+    }
+
+    private fun recordPlaybackHeatmapTick() {
+        val today = LocalDate.now().toEpochDay()
+        val firstVisibleDay = today - HomeHeatmapVisibleDays + 1
+        playbackHeatmapCounts[today] = (playbackHeatmapCounts[today] ?: 0) + 1
+        playbackHeatmapCounts.keys.removeAll { it < firstVisibleDay }
+        _recentPlaybackHeatmap.value = playbackHeatmapCounts
+            .toSortedMap()
+            .map { (epochDay, count) ->
+                PlaybackHeatmapDay(
+                    epochDay = epochDay,
+                    playCount = count,
+                )
+            }
+    }
+
+    private companion object {
+        const val HomeHeatmapVisibleDays = 84L
     }
 }

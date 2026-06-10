@@ -11,7 +11,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoAccent
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.progressFraction
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
@@ -71,7 +71,7 @@ fun MiniPlayer(
     val shape = RoundedCornerShape(14.dp)
     val scope = rememberCoroutineScope()
     val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val dark = LocalEchoDarkTheme.current
     val offsetX = remember { Animatable(0f) }
     var widthPx by remember { mutableStateOf(1f) }
     val canSwitch = onNext != null && onPrevious != null && status.track != null
@@ -91,9 +91,9 @@ fun MiniPlayer(
                 Brush.verticalGradient(
                     if (dark) {
                         listOf(
-                            scheme.surface.copy(alpha = 0.96f),
-                            scheme.surfaceVariant.copy(alpha = 0.90f),
-                            scheme.surface.copy(alpha = 0.96f),
+                            Color(0xFF24262D),
+                            Color(0xFF20222A),
+                            Color(0xFF24262D),
                         )
                     } else {
                         listOf(

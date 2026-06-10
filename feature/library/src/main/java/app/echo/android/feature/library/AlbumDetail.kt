@@ -52,6 +52,7 @@ import app.echo.android.design.ArtworkPalette
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.BlurredArtworkBackground
 import app.echo.android.design.EchoContentMaxWidth
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
 import app.echo.android.design.formatDuration
@@ -69,6 +70,27 @@ private val AlbumTextShadow = Shadow(
     blurRadius = 8f,
 )
 private const val DetailBackSwipeThresholdPx = 120f
+
+private data class DetailGlassColors(
+    val surface: Color,
+    val elevatedSurface: Color,
+    val border: Color,
+    val content: Color,
+    val muted: Color,
+)
+
+@Composable
+private fun rememberDetailGlassColors(): DetailGlassColors {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    return DetailGlassColors(
+        surface = if (dark) scheme.surface.copy(alpha = 0.74f) else Color.White.copy(alpha = 0.62f),
+        elevatedSurface = if (dark) scheme.surfaceVariant.copy(alpha = 0.62f) else Color.White.copy(alpha = 0.78f),
+        border = if (dark) scheme.outlineVariant.copy(alpha = 0.54f) else Color.White.copy(alpha = 0.78f),
+        content = if (dark) scheme.onSurface else RoonInk,
+        muted = if (dark) scheme.onSurfaceVariant.copy(alpha = 0.92f) else RoonMuted,
+    )
+}
 
 @Composable
 internal fun AlbumDetailPage(
@@ -304,6 +326,7 @@ private fun AlbumDetailLightBackground(
 
 @Composable
 private fun ArtistHero(artist: ArtistSummary, palette: ArtworkPalette) {
+    val colors = rememberDetailGlassColors()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -321,7 +344,7 @@ private fun ArtistHero(artist: ArtistSummary, palette: ArtworkPalette) {
         Spacer(Modifier.height(20.dp))
         Text(
             artist.name,
-            color = RoonInk,
+            color = colors.content,
             style = MaterialTheme.typography.headlineSmall.copy(shadow = AlbumTextShadow),
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -331,7 +354,7 @@ private fun ArtistHero(artist: ArtistSummary, palette: ArtworkPalette) {
         Spacer(Modifier.height(8.dp))
         Text(
             artistMetaLine(artist),
-            color = RoonMuted,
+            color = colors.muted,
             style = MaterialTheme.typography.labelLarge,
             textAlign = TextAlign.Center,
         )
@@ -340,6 +363,7 @@ private fun ArtistHero(artist: ArtistSummary, palette: ArtworkPalette) {
 
 @Composable
 private fun AlbumDetailTopBar(onBack: () -> Unit) {
+    val colors = rememberDetailGlassColors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -350,15 +374,15 @@ private fun AlbumDetailTopBar(onBack: () -> Unit) {
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.82f))
-                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)), CircleShape)
+                .background(colors.elevatedSurface)
+                .border(BorderStroke(1.dp, colors.border), CircleShape)
                 .clickable(onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.AutoMirrored.Rounded.ArrowBack,
                 contentDescription = "返回",
-                tint = RoonInk,
+                tint = colors.content,
                 modifier = Modifier.size(22.dp),
             )
         }
@@ -371,9 +395,10 @@ private fun AlbumHero(
     palette: ArtworkPalette,
     onArtworkBackground: Boolean = false,
 ) {
-    val titleColor = if (onArtworkBackground) AlbumOnArtwork else RoonInk
+    val colors = rememberDetailGlassColors()
+    val titleColor = if (onArtworkBackground) AlbumOnArtwork else colors.content
     val artistColor = if (onArtworkBackground) AlbumOnArtwork.copy(alpha = 0.88f) else palette.deep
-    val metaColor = if (onArtworkBackground) AlbumOnArtworkMuted else RoonMuted
+    val metaColor = if (onArtworkBackground) AlbumOnArtworkMuted else colors.muted
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -430,6 +455,7 @@ private fun AlbumActionBar(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
 ) {
+    val colors = rememberDetailGlassColors()
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -465,8 +491,8 @@ private fun AlbumActionBar(
                 .weight(1f)
                 .height(52.dp)
                 .clip(RoundedCornerShape(26.dp))
-                .background(Color.White.copy(alpha = 0.78f))
-                .border(BorderStroke(1.dp, palette.vibrant.copy(alpha = 0.35f)), RoundedCornerShape(26.dp))
+                .background(colors.elevatedSurface)
+                .border(BorderStroke(1.dp, palette.vibrant.copy(alpha = if (LocalEchoDarkTheme.current) 0.52f else 0.35f)), RoundedCornerShape(26.dp))
                 .clickable(onClick = onShuffle),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
@@ -494,13 +520,14 @@ private fun AlbumDetailInsights(
     info: DetailInsight,
     palette: ArtworkPalette,
 ) {
+    val colors = rememberDetailGlassColors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(76.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White.copy(alpha = 0.58f))
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.78f)), RoundedCornerShape(18.dp))
+            .background(colors.surface)
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(18.dp))
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -514,7 +541,7 @@ private fun AlbumDetailInsights(
             modifier = Modifier
                 .width(1.dp)
                 .height(42.dp)
-                .background(Color.White.copy(alpha = 0.66f)),
+                .background(colors.border),
         )
         DetailInsightCell(
             insight = info,
@@ -532,6 +559,7 @@ private fun DetailInsightCell(
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
+    val colors = rememberDetailGlassColors()
     Row(
         modifier = modifier
             .padding(horizontal = 10.dp),
@@ -555,7 +583,7 @@ private fun DetailInsightCell(
             )
             Text(
                 insight.primary,
-                color = RoonInk,
+                color = colors.content,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -563,7 +591,7 @@ private fun DetailInsightCell(
             )
             Text(
                 insight.secondary,
-                color = RoonMuted,
+                color = colors.muted,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -575,9 +603,12 @@ private fun DetailInsightCell(
 @Composable
 private fun AlbumTracksHeader(
     count: Int,
-    titleColor: Color = RoonInk,
-    metaColor: Color = RoonMuted,
+    titleColor: Color? = null,
+    metaColor: Color? = null,
 ) {
+    val colors = rememberDetailGlassColors()
+    val resolvedTitleColor = titleColor ?: colors.content
+    val resolvedMetaColor = metaColor ?: colors.muted
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -585,13 +616,13 @@ private fun AlbumTracksHeader(
     ) {
         Text(
             "曲目",
-            color = titleColor,
+            color = resolvedTitleColor,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
         Text(
             "$count 首",
-            color = metaColor,
+            color = resolvedMetaColor,
             style = MaterialTheme.typography.labelLarge,
         )
     }
@@ -718,13 +749,14 @@ private fun AlbumTrackRow(
     accent: Color,
     onClick: () -> Unit,
 ) {
+    val colors = rememberDetailGlassColors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.62f))
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.78f)), RoundedCornerShape(16.dp))
+            .background(colors.surface)
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -741,7 +773,7 @@ private fun AlbumTrackRow(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 track.title,
-                color = RoonInk,
+                color = colors.content,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -750,7 +782,7 @@ private fun AlbumTrackRow(
             track.artist.takeIf { it.isNotBlank() }?.let { artist ->
                 Text(
                     artist,
-                    color = RoonMuted,
+                    color = colors.muted,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -759,7 +791,7 @@ private fun AlbumTrackRow(
         }
         Text(
             formatDuration(track.durationMs),
-            color = RoonMuted,
+            color = colors.muted,
             style = MaterialTheme.typography.labelMedium,
         )
     }
@@ -767,13 +799,14 @@ private fun AlbumTrackRow(
 
 @Composable
 private fun AlbumDetailNotice(message: String) {
+    val colors = rememberDetailGlassColors()
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .widthIn(max = EchoContentMaxWidth)
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
-        Text(message, color = RoonMuted, style = MaterialTheme.typography.bodyMedium)
+        Text(message, color = colors.muted, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

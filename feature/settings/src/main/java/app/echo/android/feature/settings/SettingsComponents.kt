@@ -32,6 +32,7 @@ import app.echo.android.design.EchoHomeBlue
 import app.echo.android.design.EchoHomeMist
 import app.echo.android.design.EchoPlaceholderLine
 import app.echo.android.design.EchoSectionTitle
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.PageChrome
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
@@ -41,6 +42,41 @@ import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
 
 @Composable
+private fun signalPanelColor(lightAlpha: Float = 0.64f): Color {
+    val scheme = MaterialTheme.colorScheme
+    return if (LocalEchoDarkTheme.current) scheme.surface.copy(alpha = 0.86f) else Color.White.copy(alpha = lightAlpha)
+}
+
+@Composable
+private fun signalPanelBorder(lightAlpha: Float = 0.84f): BorderStroke {
+    val scheme = MaterialTheme.colorScheme
+    return BorderStroke(
+        1.dp,
+        if (LocalEchoDarkTheme.current) scheme.outlineVariant.copy(alpha = 0.58f) else EchoGlassBorder.copy(alpha = lightAlpha),
+    )
+}
+
+@Composable
+private fun signalHeroBrush(): Brush {
+    val scheme = MaterialTheme.colorScheme
+    return Brush.linearGradient(
+        if (LocalEchoDarkTheme.current) {
+            listOf(
+                scheme.surface.copy(alpha = 0.94f),
+                scheme.surfaceVariant.copy(alpha = 0.82f),
+                scheme.primary.copy(alpha = 0.14f),
+            )
+        } else {
+            listOf(
+                Color.White.copy(alpha = 0.72f),
+                EchoHomeMist.copy(alpha = 0.64f),
+                EchoHomeBlue.copy(alpha = 0.12f),
+            )
+        },
+    )
+}
+
+@Composable
 internal fun SignalHeroCard(
     status: EchoPlaybackStatus,
     output: String,
@@ -48,20 +84,15 @@ internal fun SignalHeroCard(
     buffer: String,
     lastCommand: String,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
             .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.72f),
-                        EchoHomeMist.copy(alpha = 0.64f),
-                        EchoHomeBlue.copy(alpha = 0.12f),
-                    ),
-                ),
+                signalHeroBrush(),
             )
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.86f)), RoundedCornerShape(22.dp))
+            .border(signalPanelBorder(0.86f), RoundedCornerShape(22.dp))
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -73,13 +104,13 @@ internal fun SignalHeroCard(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
                         "链路总览",
-                        color = RoonInk,
+                        color = scheme.onSurface,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
                         if (status.isPlaying) "正在输出稳定音频流" else "等待播放，链路保持就绪",
-                        color = RoonMuted,
+                        color = scheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -123,11 +154,12 @@ internal fun SignalStatTile(
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.62f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.80f)), RoundedCornerShape(14.dp))
+            .background(signalPanelColor(0.62f))
+            .border(signalPanelBorder(0.80f), RoundedCornerShape(14.dp))
             .padding(horizontal = 12.dp, vertical = 11.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -139,7 +171,7 @@ internal fun SignalStatTile(
             )
             Text(
                 value,
-                color = RoonInk,
+                color = scheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -159,8 +191,8 @@ internal fun SignalFlowPanel(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.64f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.84f)), RoundedCornerShape(20.dp))
+            .background(signalPanelColor(0.64f))
+            .border(signalPanelBorder(0.84f), RoundedCornerShape(20.dp))
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -191,6 +223,7 @@ internal fun SignalFlowStage(
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(13.dp))
@@ -206,7 +239,7 @@ internal fun SignalFlowStage(
             Text(title, color = accent, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 detail,
-                color = RoonInk,
+                color = scheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontWeight = FontWeight.Bold,
@@ -221,7 +254,7 @@ internal fun FlowArrow() {
     Text(
         "→",
         modifier = Modifier.padding(horizontal = 4.dp),
-        color = RoonMuted,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.titleMedium,
     )
 }
@@ -229,12 +262,17 @@ internal fun FlowArrow() {
 @Composable
 internal fun FlowChip(label: String, selected: Boolean, modifier: Modifier = Modifier) {
     val accent = EchoAccent
+    val dark = LocalEchoDarkTheme.current
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (selected) accent.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.54f))
+            .background(if (selected) accent.copy(alpha = 0.14f) else signalPanelColor(0.54f))
             .border(
-                BorderStroke(1.dp, if (selected) accent.copy(alpha = 0.28f) else EchoGlassBorder.copy(alpha = 0.74f)),
+                BorderStroke(
+                    1.dp,
+                    if (selected) accent.copy(alpha = 0.28f) else if (dark) scheme.outlineVariant.copy(alpha = 0.52f) else EchoGlassBorder.copy(alpha = 0.74f),
+                ),
                 RoundedCornerShape(20.dp),
             )
             .padding(vertical = 7.dp),
@@ -242,7 +280,7 @@ internal fun FlowChip(label: String, selected: Boolean, modifier: Modifier = Mod
     ) {
         Text(
             label,
-            color = if (selected) EchoHomeBlue else RoonMuted,
+            color = if (selected) scheme.primary else scheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -260,8 +298,8 @@ internal fun CurrentStreamPanel(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.64f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.84f)), RoundedCornerShape(20.dp))
+            .background(signalPanelColor(0.64f))
+            .border(signalPanelBorder(0.84f), RoundedCornerShape(20.dp))
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -281,8 +319,8 @@ internal fun HealthPanel(status: EchoPlaybackStatus) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.64f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.84f)), RoundedCornerShape(20.dp))
+            .background(signalPanelColor(0.64f))
+            .border(signalPanelBorder(0.84f), RoundedCornerShape(20.dp))
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -305,8 +343,8 @@ internal fun SignalBars(active: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.46f))
-            .border(BorderStroke(1.dp, EchoGlassBorder.copy(alpha = 0.62f)), RoundedCornerShape(14.dp))
+            .background(signalPanelColor(0.46f))
+            .border(signalPanelBorder(0.62f), RoundedCornerShape(14.dp))
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         Row(
@@ -337,11 +375,11 @@ internal fun SignalBars(active: Boolean) {
 @Composable
 internal fun DiagnosticLine(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyMedium)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.width(16.dp))
         Text(
             value,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontWeight = FontWeight.SemiBold,

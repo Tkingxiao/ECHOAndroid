@@ -1,10 +1,11 @@
 package app.echo.android.feature.settings
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,10 +16,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Movie
@@ -28,29 +32,36 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.EchoAccent
 import app.echo.android.design.EchoAccentDeep
-import app.echo.android.design.EchoAccentText
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoHomeBlue
 import app.echo.android.design.EchoHomeMist
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.EchoSectionTitle
 import app.echo.android.design.PageChrome
-import app.echo.android.design.RoonInk
-import app.echo.android.design.RoonMuted
 import app.echo.android.model.playback.EchoPlaybackStatus
 import kotlin.math.roundToInt
 
@@ -71,6 +82,25 @@ fun SettingsScreen(
     customBackgroundBlur: Float,
     customBackgroundBrightness: Float,
     customBackgroundGlass: Float,
+    uiFontFamily: String,
+    uiFontScale: Float,
+    uiDensityScale: Float,
+    lyricsFontFamily: String,
+    lyricsFontScale: Float,
+    importedFontUri: String?,
+    themeMode: String,
+    scheduledDarkModeEnabled: Boolean,
+    scheduledDarkStartMinute: Int,
+    scheduledDarkEndMinute: Int,
+    lastFmEnabled: Boolean,
+    lastFmUsername: String?,
+    lastFmApiKey: String?,
+    lastFmSharedSecret: String?,
+    lastFmSessionKey: String?,
+    lastFmStatusLabel: String,
+    lastFmErrorLabel: String?,
+    lastFmApiKeyLocked: Boolean,
+    lastFmSharedSecretLocked: Boolean,
     onDynamicArtworkEnabledChange: (Boolean) -> Unit,
     onCompactModeEnabledChange: (Boolean) -> Unit,
     onPcHandoffEnabledChange: (Boolean) -> Unit,
@@ -83,10 +113,32 @@ fun SettingsScreen(
     onCustomBackgroundBlurChange: (Float) -> Unit,
     onCustomBackgroundBrightnessChange: (Float) -> Unit,
     onCustomBackgroundGlassChange: (Float) -> Unit,
+    onUiFontFamilyChange: (String) -> Unit,
+    onUiFontScaleChange: (Float) -> Unit,
+    onUiDensityScaleChange: (Float) -> Unit,
+    onLyricsFontFamilyChange: (String) -> Unit,
+    onLyricsFontScaleChange: (Float) -> Unit,
+    onImportUiFont: () -> Unit,
+    onImportLyricsFont: () -> Unit,
+    onClearImportedFont: () -> Unit,
+    onThemeModeChange: (String) -> Unit,
+    onScheduledDarkModeEnabledChange: (Boolean) -> Unit,
+    onScheduledDarkStartMinuteChange: (Int) -> Unit,
+    onScheduledDarkEndMinuteChange: (Int) -> Unit,
+    onLastFmEnabledChange: (Boolean) -> Unit,
+    onConnectLastFm: (apiKey: String, sharedSecret: String, username: String, password: String) -> Unit,
+    onDisconnectLastFm: () -> Unit,
+    onOpenLastFmApiAccounts: () -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenConnect: () -> Unit,
 ) {
     val sectionGap = if (compactModeEnabled) 8.dp else 14.dp
+    var customBackgroundExpanded by rememberSaveable { mutableStateOf(true) }
+    var fontSectionExpanded by rememberSaveable { mutableStateOf(false) }
+    var lastFmApiKeyInput by rememberSaveable(lastFmApiKey) { mutableStateOf(lastFmApiKey.orEmpty()) }
+    var lastFmSecretInput by rememberSaveable(lastFmSharedSecret) { mutableStateOf(lastFmSharedSecret.orEmpty()) }
+    var lastFmUsernameInput by rememberSaveable(lastFmUsername) { mutableStateOf(lastFmUsername.orEmpty()) }
+    var lastFmPasswordInput by rememberSaveable { mutableStateOf("") }
 
     PageChrome(
         title = "设置",
@@ -102,6 +154,43 @@ fun SettingsScreen(
                 artistCount = artistCount,
                 dynamicArtwork = dynamicArtworkEnabled,
             )
+            SettingsSectionCard(title = "主题") {
+                SettingsChoiceGroupRow(
+                    icon = Icons.Rounded.Palette,
+                    title = "显示模式",
+                    detail = themeDetail(themeMode),
+                    options = themeOptions(),
+                    selectedValue = themeMode,
+                    onOptionSelected = onThemeModeChange,
+                )
+                SettingsSwitchRow(
+                    icon = Icons.Rounded.Settings,
+                    title = "定时开启深色模式",
+                    detail = "${formatMinuteOfDay(scheduledDarkStartMinute)} - ${formatMinuteOfDay(scheduledDarkEndMinute)} 自动使用深色",
+                    checked = scheduledDarkModeEnabled,
+                    onCheckedChange = onScheduledDarkModeEnabledChange,
+                )
+                if (scheduledDarkModeEnabled) {
+                    SettingsSliderRow(
+                        icon = Icons.Rounded.Speed,
+                        title = "深色开始时间",
+                        detail = formatMinuteOfDay(scheduledDarkStartMinute),
+                        value = scheduledDarkStartMinute.toFloat(),
+                        valueRange = 0f..1439f,
+                        steps = 95,
+                        onValueChange = { onScheduledDarkStartMinuteChange(it.roundToQuarterHour()) },
+                    )
+                    SettingsSliderRow(
+                        icon = Icons.Rounded.Speed,
+                        title = "深色结束时间",
+                        detail = formatMinuteOfDay(scheduledDarkEndMinute),
+                        value = scheduledDarkEndMinute.toFloat(),
+                        valueRange = 0f..1439f,
+                        steps = 95,
+                        onValueChange = { onScheduledDarkEndMinuteChange(it.roundToQuarterHour()) },
+                    )
+                }
+            }
             SettingsSectionCard(title = "界面") {
                 SettingsSwitchRow(
                     icon = Icons.Rounded.Palette,
@@ -118,30 +207,21 @@ fun SettingsScreen(
                     onCheckedChange = onCompactModeEnabledChange,
                 )
             }
-            SettingsSectionCard(title = "自定义背景") {
-                SettingsActionRow(
-                    icon = Icons.Rounded.Image,
-                    title = "背景图片",
-                    detail = backgroundDetail(customBackgroundMode, customBackgroundUri, "image"),
-                    onClick = onPickImageBackground,
-                )
-                SettingsActionRow(
-                    icon = Icons.Rounded.Movie,
-                    title = "视频壁纸",
-                    detail = backgroundDetail(customBackgroundMode, customBackgroundUri, "video"),
-                    onClick = onPickVideoBackground,
-                )
-                SettingsActionRow(
-                    icon = Icons.Rounded.Settings,
-                    title = "恢复默认背景",
-                    detail = if (customBackgroundUri.isNullOrBlank()) {
-                        "正在使用默认 ECHO 背景"
-                    } else {
-                        "移除当前自定义背景"
-                    },
-                    enabled = !customBackgroundUri.isNullOrBlank(),
-                    onClick = onClearCustomBackground,
-                )
+            SettingsSectionCard(
+                title = "自定义背景",
+                collapsible = true,
+                expanded = customBackgroundExpanded,
+                onExpandedChange = { customBackgroundExpanded = it },
+                persistentContent = {
+                    SettingsBackgroundSourceRow(
+                        mode = customBackgroundMode,
+                        uri = customBackgroundUri,
+                        onPickImageBackground = onPickImageBackground,
+                        onPickVideoBackground = onPickVideoBackground,
+                        onClearCustomBackground = onClearCustomBackground,
+                    )
+                },
+            ) {
                 SettingsSliderRow(
                     icon = Icons.Rounded.Palette,
                     title = "毛玻璃模糊",
@@ -170,6 +250,81 @@ fun SettingsScreen(
                     onValueChange = onCustomBackgroundGlassChange,
                 )
             }
+            SettingsSectionCard(
+                title = "字体",
+                collapsible = true,
+                expanded = fontSectionExpanded,
+                onExpandedChange = { fontSectionExpanded = it },
+            ) {
+                SettingsChoiceGroupRow(
+                    icon = Icons.Rounded.Palette,
+                    title = "界面字体",
+                    detail = fontDetail(uiFontFamily, importedFontUri),
+                    options = fontOptions(importedFontUri),
+                    selectedValue = uiFontFamily,
+                    onOptionSelected = { value ->
+                        if (value == "imported" && importedFontUri.isNullOrBlank()) {
+                            onImportUiFont()
+                        } else {
+                            onUiFontFamilyChange(value)
+                        }
+                    },
+                )
+                SettingsSliderRow(
+                    icon = Icons.Rounded.Speed,
+                    title = "界面字号",
+                    detail = "${(uiFontScale * 100f).roundToInt()}%",
+                    value = uiFontScale,
+                    valueRange = 0.88f..1.18f,
+                    steps = 14,
+                    onValueChange = onUiFontScaleChange,
+                )
+                SettingsSliderRow(
+                    icon = Icons.Rounded.Settings,
+                    title = "界面密度",
+                    detail = "${(uiDensityScale * 100f).roundToInt()}%",
+                    value = uiDensityScale,
+                    valueRange = 0.90f..1.12f,
+                    steps = 10,
+                    onValueChange = onUiDensityScaleChange,
+                )
+                SettingsChoiceGroupRow(
+                    icon = Icons.Rounded.Lyrics,
+                    title = "歌词字体",
+                    detail = fontDetail(lyricsFontFamily, importedFontUri),
+                    options = fontOptions(importedFontUri),
+                    selectedValue = lyricsFontFamily,
+                    onOptionSelected = { value ->
+                        if (value == "imported" && importedFontUri.isNullOrBlank()) {
+                            onImportLyricsFont()
+                        } else {
+                            onLyricsFontFamilyChange(value)
+                        }
+                    },
+                )
+                SettingsSliderRow(
+                    icon = Icons.Rounded.Lyrics,
+                    title = "歌词字号",
+                    detail = "${(lyricsFontScale * 100f).roundToInt()}%",
+                    value = lyricsFontScale,
+                    valueRange = 0.82f..1.28f,
+                    steps = 22,
+                    onValueChange = onLyricsFontScaleChange,
+                )
+                SettingsActionRow(
+                    icon = Icons.Rounded.Settings,
+                    title = "重新选择字体文件",
+                    detail = if (importedFontUri.isNullOrBlank()) "导入 .ttf / .otf 文件" else "当前导入 ${importedFontUri.substringAfterLast('/').takeLast(28)}",
+                    onClick = onImportUiFont,
+                )
+                SettingsActionRow(
+                    icon = Icons.Rounded.Settings,
+                    title = "清除导入字体",
+                    detail = if (importedFontUri.isNullOrBlank()) "没有导入字体" else "界面和歌词会回退到系统字体",
+                    enabled = !importedFontUri.isNullOrBlank(),
+                    onClick = onClearImportedFont,
+                )
+            }
             SettingsSectionCard(title = "播放") {
                 SettingsSwitchRow(
                     icon = Icons.Rounded.Lyrics,
@@ -194,6 +349,34 @@ fun SettingsScreen(
                 )
             }
             SettingsSectionCard(title = "互联") {
+                LastFmSettingsPanel(
+                    enabled = lastFmEnabled,
+                    connected = !lastFmSessionKey.isNullOrBlank(),
+                    statusLabel = lastFmStatusLabel,
+                    errorLabel = lastFmErrorLabel,
+                    apiKey = lastFmApiKeyInput,
+                    sharedSecret = lastFmSecretInput,
+                    apiKeyLocked = lastFmApiKeyLocked,
+                    sharedSecretLocked = lastFmSharedSecretLocked,
+                    username = lastFmUsernameInput,
+                    password = lastFmPasswordInput,
+                    onEnabledChange = onLastFmEnabledChange,
+                    onApiKeyChange = { lastFmApiKeyInput = it },
+                    onSharedSecretChange = { lastFmSecretInput = it },
+                    onUsernameChange = { lastFmUsernameInput = it },
+                    onPasswordChange = { lastFmPasswordInput = it },
+                    onConnect = {
+                        onConnectLastFm(
+                            lastFmApiKeyInput,
+                            lastFmSecretInput,
+                            lastFmUsernameInput,
+                            lastFmPasswordInput,
+                        )
+                        lastFmPasswordInput = ""
+                    },
+                    onDisconnect = onDisconnectLastFm,
+                    onOpenApiAccounts = onOpenLastFmApiAccounts,
+                )
                 SettingsSwitchRow(
                     icon = Icons.Rounded.Devices,
                     title = "PC 接力入口",
@@ -222,12 +405,214 @@ fun SettingsScreen(
     }
 }
 
-private fun backgroundDetail(mode: String, uri: String?, rowMode: String): String =
-    if (mode == rowMode && !uri.isNullOrBlank()) {
-        "已选择 ${uri.substringAfterLast('/').takeLast(28)}"
-    } else {
-        "从本机文件选择"
+@Composable
+private fun LastFmSettingsPanel(
+    enabled: Boolean,
+    connected: Boolean,
+    statusLabel: String,
+    errorLabel: String?,
+    apiKey: String,
+    sharedSecret: String,
+    apiKeyLocked: Boolean,
+    sharedSecretLocked: Boolean,
+    username: String,
+    password: String,
+    onEnabledChange: (Boolean) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onSharedSecretChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onOpenApiAccounts: () -> Unit,
+) {
+    SettingsSwitchRow(
+        icon = Icons.Rounded.Devices,
+        title = "Last.fm Connect",
+        detail = errorLabel ?: statusLabel,
+        checked = enabled,
+        onCheckedChange = onEnabledChange,
+    )
+    if (enabled) {
+        if (apiKeyLocked) {
+            SettingsActionRow(
+                icon = Icons.Rounded.Settings,
+                title = "API key",
+                detail = "已内置，用户无需填写",
+                enabled = false,
+                onClick = {},
+            )
+        } else {
+            SettingsTextInputRow(
+                icon = Icons.Rounded.Settings,
+                title = "API key",
+                value = apiKey,
+                placeholder = "Last.fm API key",
+                onValueChange = onApiKeyChange,
+            )
+        }
+        if (sharedSecretLocked) {
+            SettingsActionRow(
+                icon = Icons.Rounded.Settings,
+                title = "Shared secret",
+                detail = "已内置，用户无需填写",
+                enabled = false,
+                onClick = {},
+            )
+        } else {
+            SettingsTextInputRow(
+                icon = Icons.Rounded.Settings,
+                title = "Shared secret",
+                value = sharedSecret,
+                placeholder = "Last.fm shared secret",
+                secret = true,
+                onValueChange = onSharedSecretChange,
+            )
+        }
+        SettingsTextInputRow(
+            icon = Icons.Rounded.Devices,
+            title = "Last.fm 用户名",
+            value = username,
+            placeholder = "username",
+            onValueChange = onUsernameChange,
+        )
+        SettingsTextInputRow(
+            icon = Icons.Rounded.Settings,
+            title = "临时密码",
+            value = password,
+            placeholder = if (connected) "已连接；重新连接时再输入" else "仅用于换取 session key",
+            secret = true,
+            onValueChange = onPasswordChange,
+        )
+        SettingsActionRow(
+            icon = Icons.Rounded.Devices,
+            title = if (connected) "重新连接 Last.fm" else "连接 Last.fm",
+            detail = if (connected) "密码不会保存，连接成功后只保留 session key" else "提交 now playing 与 scrobble 前需要授权",
+            enabled = (apiKeyLocked || apiKey.isNotBlank()) &&
+                (sharedSecretLocked || sharedSecret.isNotBlank()) &&
+                username.isNotBlank() &&
+                password.isNotBlank(),
+            onClick = onConnect,
+        )
+        SettingsActionRow(
+            icon = Icons.Rounded.Settings,
+            title = "查看 Last.fm API accounts",
+            detail = "在网页里查看已申请的 API key 和 shared secret",
+            onClick = onOpenApiAccounts,
+        )
+        if (connected) {
+            SettingsActionRow(
+                icon = Icons.Rounded.Settings,
+                title = "断开 Last.fm",
+                detail = "清除本机 session key，保留 API key 方便下次连接",
+                onClick = onDisconnect,
+            )
+        }
     }
+}
+
+@Composable
+private fun SettingsTextInputRow(
+    icon: ImageVector,
+    title: String,
+    value: String,
+    placeholder: String,
+    secret: Boolean = false,
+    onValueChange: (String) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(scheme.surface.copy(alpha = if (dark) 0.70f else 0.64f))
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (dark) scheme.outlineVariant.copy(alpha = 0.52f) else EchoGlassBorder.copy(alpha = 0.78f),
+                ),
+                RoundedCornerShape(16.dp),
+            )
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        SettingsIconBubble(icon)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                title,
+                color = scheme.onSurface,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                singleLine = true,
+                visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+private fun backgroundDetail(mode: String, uri: String?): String {
+    val fileName = uri?.substringAfterLast('/')?.takeLast(28)
+    return when {
+        mode == "image" && !fileName.isNullOrBlank() -> "图片背景：$fileName"
+        mode == "video" && !fileName.isNullOrBlank() -> "视频壁纸：$fileName"
+        else -> "正在使用默认 ECHO 背景"
+    }
+}
+
+private data class SettingsChoiceOption(
+    val value: String,
+    val label: String,
+)
+
+private fun themeOptions(): List<SettingsChoiceOption> = listOf(
+    SettingsChoiceOption("system", "同步手机"),
+    SettingsChoiceOption("light", "浅色"),
+    SettingsChoiceOption("dark", "深色"),
+)
+
+private fun themeDetail(mode: String): String =
+    when (mode) {
+        "light" -> "始终使用浅色模式"
+        "dark" -> "始终使用深色模式"
+        else -> "跟随手机系统外观"
+    }
+
+private fun fontOptions(importedFontUri: String?): List<SettingsChoiceOption> = buildList {
+    add(SettingsChoiceOption("system", "系统"))
+    add(SettingsChoiceOption("outfit", "Outfit"))
+    add(SettingsChoiceOption("serif", "衬线"))
+    add(SettingsChoiceOption("monospace", "等宽"))
+    add(SettingsChoiceOption("imported", if (importedFontUri.isNullOrBlank()) "导入" else "导入字体"))
+}
+
+private fun fontDetail(mode: String, importedFontUri: String?): String =
+    when (mode) {
+        "outfit" -> "使用内置 Outfit"
+        "serif" -> "使用系统衬线字体"
+        "monospace" -> "使用系统等宽字体"
+        "imported" -> importedFontUri?.substringAfterLast('/')?.takeLast(28)?.let { "使用导入字体：$it" } ?: "选择 .ttf / .otf 文件"
+        else -> "使用 Android 系统字体"
+    }
+
+private fun formatMinuteOfDay(value: Int): String {
+    val minuteOfDay = value.coerceIn(0, 23 * 60 + 59)
+    val hour = minuteOfDay / 60
+    val minute = minuteOfDay % 60
+    return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+}
+
+private fun Float.roundToQuarterHour(): Int =
+    ((this / 15f).roundToInt() * 15).coerceIn(0, 23 * 60 + 59)
 
 @Composable
 private fun SettingsHeroCard(
@@ -237,7 +622,7 @@ private fun SettingsHeroCard(
     artistCount: Int,
     dynamicArtwork: Boolean,
 ) {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalEchoDarkTheme.current
     val scheme = MaterialTheme.colorScheme
     val heroColors = if (dynamicArtwork) {
         if (dark) {
@@ -275,7 +660,10 @@ private fun SettingsHeroCard(
             .background(
                 Brush.linearGradient(heroColors),
             )
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(26.dp))
+            .border(
+                BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.62f) else EchoGlassBorder),
+                RoundedCornerShape(26.dp),
+            )
             .padding(18.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -312,10 +700,14 @@ private fun SettingsHeroCard(
 @Composable
 private fun SettingsSectionCard(
     title: String,
+    collapsible: Boolean = false,
+    expanded: Boolean = true,
+    onExpandedChange: (Boolean) -> Unit = {},
+    persistentContent: @Composable ColumnScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val dark = LocalEchoDarkTheme.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -325,16 +717,170 @@ private fun SettingsSectionCard(
                 BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.62f) else EchoGlassBorder),
                 RoundedCornerShape(22.dp),
             )
+            .animateContentSize()
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        Row(
+            modifier = if (collapsible) {
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onExpandedChange(!expanded) }
+                    .padding(vertical = 2.dp)
+            } else {
+                Modifier.fillMaxWidth()
+            },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                color = scheme.onSurface,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            if (collapsible) {
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+        persistentContent()
+        if (expanded) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsBackgroundSourceRow(
+    mode: String,
+    uri: String?,
+    onPickImageBackground: () -> Unit,
+    onPickVideoBackground: () -> Unit,
+    onClearCustomBackground: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(scheme.surface.copy(alpha = if (dark) 0.70f else 0.64f))
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (dark) scheme.outlineVariant.copy(alpha = 0.52f) else EchoGlassBorder.copy(alpha = 0.78f),
+                ),
+                RoundedCornerShape(16.dp),
+            )
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SettingsIconBubble(Icons.Rounded.Image)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "背景来源",
+                color = scheme.onSurface,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                backgroundDetail(mode, uri),
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                BackgroundSourceAction(
+                    icon = Icons.Rounded.Image,
+                    label = "图片",
+                    selected = mode == "image" && !uri.isNullOrBlank(),
+                    enabled = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onPickImageBackground,
+                )
+                BackgroundSourceAction(
+                    icon = Icons.Rounded.Movie,
+                    label = "视频",
+                    selected = mode == "video" && !uri.isNullOrBlank(),
+                    enabled = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onPickVideoBackground,
+                )
+                BackgroundSourceAction(
+                    icon = Icons.Rounded.Settings,
+                    label = "默认",
+                    selected = uri.isNullOrBlank(),
+                    enabled = !uri.isNullOrBlank(),
+                    modifier = Modifier.weight(1f),
+                    onClick = onClearCustomBackground,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackgroundSourceAction(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    val accent = if (selected) scheme.primary else scheme.onSurfaceVariant
+    Row(
+        modifier = modifier
+            .height(34.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (selected) {
+                    scheme.primary.copy(alpha = 0.14f)
+                } else {
+                    scheme.surfaceVariant.copy(alpha = 0.34f)
+                },
+            )
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (selected) {
+                        scheme.primary.copy(alpha = 0.26f)
+                    } else if (dark) {
+                        scheme.outlineVariant.copy(alpha = 0.50f)
+                    } else {
+                        EchoGlassBorder.copy(alpha = 0.56f)
+                    },
+                ),
+                RoundedCornerShape(12.dp),
+            )
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .alpha(if (enabled || selected) 1f else 0.48f)
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
         Text(
-            title,
-            color = scheme.onSurface,
-            style = MaterialTheme.typography.titleMedium,
+            label,
+            color = accent,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 4.dp),
         )
-        content()
     }
 }
 
@@ -359,6 +905,7 @@ private fun SettingsActionRow(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     SettingsRowShell(
         icon = icon,
         title = title,
@@ -367,9 +914,76 @@ private fun SettingsActionRow(
     ) {
         Text(
             if (enabled) "进入" else "关闭",
-            color = if (enabled) EchoAccentText else RoonMuted,
+            color = if (enabled) scheme.primary else scheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun SettingsChoiceGroupRow(
+    icon: ImageVector,
+    title: String,
+    detail: String,
+    options: List<SettingsChoiceOption>,
+    selectedValue: String,
+    onOptionSelected: (String) -> Unit,
+) {
+    SettingsRowShell(icon = icon, title = title, detail = detail, trailing = {})
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEach { option ->
+            SettingsOptionChip(
+                label = option.label,
+                selected = selectedValue == option.value,
+                onClick = { onOptionSelected(option.value) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsOptionChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    Box(
+        modifier = Modifier
+            .height(34.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) scheme.primary.copy(alpha = 0.14f) else scheme.surfaceVariant.copy(alpha = 0.34f))
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (selected) {
+                        scheme.primary.copy(alpha = 0.26f)
+                    } else if (dark) {
+                        scheme.outlineVariant.copy(alpha = 0.50f)
+                    } else {
+                        EchoGlassBorder.copy(alpha = 0.56f)
+                    },
+                ),
+                RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (selected) scheme.primary else scheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
         )
     }
 }
@@ -385,7 +999,7 @@ private fun SettingsSliderRow(
     onValueChange: (Float) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val dark = LocalEchoDarkTheme.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -428,7 +1042,14 @@ private fun SettingsSliderRow(
                 value = value,
                 onValueChange = onValueChange,
                 valueRange = valueRange,
-                steps = steps,
+                steps = 0,
+                colors = SliderDefaults.colors(
+                    thumbColor = scheme.primary,
+                    activeTrackColor = scheme.primary.copy(alpha = 0.82f),
+                    inactiveTrackColor = scheme.outlineVariant.copy(alpha = if (dark) 0.42f else 0.72f),
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent,
+                ),
             )
         }
     }
@@ -443,7 +1064,7 @@ private fun SettingsRowShell(
     trailing: @Composable () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val dark = LocalEchoDarkTheme.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -485,7 +1106,7 @@ private fun SettingsRowShell(
 @Composable
 private fun SettingsIconBubble(icon: ImageVector) {
     val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = Modifier
             .size(42.dp)
@@ -505,7 +1126,7 @@ private fun SettingsStatTile(
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val dark = LocalEchoDarkTheme.current
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))

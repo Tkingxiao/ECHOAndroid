@@ -70,8 +70,25 @@ class EchoUsbAudioMonitor(context: Context) {
 
     fun prepareForTrack(sampleRateHz: Int?) {
         val safeSampleRate = sampleRateHz?.takeIf { it > 0 }
-        if (!exclusiveEnabled || safeSampleRate == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (!exclusiveEnabled) {
             refresh()
+            return
+        }
+        if (safeSampleRate == null) {
+            _status.value = scan().copy(
+                lastRequestError = EchoPlaybackError(
+                    kind = EchoAudioErrorKind.OutputRouteFailure,
+                    message = "Track sample rate is unknown; USB exclusive request skipped",
+                    recoverable = true,
+                ),
+            )
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            _status.value = scan().copy(
+                lastRequestedSampleRateHz = safeSampleRate,
+                lastRequestError = preAndroid14ExclusiveError(),
+            )
             return
         }
 
@@ -151,6 +168,13 @@ class EchoUsbAudioMonitor(context: Context) {
             audioManager.clearPreferredMixerAttributes(androidMusicAttributes(), device)
         }
     }
+
+    private fun preAndroid14ExclusiveError(): EchoPlaybackError =
+        EchoPlaybackError(
+            kind = EchoAudioErrorKind.OutputRouteFailure,
+            message = "Android 14+ is required for system USB bit-perfect; using Android mixer",
+            recoverable = true,
+        )
 
     private fun findUsbOutputDevice(): AudioDeviceInfo? =
         audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)

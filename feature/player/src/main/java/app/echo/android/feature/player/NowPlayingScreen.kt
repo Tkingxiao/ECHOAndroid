@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -114,6 +115,8 @@ fun NowPlayingScreen(
     onOpenAlbum: () -> Unit,
     modifier: Modifier = Modifier,
     positionState: PlaybackPositionState? = null,
+    lyricsFontFamily: FontFamily? = null,
+    lyricsFontScale: Float = 1f,
 ) {
     val track = status.track
     val palette = rememberArtworkPalette(track?.artworkUri, seedKey = track?.id)
@@ -195,6 +198,8 @@ fun NowPlayingScreen(
                         status = status,
                         lyricsState = lyricsState,
                         showLyricsControlDeck = showLyricsControlDeck,
+                        lyricsFontFamily = lyricsFontFamily,
+                        lyricsFontScale = lyricsFontScale,
                         onPlayPause = onPlayPause,
                         onNext = onNext,
                         onPrevious = onPrevious,
@@ -293,6 +298,8 @@ private fun NowPlayingLyricsPage(
     status: EchoPlaybackStatus,
     lyricsState: EchoLyricsLoadState,
     showLyricsControlDeck: Boolean,
+    lyricsFontFamily: FontFamily?,
+    lyricsFontScale: Float,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -326,6 +333,8 @@ private fun NowPlayingLyricsPage(
                     lyrics = lyricsState.lyrics,
                     positionMs = positionMs,
                     onSeek = onSeek,
+                    lyricsFontFamily = lyricsFontFamily,
+                    lyricsFontScale = lyricsFontScale,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 4.dp),
@@ -369,6 +378,8 @@ private fun LyricsLineList(
     lyrics: EchoLyrics,
     positionMs: Long,
     onSeek: (Long) -> Unit,
+    lyricsFontFamily: FontFamily?,
+    lyricsFontScale: Float,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier) {
@@ -437,9 +448,17 @@ private fun LyricsLineList(
                         modifier = Modifier.fillMaxWidth(),
                         color = OnArt.copy(alpha = primaryAlpha),
                         style = if (active) {
-                            MaterialTheme.typography.headlineLarge.copy(fontSize = 32.sp, lineHeight = 38.sp)
+                            MaterialTheme.typography.headlineLarge.copy(
+                                fontFamily = lyricsFontFamily,
+                                fontSize = (32f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                                lineHeight = (38f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                            )
                         } else {
-                            MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, lineHeight = 28.sp)
+                            MaterialTheme.typography.titleLarge.copy(
+                                fontFamily = lyricsFontFamily,
+                                fontSize = (22f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                                lineHeight = (28f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                            )
                         },
                         fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
@@ -452,9 +471,17 @@ private fun LyricsLineList(
                             modifier = Modifier.fillMaxWidth(),
                             color = OnArt.copy(alpha = secondaryAlpha),
                             style = if (active) {
-                                MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 21.sp)
+                                MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = lyricsFontFamily,
+                                    fontSize = (15f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                                    lineHeight = (21f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                                )
                             } else {
-                                MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 19.sp)
+                                MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = lyricsFontFamily,
+                                    fontSize = (13f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                                    lineHeight = (19f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                                )
                             },
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
@@ -467,7 +494,11 @@ private fun LyricsLineList(
                             text = romanization,
                             modifier = Modifier.fillMaxWidth(),
                             color = OnArt.copy(alpha = secondaryAlpha * 0.82f),
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = lyricsFontFamily,
+                                fontSize = (12f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                                lineHeight = (17f * lyricsFontScale.coerceIn(0.82f, 1.28f)).sp,
+                            ),
                             textAlign = TextAlign.Center,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,

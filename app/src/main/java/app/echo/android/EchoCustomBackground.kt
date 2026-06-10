@@ -29,6 +29,7 @@ import androidx.media3.ui.PlayerView
 import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoBackgroundMode
 import app.echo.android.design.EchoGlassBackground
+import app.echo.android.design.LocalEchoDarkTheme
 import coil.compose.AsyncImage
 
 @Composable
@@ -155,17 +156,25 @@ private fun EchoBrightnessOverlay(brightness: Float) {
 
 @Composable
 private fun EchoBackgroundGlassOverlay(glass: Float) {
+    val dark = LocalEchoDarkTheme.current
+    val colors = if (dark) {
+        listOf(
+            Color(0xFF080A0F).copy(alpha = (glass * 0.74f).coerceIn(0f, 0.78f)),
+            Color(0xFF10131A).copy(alpha = (glass * 0.58f).coerceIn(0f, 0.64f)),
+            Color.Black.copy(alpha = (glass * 0.78f).coerceIn(0f, 0.82f)),
+        )
+    } else {
+        listOf(
+            Color.White.copy(alpha = (glass * 0.68f).coerceIn(0f, 0.72f)),
+            Color.White.copy(alpha = (glass * 0.42f).coerceIn(0f, 0.54f)),
+            Color.White.copy(alpha = (glass * 0.74f).coerceIn(0f, 0.78f)),
+        )
+    }
     Box(
         Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color.White.copy(alpha = (glass * 0.68f).coerceIn(0f, 0.72f)),
-                        Color.White.copy(alpha = (glass * 0.42f).coerceIn(0f, 0.54f)),
-                        Color.White.copy(alpha = (glass * 0.74f).coerceIn(0f, 0.78f)),
-                    ),
-                ),
+                Brush.verticalGradient(colors),
             ),
     )
 }
