@@ -56,7 +56,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -124,6 +123,7 @@ private enum class LinkedLibraryMode(
 ) {
     Songs("歌曲", Icons.AutoMirrored.Rounded.QueueMusic),
     Albums("专辑", Icons.Rounded.LibraryMusic),
+    Artists("艺术家", Icons.Rounded.Person),
 }
 
 private enum class LibrarySourceMode(
@@ -133,6 +133,15 @@ private enum class LibrarySourceMode(
     Local("本地", Icons.Rounded.LibraryMusic),
     PcEcho("PC ECHO", Icons.Rounded.Devices),
     Cloud("网盘", Icons.Rounded.CloudQueue),
+}
+
+private sealed interface LibraryAlbumTransitionTarget {
+    object Browser : LibraryAlbumTransitionTarget
+
+    data class Detail(
+        val album: AlbumSummary,
+        val tracks: LazyPagingItems<EchoTrack>,
+    ) : LibraryAlbumTransitionTarget
 }
 
 @Composable
@@ -194,6 +203,7 @@ fun LibraryScreen(
     }
     var linkedMode by remember { mutableStateOf(LinkedLibraryMode.Songs) }
     var selectedLinkedAlbumKey by remember { mutableStateOf<String?>(null) }
+    var selectedLinkedArtistKey by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(linkedLibraryActive) {
         if (linkedLibraryActive) {
@@ -204,6 +214,7 @@ fun LibraryScreen(
     fun selectSource(source: LibrarySourceMode) {
         selectedSource = source
         selectedLinkedAlbumKey = null
+        selectedLinkedArtistKey = null
         when (source) {
             LibrarySourceMode.Local -> {
                 if (selectedMode == LibraryViewMode.Cloud) {
@@ -227,9 +238,13 @@ fun LibraryScreen(
             onSelectMode = { mode ->
                 linkedMode = mode
                 selectedLinkedAlbumKey = null
+                selectedLinkedArtistKey = null
             },
             onOpenAlbum = { album -> selectedLinkedAlbumKey = album.albumKey },
+            selectedArtistKey = selectedLinkedArtistKey,
+            onOpenArtist = { artist -> selectedLinkedArtistKey = artist.artistKey },
             onCloseAlbum = { selectedLinkedAlbumKey = null },
+            onCloseArtist = { selectedLinkedArtistKey = null },
             onRefresh = onRefreshLinkedLibrary,
             onPlayLinkedTrack = onPlayLinkedTrack,
             modifier = Modifier.fillMaxSize(),
@@ -272,88 +287,129 @@ fun LibraryScreen(
 
     // 专辑详情走全屏沉浸式页面，不套用曲库的 PageChrome
     val activeAlbumDetail = selectedAlbum
-    if (activeAlbumDetail != null && albumDetailTracks != null) {
-        AlbumDetailPage(
-            album = activeAlbumDetail,
-            tracks = albumDetailTracks,
-            onBack = onCloseDetail,
-            onPlayAll = { onPlayAlbum(activeAlbumDetail) },
-            onShuffle = { onShuffleAlbum(activeAlbumDetail) },
-            onPlayTrack = onPlayTrack,
-            modifier = Modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    // 艺术家详情同样走全屏沉浸式页面
-    val activeArtistDetail = selectedArtist
-    if (activeArtistDetail != null && artistDetailTracks != null) {
-        ArtistDetailPage(
-            artist = activeArtistDetail,
-            tracks = artistDetailTracks,
-            onBack = onCloseDetail,
-            onPlayAll = { onPlayArtist(activeArtistDetail) },
-            onShuffle = { onShuffleArtist(activeArtistDetail) },
-            onPlayTrack = onPlayTrack,
-            modifier = Modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    val activeFolderDetail = selectedFolder
-    val activePlaylistDetail = selectedPlaylist
-    if (activePlaylistDetail != null && playlistDetailTracks != null) {
-        LibraryDetailPage(
-            title = activePlaylistDetail.name,
-            subtitle = "${activePlaylistDetail.trackCount} 首 · 网易云歌单",
-            tracks = playlistDetailTracks,
-            onBack = onCloseDetail,
-            onPlayAll = { onPlayPlaylist(activePlaylistDetail) },
-            onPlayTrack = onPlayTrack,
-            modifier = Modifier.fillMaxSize(),
-        )
-        return
+    val albumTransitionTarget = if (activeAlbumDetail != null && albumDetailTracks != null) {
+        LibraryAlbumTransitionTarget.Detail(activeAlbumDetail, albumDetailTracks)
+    } else {
+        LibraryAlbumTransitionTarget.Browser
     }
 
     AnimatedContent(
-        targetState = activeFolderDetail != null && folderDetailTracks != null,
+        targetState = albumTransitionTarget,
         transitionSpec = {
-            if (targetState) {
-                val enter = slideInHorizontally(tween(durationMillis = 360, easing = LibraryFolderMotionEasing)) { it / 3 } +
-                    fadeIn(tween(durationMillis = 180, easing = LibraryFolderMotionEasing)) +
+            if (targetState is LibraryAlbumTransitionTarget.Detail) {
+                val enter = slideInHorizontally(tween(durationMillis = 380, easing = LibraryFolderMotionEasing)) { it / 4 } +
+                    fadeIn(tween(durationMillis = 220, easing = LibraryFolderMotionEasing)) +
                     scaleIn(
                         initialScale = 0.985f,
-                        animationSpec = tween(durationMillis = 360, easing = LibraryFolderMotionEasing),
+                        animationSpec = tween(durationMillis = 380, easing = LibraryFolderMotionEasing),
                     )
-                val exit = slideOutHorizontally(tween(durationMillis = 220, easing = LibraryFolderMotionEasing)) { -it / 8 } +
-                    fadeOut(tween(durationMillis = 140, easing = LibraryFolderMotionEasing)) +
+                val exit = slideOutHorizontally(tween(durationMillis = 240, easing = LibraryFolderMotionEasing)) { -it / 10 } +
+                    fadeOut(tween(durationMillis = 150, easing = LibraryFolderMotionEasing)) +
                     scaleOut(
                         targetScale = 0.992f,
-                        animationSpec = tween(durationMillis = 220, easing = LibraryFolderMotionEasing),
+                        animationSpec = tween(durationMillis = 240, easing = LibraryFolderMotionEasing),
                     )
                 enter togetherWith exit
             } else {
-                val enter = slideInHorizontally(tween(durationMillis = 320, easing = LibraryFolderMotionEasing)) { -it / 5 } +
-                    fadeIn(tween(durationMillis = 160, easing = LibraryFolderMotionEasing))
-                val exit = slideOutHorizontally(tween(durationMillis = 240, easing = LibraryFolderMotionEasing)) { it / 3 } +
-                    fadeOut(tween(durationMillis = 140, easing = LibraryFolderMotionEasing))
+                val enter = slideInHorizontally(tween(durationMillis = 300, delayMillis = 35, easing = LibraryFolderMotionEasing)) { -it / 7 } +
+                    fadeIn(tween(durationMillis = 190, delayMillis = 55, easing = LibraryFolderMotionEasing)) +
+                    scaleIn(
+                        initialScale = 0.992f,
+                        animationSpec = tween(durationMillis = 300, delayMillis = 35, easing = LibraryFolderMotionEasing),
+                    )
+                val exit = slideOutHorizontally(tween(durationMillis = 320, easing = LibraryFolderMotionEasing)) { it / 3 } +
+                    fadeOut(tween(durationMillis = 180, easing = LibraryFolderMotionEasing)) +
+                    scaleOut(
+                        targetScale = 0.985f,
+                        animationSpec = tween(durationMillis = 320, easing = LibraryFolderMotionEasing),
+                    )
                 enter togetherWith exit
             }
         },
-        label = "library-folder-detail-transition",
+        label = "library-album-detail-transition",
         modifier = Modifier.fillMaxSize(),
-    ) { showFolderDetail ->
-        if (showFolderDetail && activeFolderDetail != null && folderDetailTracks != null) {
-            FolderDetailPage(
-                folder = activeFolderDetail,
-                tracks = folderDetailTracks,
+    ) { target ->
+        when (target) {
+            is LibraryAlbumTransitionTarget.Detail -> AlbumDetailPage(
+                album = target.album,
+                tracks = target.tracks,
                 onBack = onCloseDetail,
-                onPlayAll = { onPlayFolder(activeFolderDetail) },
+                onPlayAll = { onPlayAlbum(target.album) },
+                onShuffle = { onShuffleAlbum(target.album) },
                 onPlayTrack = onPlayTrack,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else {
-            PageChrome(
+            LibraryAlbumTransitionTarget.Browser -> {
+
+                // 艺术家详情同样走全屏沉浸式页面
+                val activeArtistDetail = selectedArtist
+                if (activeArtistDetail != null && artistDetailTracks != null) {
+                    ArtistDetailPage(
+                        artist = activeArtistDetail,
+                        tracks = artistDetailTracks,
+                        onBack = onCloseDetail,
+                        onPlayAll = { onPlayArtist(activeArtistDetail) },
+                        onShuffle = { onShuffleArtist(activeArtistDetail) },
+                        onPlayTrack = onPlayTrack,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    return@AnimatedContent
+                }
+
+                val activeFolderDetail = selectedFolder
+                val activePlaylistDetail = selectedPlaylist
+                if (activePlaylistDetail != null && playlistDetailTracks != null) {
+                    LibraryDetailPage(
+                        title = activePlaylistDetail.name,
+                        subtitle = "${activePlaylistDetail.trackCount} 首 · 网易云歌单",
+                        tracks = playlistDetailTracks,
+                        onBack = onCloseDetail,
+                        onPlayAll = { onPlayPlaylist(activePlaylistDetail) },
+                        onPlayTrack = onPlayTrack,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    return@AnimatedContent
+                }
+
+                AnimatedContent(
+                    targetState = activeFolderDetail != null && folderDetailTracks != null,
+                    transitionSpec = {
+                        if (targetState) {
+                            val enter = slideInHorizontally(tween(durationMillis = 360, easing = LibraryFolderMotionEasing)) { it / 3 } +
+                                fadeIn(tween(durationMillis = 180, easing = LibraryFolderMotionEasing)) +
+                                scaleIn(
+                                    initialScale = 0.985f,
+                                    animationSpec = tween(durationMillis = 360, easing = LibraryFolderMotionEasing),
+                                )
+                            val exit = slideOutHorizontally(tween(durationMillis = 220, easing = LibraryFolderMotionEasing)) { -it / 8 } +
+                                fadeOut(tween(durationMillis = 140, easing = LibraryFolderMotionEasing)) +
+                                scaleOut(
+                                    targetScale = 0.992f,
+                                    animationSpec = tween(durationMillis = 220, easing = LibraryFolderMotionEasing),
+                                )
+                            enter togetherWith exit
+                        } else {
+                            val enter = slideInHorizontally(tween(durationMillis = 320, easing = LibraryFolderMotionEasing)) { -it / 5 } +
+                                fadeIn(tween(durationMillis = 160, easing = LibraryFolderMotionEasing))
+                            val exit = slideOutHorizontally(tween(durationMillis = 240, easing = LibraryFolderMotionEasing)) { it / 3 } +
+                                fadeOut(tween(durationMillis = 140, easing = LibraryFolderMotionEasing))
+                            enter togetherWith exit
+                        }
+                    },
+                    label = "library-folder-detail-transition",
+                    modifier = Modifier.fillMaxSize(),
+                ) { showFolderDetail ->
+                    if (showFolderDetail && activeFolderDetail != null && folderDetailTracks != null) {
+                        FolderDetailPage(
+                            folder = activeFolderDetail,
+                            tracks = folderDetailTracks,
+                            onBack = onCloseDetail,
+                            onPlayAll = { onPlayFolder(activeFolderDetail) },
+                            onPlayTrack = onPlayTrack,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        PageChrome(
                 title = "曲库",
                 subtitle = null,
                 badge = selectedSource.label,
@@ -487,6 +543,9 @@ fun LibraryScreen(
             }
         }
     }
+            }
+        }
+    }
 }
 
 @Composable
@@ -593,12 +652,15 @@ private fun LinkedEchoLibraryPage(
     query: String,
     selectedMode: LinkedLibraryMode,
     selectedAlbumKey: String?,
+    selectedArtistKey: String?,
     selectedSource: LibrarySourceMode,
     onQueryChange: (String) -> Unit,
     onSelectSource: (LibrarySourceMode) -> Unit,
     onSelectMode: (LinkedLibraryMode) -> Unit,
     onOpenAlbum: (AlbumSummary) -> Unit,
+    onOpenArtist: (ArtistSummary) -> Unit,
     onCloseAlbum: () -> Unit,
+    onCloseArtist: () -> Unit,
     onRefresh: () -> Unit,
     onPlayLinkedTrack: (EchoRemoteTrack) -> Unit,
     modifier: Modifier = Modifier,
@@ -606,8 +668,12 @@ private fun LinkedEchoLibraryPage(
     val tracks = state.tracks
     val filteredTracks = remember(tracks, query) { tracks.filterLinkedLibraryQuery(query) }
     val albums = remember(filteredTracks) { filteredTracks.toLinkedAlbums() }
+    val artists = remember(filteredTracks) { filteredTracks.toLinkedArtists() }
     val selectedAlbum = remember(albums, selectedAlbumKey) {
         albums.firstOrNull { it.albumKey == selectedAlbumKey }
+    }
+    val selectedArtist = remember(artists, selectedArtistKey) {
+        artists.firstOrNull { it.artistKey == selectedArtistKey }
     }
     val selectedAlbumTracks = remember(filteredTracks, selectedAlbumKey) {
         if (selectedAlbumKey == null) {
@@ -616,12 +682,29 @@ private fun LinkedEchoLibraryPage(
             filteredTracks.filter { it.linkedAlbumKey() == selectedAlbumKey }
         }
     }
+    val selectedArtistTracks = remember(filteredTracks, selectedArtistKey) {
+        if (selectedArtistKey == null) {
+            emptyList()
+        } else {
+            filteredTracks.filter { it.linkedArtistKey() == selectedArtistKey }
+        }
+    }
 
     if (selectedAlbum != null) {
         LinkedAlbumTracksPage(
             album = selectedAlbum,
             tracks = selectedAlbumTracks,
             onBack = onCloseAlbum,
+            onPlayLinkedTrack = onPlayLinkedTrack,
+            modifier = modifier,
+        )
+        return
+    }
+    if (selectedArtist != null) {
+        LinkedArtistTracksPage(
+            artist = selectedArtist,
+            tracks = selectedArtistTracks,
+            onBack = onCloseArtist,
             onPlayLinkedTrack = onPlayLinkedTrack,
             modifier = modifier,
         )
@@ -668,6 +751,9 @@ private fun LinkedEchoLibraryPage(
             selectedMode == LinkedLibraryMode.Albums && albums.isEmpty() -> {
                 EmptyState(if (query.isBlank()) "PC ECHO 暂无可显示专辑。" else "PC ECHO 没有匹配的专辑。")
             }
+            selectedMode == LinkedLibraryMode.Artists && artists.isEmpty() -> {
+                EmptyState(if (query.isBlank()) "PC ECHO 暂无可显示艺术家。" else "PC ECHO 没有匹配的艺术家。")
+            }
             selectedMode == LinkedLibraryMode.Songs -> LinkedTrackList(
                 tracks = filteredTracks,
                 onPlayLinkedTrack = onPlayLinkedTrack,
@@ -676,6 +762,11 @@ private fun LinkedEchoLibraryPage(
             selectedMode == LinkedLibraryMode.Albums -> LinkedAlbumWall(
                 albums = albums,
                 onOpenAlbum = onOpenAlbum,
+                modifier = Modifier.weight(1f),
+            )
+            selectedMode == LinkedLibraryMode.Artists -> LinkedArtistWall(
+                artists = artists,
+                onOpenArtist = onOpenArtist,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -859,6 +950,28 @@ private fun LinkedAlbumWall(
 }
 
 @Composable
+private fun LinkedArtistWall(
+    artists: List<ArtistSummary>,
+    onOpenArtist: (ArtistSummary) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = PaddingValues(top = 6.dp, bottom = LibraryBottomControlsPadding),
+    ) {
+        gridItems(
+            items = artists,
+            key = { artist -> artist.artistKey },
+        ) { artist ->
+            ArtistWallCard(artist = artist, onClick = { onOpenArtist(artist) })
+        }
+    }
+}
+
+@Composable
 private fun LinkedAlbumTracksPage(
     album: AlbumSummary,
     tracks: List<EchoRemoteTrack>,
@@ -866,28 +979,42 @@ private fun LinkedAlbumTracksPage(
     onPlayLinkedTrack: (EchoRemoteTrack) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val artistLabel = album.albumArtist ?: album.artist ?: "PC ECHO"
-    LinkedLibraryChrome(
-        title = album.title,
-        subtitle = "$artistLabel · ${tracks.size} 首",
-        badge = "PC 专辑",
-        actions = {
-            TextButton(onClick = onBack) {
-                Text("返回")
-            }
-        },
-        modifier = modifier,
-    ) {
-        if (tracks.isEmpty()) {
-            EmptyState("这个 PC 专辑暂无可显示歌曲。")
-        } else {
-            LinkedTrackList(
-                tracks = tracks,
-                onPlayLinkedTrack = onPlayLinkedTrack,
-                modifier = Modifier.weight(1f),
-            )
-        }
+    val albumTracks = remember(tracks) { tracks.map { it.toEchoTrack() } }
+    val remoteTracksByUiId = remember(tracks, albumTracks) {
+        tracks.zip(albumTracks).associate { (remote, uiTrack) -> uiTrack.id to remote }
     }
+    AlbumDetailListPage(
+        album = album,
+        tracks = albumTracks,
+        onBack = onBack,
+        onPlayAll = { tracks.firstOrNull()?.let(onPlayLinkedTrack) },
+        onShuffle = { tracks.shuffled().firstOrNull()?.let(onPlayLinkedTrack) },
+        onPlayTrack = { track -> remoteTracksByUiId[track.id]?.let(onPlayLinkedTrack) },
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun LinkedArtistTracksPage(
+    artist: ArtistSummary,
+    tracks: List<EchoRemoteTrack>,
+    onBack: () -> Unit,
+    onPlayLinkedTrack: (EchoRemoteTrack) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val artistTracks = remember(tracks) { tracks.map { it.toEchoTrack() } }
+    val remoteTracksByUiId = remember(tracks, artistTracks) {
+        tracks.zip(artistTracks).associate { (remote, uiTrack) -> uiTrack.id to remote }
+    }
+    ArtistDetailListPage(
+        artist = artist,
+        tracks = artistTracks,
+        onBack = onBack,
+        onPlayAll = { tracks.firstOrNull()?.let(onPlayLinkedTrack) },
+        onShuffle = { tracks.shuffled().firstOrNull()?.let(onPlayLinkedTrack) },
+        onPlayTrack = { track -> remoteTracksByUiId[track.id]?.let(onPlayLinkedTrack) },
+        modifier = modifier,
+    )
 }
 
 private fun List<EchoRemoteTrack>.toLinkedAlbums(): List<AlbumSummary> =
@@ -908,8 +1035,27 @@ private fun List<EchoRemoteTrack>.toLinkedAlbums(): List<AlbumSummary> =
         }
         .sortedWith(compareBy<AlbumSummary> { it.title.lowercase() }.thenBy { it.albumArtist.orEmpty().lowercase() })
 
+private fun List<EchoRemoteTrack>.toLinkedArtists(): List<ArtistSummary> =
+    groupBy { it.linkedArtistKey() }
+        .values
+        .map { artistTracks ->
+            val first = artistTracks.first()
+            ArtistSummary(
+                artistKey = first.linkedArtistKey(),
+                name = first.artist.takeIf { it.isNotBlank() } ?: "未知艺术家",
+                artworkUri = artistTracks.firstNotNullOfOrNull { it.artworkUrl?.takeIf(String::isNotBlank) },
+                albumCount = artistTracks.map { it.linkedAlbumKey() }.distinct().size,
+                trackCount = artistTracks.size,
+                durationMs = artistTracks.sumOf { it.durationMs.coerceAtLeast(0L) },
+            )
+        }
+        .sortedWith(compareBy<ArtistSummary> { it.name.lowercase() }.thenByDescending { it.trackCount })
+
 private fun EchoRemoteTrack.linkedAlbumKey(): String =
     "echo-link:${album?.trim().orEmpty().lowercase()}|${artist.trim().lowercase()}"
+
+private fun EchoRemoteTrack.linkedArtistKey(): String =
+    "echo-link:${artist.trim().ifBlank { "PC ECHO" }.lowercase()}"
 
 private fun EchoRemoteTrack.toEchoTrack(): EchoTrack =
     EchoTrack(
@@ -918,6 +1064,7 @@ private fun EchoRemoteTrack.toEchoTrack(): EchoTrack =
         title = title,
         artist = artist.ifBlank { "PC ECHO" },
         album = album,
+        albumArtist = artist.takeIf { it.isNotBlank() },
         artworkUri = artworkUrl,
         durationMs = durationMs,
         source = LibrarySource("echo-link"),

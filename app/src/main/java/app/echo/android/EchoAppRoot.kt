@@ -413,6 +413,11 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         }
     }
     fun selectDockTab(tab: EchoTab) = navigateToPage(tab.pagerPage)
+    val dockTabProgress = (
+        tabPagerState.currentPage +
+            tabPagerState.currentPageOffsetFraction -
+            EchoPagerPage.Now.ordinal
+        ).coerceIn(0f, EchoTab.entries.lastIndex.toFloat())
     fun clearLibraryDetail() {
         selectedAlbum = null
         selectedArtist = null
@@ -833,6 +838,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 positionState = playbackPosition,
                                 darkTheme = darkTheme,
                                 selectedTab = selectedTab,
+                                selectedTabProgress = dockTabProgress,
                                 onPlayPause = viewModel::playPause,
                                 onHideDock = { bottomDockExpanded = false },
                                 onSelectTab = { selectDockTab(EchoTab.entries[it]) },
@@ -964,6 +970,7 @@ private fun ExpandedBottomControls(
     positionState: PlaybackPositionState,
     darkTheme: Boolean,
     selectedTab: Int,
+    selectedTabProgress: Float,
     onPlayPause: () -> Unit,
     onHideDock: () -> Unit,
     onSelectTab: (Int) -> Unit,
@@ -1010,6 +1017,7 @@ private fun ExpandedBottomControls(
         )
         BottomDock(
             selectedTab = selectedTab,
+            selectedTabProgress = selectedTabProgress,
             onLightSurface = !darkTheme,
             onSelectTab = onSelectTab,
             modifier = Modifier.fillMaxWidth(),

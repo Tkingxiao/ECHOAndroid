@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -187,6 +188,89 @@ internal fun AlbumDetailPage(
 }
 
 @Composable
+internal fun AlbumDetailListPage(
+    album: AlbumSummary,
+    tracks: List<EchoTrack>,
+    onBack: () -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffle: () -> Unit,
+    onPlayTrack: (EchoTrack) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val palette = rememberArtworkPalette(album.artworkUri, seedKey = album.albumKey)
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .detailBackSwipe(onBack),
+    ) {
+        AlbumDetailLightBackground(
+            artworkUri = album.artworkUri,
+            palette = palette,
+            modifier = Modifier.fillMaxSize(),
+        )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(bottom = AlbumDetailBottomPadding),
+        ) {
+            item(key = "hero") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = EchoContentMaxWidth)
+                        .padding(horizontal = 20.dp),
+                ) {
+                    AlbumDetailTopBar(onBack = onBack)
+                    Spacer(Modifier.height(8.dp))
+                    AlbumHero(album = album, palette = palette, onArtworkBackground = true)
+                    Spacer(Modifier.height(18.dp))
+                    AlbumActionBar(palette = palette, onPlayAll = onPlayAll, onShuffle = onShuffle)
+                    Spacer(Modifier.height(18.dp))
+                    AlbumDetailInsights(
+                        source = sourceInsight(tracks),
+                        info = formatInsight(tracks),
+                        palette = palette,
+                    )
+                    Spacer(Modifier.height(22.dp))
+                    AlbumTracksHeader(
+                        count = album.trackCount,
+                        titleColor = AlbumOnArtwork,
+                        metaColor = AlbumOnArtworkMuted,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+            }
+
+            if (tracks.isEmpty()) {
+                item(key = "empty") {
+                    AlbumDetailNotice("暂无曲目。")
+                }
+            } else {
+                itemsIndexed(
+                    items = tracks,
+                    key = { _, track -> track.id },
+                ) { index, track ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = EchoContentMaxWidth)
+                            .padding(horizontal = 20.dp),
+                    ) {
+                        AlbumTrackRow(
+                            index = index,
+                            track = track,
+                            accent = palette.vibrant,
+                            onClick = { onPlayTrack(track) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 internal fun ArtistDetailPage(
     artist: ArtistSummary,
     tracks: LazyPagingItems<EchoTrack>,
@@ -274,6 +358,93 @@ internal fun ArtistDetailPage(
                                 onClick = { onPlayTrack(track) },
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ArtistDetailListPage(
+    artist: ArtistSummary,
+    tracks: List<EchoTrack>,
+    onBack: () -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffle: () -> Unit,
+    onPlayTrack: (EchoTrack) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val palette = rememberArtworkPalette(artist.artworkUri, seedKey = artist.artistKey)
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .detailBackSwipe(onBack),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(440.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0f to palette.vibrant.copy(alpha = 0.34f),
+                        0.45f to palette.deep.copy(alpha = 0.18f),
+                        1f to Color.Transparent,
+                    ),
+                ),
+        )
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(bottom = AlbumDetailBottomPadding),
+        ) {
+            item(key = "hero") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = EchoContentMaxWidth)
+                        .padding(horizontal = 20.dp),
+                ) {
+                    AlbumDetailTopBar(onBack = onBack)
+                    Spacer(Modifier.height(8.dp))
+                    ArtistHero(artist = artist, palette = palette)
+                    Spacer(Modifier.height(18.dp))
+                    AlbumActionBar(palette = palette, onPlayAll = onPlayAll, onShuffle = onShuffle)
+                    Spacer(Modifier.height(18.dp))
+                    AlbumDetailInsights(
+                        source = sourceInsight(tracks),
+                        info = formatInsight(tracks),
+                        palette = palette,
+                    )
+                    Spacer(Modifier.height(22.dp))
+                    AlbumTracksHeader(count = artist.trackCount)
+                    Spacer(Modifier.height(10.dp))
+                }
+            }
+
+            if (tracks.isEmpty()) {
+                item(key = "empty") {
+                    AlbumDetailNotice("暂无曲目。")
+                }
+            } else {
+                itemsIndexed(
+                    items = tracks,
+                    key = { _, track -> track.id },
+                ) { index, track ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = EchoContentMaxWidth)
+                            .padding(horizontal = 20.dp),
+                    ) {
+                        AlbumTrackRow(
+                            index = index,
+                            track = track,
+                            accent = palette.vibrant,
+                            onClick = { onPlayTrack(track) },
+                        )
                     }
                 }
             }

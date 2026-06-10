@@ -2,7 +2,9 @@ package app.echo.android
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -11,13 +13,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Devices
@@ -65,19 +71,23 @@ enum class EchoTab(
 @Composable
 fun BottomDock(
     selectedTab: Int,
+    selectedTabProgress: Float = selectedTab.toFloat(),
     onLightSurface: Boolean,
     onSelectTab: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val dark = LocalEchoDarkTheme.current
-    val swipeThresholdPx = with(LocalDensity.current) { 46.dp.toPx() }
+    val density = LocalDensity.current
+    val scheme = MaterialTheme.colorScheme
+    val tabCount = EchoTab.entries.size
+    val swipeThresholdPx = with(density) { 46.dp.toPx() }
     var dragOffsetX by remember { mutableStateOf(0f) }
     Box(
         modifier = modifier
             .fillMaxWidth()
             .background(Color.Transparent),
     ) {
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
@@ -125,9 +135,39 @@ fun BottomDock(
                     )
                 }
                 .padding(horizontal = 2.dp, vertical = 3.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
         ) {
+            val tabWidth = maxWidth / tabCount
+            val tabWidthPx = with(density) { tabWidth.toPx() }.coerceAtLeast(1f)
+            val dragProgress = (-dragOffsetX / tabWidthPx).coerceIn(-1f, 1f)
+            val targetIndicatorProgress = (selectedTabProgress + dragProgress)
+                .coerceIn(0f, EchoTab.entries.lastIndex.toFloat())
+            val indicatorProgress by animateFloatAsState(
+                targetValue = targetIndicatorProgress,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+                label = "dock-selected-pill-position",
+            )
+            val indicatorColor = when {
+                onLightSurface -> scheme.primary.copy(alpha = 0.14f)
+                else -> EchoGlassPanel.copy(alpha = 0.62f)
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = tabWidth * indicatorProgress)
+                    .width(tabWidth)
+                    .height(50.dp)
+                    .padding(horizontal = 3.dp, vertical = 2.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(indicatorColor),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             EchoTab.entries.forEach { tab ->
                 DockItem(
                     tab = tab,
@@ -136,6 +176,7 @@ fun BottomDock(
                     onClick = { onSelectTab(tab.ordinal) },
                     modifier = Modifier.weight(1f),
                 )
+            }
             }
         }
     }
@@ -162,11 +203,6 @@ private fun DockItem(
         onLightSurface -> scheme.onSurfaceVariant
         else -> Color.White.copy(alpha = 0.84f)
     }
-    val targetContainerColor = when {
-        !selected -> Color.Transparent
-        onLightSurface -> scheme.primary.copy(alpha = 0.14f)
-        else -> EchoGlassPanel.copy(alpha = 0.62f)
-    }
     val iconColor by animateColorAsState(
         targetValue = targetIconColor,
         animationSpec = tween(durationMillis = 180, easing = DockItemMotionEasing),
@@ -176,11 +212,6 @@ private fun DockItem(
         targetValue = targetLabelColor,
         animationSpec = tween(durationMillis = 180, easing = DockItemMotionEasing),
         label = "dock-label-color",
-    )
-    val containerColor by animateColorAsState(
-        targetValue = targetContainerColor,
-        animationSpec = tween(durationMillis = 220, easing = DockItemMotionEasing),
-        label = "dock-item-container",
     )
     val iconScale by animateFloatAsState(
         targetValue = if (selected) 1f else 0.92f,
@@ -197,7 +228,6 @@ private fun DockItem(
             modifier = Modifier
                 .defaultMinSize(minWidth = 56.dp, minHeight = 48.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(containerColor)
                 .padding(horizontal = 2.dp, vertical = 1.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
