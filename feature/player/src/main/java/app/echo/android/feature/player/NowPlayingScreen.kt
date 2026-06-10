@@ -108,6 +108,7 @@ fun NowPlayingScreen(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
+    onOpenQueue: () -> Unit,
     onImportLyrics: () -> Unit,
     onAdjustLyricsOffset: (Long) -> Unit,
     onResetLyricsOffset: () -> Unit,
@@ -185,6 +186,7 @@ fun NowPlayingScreen(
                         onNext = onNext,
                         onPrevious = onPrevious,
                         onSeek = onSeek,
+                        onOpenQueue = onOpenQueue,
                         onOpenLyrics = {
                             pageScope.launch {
                                 pagerState.animateScrollToPage(NowPlayingPage.Lyrics.ordinal)
@@ -204,6 +206,7 @@ fun NowPlayingScreen(
                         onNext = onNext,
                         onPrevious = onPrevious,
                         onSeek = onSeek,
+                        onOpenQueue = onOpenQueue,
                         positionMs = activePositionMs,
                         durationMs = activeDurationMs,
                         onCloseLyrics = {
@@ -231,6 +234,7 @@ private fun NowPlayingCoverPage(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
+    onOpenQueue: () -> Unit,
     onOpenLyrics: () -> Unit,
     onOpenArtist: () -> Unit,
     onOpenAlbum: () -> Unit,
@@ -271,7 +275,7 @@ private fun NowPlayingCoverPage(
             onPlayPause = onPlayPause,
             onNext = onNext,
             onPrevious = onPrevious,
-            onOpenQueue = {},
+            onOpenQueue = onOpenQueue,
         )
         Spacer(Modifier.height(14.dp))
     }
@@ -304,6 +308,7 @@ private fun NowPlayingLyricsPage(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
+    onOpenQueue: () -> Unit,
     positionMs: Long,
     durationMs: Long,
     onCloseLyrics: () -> Unit,
@@ -367,7 +372,7 @@ private fun NowPlayingLyricsPage(
             onPlayPause = onPlayPause,
             onNext = onNext,
             onPrevious = onPrevious,
-            onOpenQueue = {},
+            onOpenQueue = onOpenQueue,
         )
         Spacer(Modifier.height(14.dp))
     }

@@ -203,7 +203,13 @@ class EchoUsbAudioMonitor(context: Context) {
         val usbSnapshot = usbAudioProbe.snapshot(permissionRequestPendingDeviceName)
         val usbDevice = findUsbAudioDevice()
         val hostPermissionGranted = usbSnapshot.permissionGranted || usbDevice?.let(usbManager::hasPermission) == true
-        val hostPermissionPending = usbSnapshot.permissionPending || usbDevice?.deviceName == permissionRequestPendingDeviceName
+        val pendingDeviceName = permissionRequestPendingDeviceName
+        val pendingDeviceMatches = pendingDeviceName != null &&
+            (usbSnapshot.deviceName == pendingDeviceName || usbDevice?.deviceName == pendingDeviceName)
+        if (hostPermissionGranted && pendingDeviceMatches) {
+            permissionRequestPendingDeviceName = null
+        }
+        val hostPermissionPending = !hostPermissionGranted && (usbSnapshot.permissionPending || pendingDeviceMatches)
         if (device == null) {
             return EchoUsbAudioStatus(
                 exclusiveEnabled = exclusiveEnabled,

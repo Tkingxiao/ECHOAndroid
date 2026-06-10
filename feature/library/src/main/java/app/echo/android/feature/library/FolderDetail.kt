@@ -1,0 +1,451 @@
+package app.echo.android.feature.library
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
+import app.echo.android.design.ArtworkTile
+import app.echo.android.design.EchoAccent
+import app.echo.android.design.EchoAccentDeep
+import app.echo.android.design.EchoContentMaxWidth
+import app.echo.android.design.LocalEchoDarkTheme
+import app.echo.android.design.RoonInk
+import app.echo.android.design.RoonMuted
+import app.echo.android.design.formatDuration
+import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.FolderSummary
+
+private val FolderDetailBottomPadding = 168.dp
+private const val FolderBackSwipeThresholdPx = 120f
+private val FolderTitleShadow = Shadow(
+    color = Color.Black.copy(alpha = 0.18f),
+    offset = Offset(0f, 1.4f),
+    blurRadius = 8f,
+)
+
+private data class FolderDetailColors(
+    val surface: Color,
+    val elevatedSurface: Color,
+    val border: Color,
+    val content: Color,
+    val muted: Color,
+)
+
+@Composable
+private fun rememberFolderDetailColors(): FolderDetailColors {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    return FolderDetailColors(
+        surface = if (dark) scheme.surface.copy(alpha = 0.72f) else Color.White.copy(alpha = 0.68f),
+        elevatedSurface = if (dark) scheme.surfaceVariant.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.82f),
+        border = if (dark) scheme.outlineVariant.copy(alpha = 0.52f) else Color.White.copy(alpha = 0.82f),
+        content = if (dark) scheme.onSurface else RoonInk,
+        muted = if (dark) scheme.onSurfaceVariant.copy(alpha = 0.90f) else RoonMuted,
+    )
+}
+
+@Composable
+internal fun FolderDetailPage(
+    folder: FolderSummary,
+    tracks: LazyPagingItems<EchoTrack>,
+    onBack: () -> Unit,
+    onPlayAll: () -> Unit,
+    onPlayTrack: (EchoTrack) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = rememberFolderDetailColors()
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .folderBackSwipe(onBack),
+    ) {
+        FolderDetailBackground()
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(bottom = FolderDetailBottomPadding),
+        ) {
+            item(key = "folder-hero") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = EchoContentMaxWidth)
+                        .padding(horizontal = 20.dp),
+                ) {
+                    FolderDetailTopBar(onBack = onBack)
+                    Spacer(Modifier.height(10.dp))
+                    FolderHero(folder = folder, onPlayAll = onPlayAll)
+                    Spacer(Modifier.height(14.dp))
+                    FolderInsightGrid(folder = folder)
+                    Spacer(Modifier.height(22.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "文件夹曲目",
+                            color = colors.content,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                        )
+                        Text(
+                            "${folder.trackCount} 首",
+                            color = colors.muted,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+            }
+
+            when {
+                tracks.loadState.refresh is LoadState.Loading -> item(key = "folder-loading") {
+                    FolderDetailNotice("正在加载文件夹曲目...")
+                }
+                tracks.loadState.refresh is LoadState.Error -> item(key = "folder-error") {
+                    FolderDetailNotice("文件夹曲目加载失败。")
+                }
+                tracks.itemCount == 0 -> item(key = "folder-empty") {
+                    FolderDetailNotice("这个文件夹暂无曲目。")
+                }
+                else -> items(
+                    count = tracks.itemCount,
+                    key = { index -> tracks.peek(index)?.id ?: "folder-track-$index" },
+                ) { index ->
+                    tracks[index]?.let { track ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = EchoContentMaxWidth)
+                                .padding(horizontal = 20.dp),
+                        ) {
+                            FolderTrackRow(
+                                index = index,
+                                track = track,
+                                onClick = { onPlayTrack(track) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun Modifier.folderBackSwipe(onBack: () -> Unit): Modifier = pointerInput(onBack) {
+    var dragX = 0f
+    detectHorizontalDragGestures(
+        onDragStart = { dragX = 0f },
+        onHorizontalDrag = { _, dragAmount -> dragX += dragAmount },
+        onDragEnd = {
+            if (kotlin.math.abs(dragX) >= FolderBackSwipeThresholdPx) onBack()
+        },
+        onDragCancel = { dragX = 0f },
+    )
+}
+
+@Composable
+private fun FolderDetailBackground() {
+    val dark = LocalEchoDarkTheme.current
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    if (dark) {
+                        listOf(Color(0xFF151A22), Color(0xFF101219))
+                    } else {
+                        listOf(Color(0xFFEAF7FF), Color(0xFFF6F2FF), Color(0xFFEFF6FF))
+                    },
+                ),
+            ),
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(420.dp)
+            .background(
+                Brush.radialGradient(
+                    listOf(EchoAccent.copy(alpha = 0.30f), EchoAccentDeep.copy(alpha = 0.10f), Color.Transparent),
+                ),
+            ),
+    )
+}
+
+@Composable
+private fun FolderDetailTopBar(onBack: () -> Unit) {
+    val colors = rememberFolderDetailColors()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(colors.elevatedSurface)
+                .border(BorderStroke(1.dp, colors.border), CircleShape)
+                .clickable(onClick = onBack),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = "返回",
+                tint = colors.content,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun FolderHero(
+    folder: FolderSummary,
+    onPlayAll: () -> Unit,
+) {
+    val colors = rememberFolderDetailColors()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(30.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(colors.surface, colors.elevatedSurface, EchoAccent.copy(alpha = 0.10f)),
+                ),
+            )
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(30.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(84.dp)
+                    .shadow(12.dp, RoundedCornerShape(26.dp), ambientColor = EchoAccent.copy(alpha = 0.16f))
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(Brush.linearGradient(listOf(EchoAccent.copy(alpha = 0.24f), EchoAccentDeep.copy(alpha = 0.18f))))
+                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.58f)), RoundedCornerShape(26.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.FolderOpen,
+                    contentDescription = null,
+                    tint = EchoAccentDeep,
+                    modifier = Modifier.size(42.dp),
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(
+                    folderDisplayName(folder),
+                    color = colors.content,
+                    style = MaterialTheme.typography.headlineSmall.copy(shadow = FolderTitleShadow),
+                    fontWeight = FontWeight.Black,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    folderPathLabel(folder),
+                    color = colors.muted,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .clip(RoundedCornerShape(26.dp))
+                .background(Brush.horizontalGradient(listOf(EchoAccent, EchoAccentDeep)))
+                .clickable(onClick = onPlayAll),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("播放这个文件夹", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun FolderInsightGrid(folder: FolderSummary) {
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.fillMaxWidth()) {
+            FolderInsightCard(Icons.Rounded.MusicNote, "歌曲", "${folder.trackCount} 首", Modifier.weight(1f))
+            FolderInsightCard(Icons.Rounded.LibraryMusic, "专辑", "${folder.albumCount} 张", Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.fillMaxWidth()) {
+            FolderInsightCard(Icons.Rounded.GraphicEq, "时长", readableFolderDuration(folder.durationMs), Modifier.weight(1f))
+            FolderInsightCard(Icons.Rounded.FolderOpen, "容量", formatFolderByteSize(folder.totalSizeBytes), Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun FolderInsightCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = rememberFolderDetailColors()
+    Row(
+        modifier = modifier
+            .height(66.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(colors.surface)
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(18.dp))
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = EchoAccentDeep, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, color = colors.muted, style = MaterialTheme.typography.labelMedium)
+            Text(value, color = colors.content, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun FolderTrackRow(
+    index: Int,
+    track: EchoTrack,
+    onClick: () -> Unit,
+) {
+    val colors = rememberFolderDetailColors()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(colors.surface)
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = (index + 1).toString().padStart(2, '0'),
+            color = EchoAccentDeep,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.width(28.dp),
+        )
+        ArtworkTile(
+            artworkUri = track.artworkUri,
+            modifier = Modifier.size(48.dp),
+            accent = EchoAccent,
+            cornerRadius = 14.dp,
+            elevation = 2.dp,
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                track.title,
+                color = colors.content,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                trackSubtitle(track),
+                color = colors.muted,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            formatDuration(track.durationMs),
+            color = colors.muted,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun FolderDetailNotice(message: String) {
+    val colors = rememberFolderDetailColors()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = EchoContentMaxWidth)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+    ) {
+        Text(message, color = colors.muted, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private fun folderPathLabel(folder: FolderSummary): String =
+    folder.path?.takeIf { it.isNotBlank() } ?: "MediaStore 未提供路径"
+
+private fun readableFolderDuration(durationMs: Long): String {
+    val minutes = (durationMs / 60000L).toInt()
+    return if (minutes >= 1) "$minutes 分钟" else formatDuration(durationMs)
+}
+
+private fun formatFolderByteSize(bytes: Long): String =
+    when {
+        bytes >= 1024L * 1024L * 1024L -> "%.1f GB".format(bytes / (1024f * 1024f * 1024f))
+        bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / (1024f * 1024f))
+        bytes >= 1024L -> "%.1f KB".format(bytes / 1024f)
+        else -> "$bytes B"
+    }

@@ -36,6 +36,7 @@ import app.echo.android.model.playback.OpraHeadphoneCorrectionState
 import app.echo.android.model.playback.PlaybackHeatmapDay
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
+import app.echo.android.model.playback.PlaybackQueueState
 import app.echo.android.playback.EchoRemotePlaybackAuthRegistry
 import app.echo.android.playback.EchoWebDavPlaybackCredential
 import java.time.LocalDate
@@ -100,6 +101,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val playbackMetadata: StateFlow<PlaybackMetadataState> = playbackController.playbackMetadata
     val playbackPosition: StateFlow<PlaybackPositionState> = playbackController.playbackPosition
     val playbackControls: StateFlow<PlaybackControlsState> = playbackController.playbackControls
+    val playbackQueue: StateFlow<PlaybackQueueState> = playbackController.playbackQueue
     val playbackDiagnostics: StateFlow<PlaybackDiagnosticsState> = playbackController.playbackDiagnostics
     val equalizerState: StateFlow<EchoEqualizerState> = playbackController.equalizerState
     val lyricsState: StateFlow<EchoLyricsLoadState> = lyricsController.lyricsState
@@ -287,6 +289,18 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
 
     fun skipPrevious() {
         playbackController.skipPrevious()
+    }
+
+    fun playQueueItem(index: Int) {
+        playbackController.playQueueItem(index)
+    }
+
+    fun removeQueueItem(index: Int) {
+        playbackController.removeQueueItem(index)
+    }
+
+    fun clearQueue() {
+        playbackController.clearQueue()
     }
 
     fun cycleRepeatMode() {

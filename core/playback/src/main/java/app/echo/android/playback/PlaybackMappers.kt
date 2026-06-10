@@ -15,6 +15,7 @@ import app.echo.android.model.playback.PlaybackControlsState
 import app.echo.android.model.playback.PlaybackDiagnosticsState
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
+import app.echo.android.model.playback.PlaybackQueueState
 
 fun MediaItem.toEchoTrackRef(durationMs: Long = 0L): EchoTrackRef {
     val metadata = mediaMetadata
@@ -99,6 +100,20 @@ fun Player.toPlaybackPositionState(): PlaybackPositionState {
         durationMs = safeDuration.coerceAtLeast(0L),
         bufferedMs = (bufferedPosition - currentPosition).coerceAtLeast(0L),
         updateTimeEpochMs = System.currentTimeMillis(),
+    )
+}
+
+fun Player.toPlaybackQueueState(): PlaybackQueueState {
+    val currentIndex = currentMediaItemIndex.takeIf { it in 0 until mediaItemCount } ?: -1
+    val currentDurationMs = duration.takeIf { it > 0L } ?: 0L
+    val items = (0 until mediaItemCount).map { index ->
+        getMediaItemAt(index).toEchoTrackRef(
+            durationMs = if (index == currentIndex) currentDurationMs else 0L,
+        )
+    }
+    return PlaybackQueueState(
+        items = items,
+        currentIndex = currentIndex,
     )
 }
 

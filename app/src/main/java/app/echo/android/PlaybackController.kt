@@ -19,6 +19,7 @@ import app.echo.android.model.playback.PlaybackControlsState
 import app.echo.android.model.playback.PlaybackDiagnosticsState
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
+import app.echo.android.model.playback.PlaybackQueueState
 import app.echo.android.model.playback.OpraHeadphoneCorrectionPreset
 import app.echo.android.playback.EchoEqualizerController
 import app.echo.android.playback.EchoPlaybackService
@@ -30,6 +31,7 @@ import app.echo.android.playback.toPlaybackControlsState
 import app.echo.android.playback.toPlaybackDiagnosticsState
 import app.echo.android.playback.toPlaybackMetadataState
 import app.echo.android.playback.toPlaybackPositionState
+import app.echo.android.playback.toPlaybackQueueState
 import app.echo.android.playback.withUsbAudioStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -57,6 +59,9 @@ internal class PlaybackController(
 
     private val _playbackControls = MutableStateFlow(PlaybackControlsState())
     val playbackControls: StateFlow<PlaybackControlsState> = _playbackControls.asStateFlow()
+
+    private val _playbackQueue = MutableStateFlow(PlaybackQueueState())
+    val playbackQueue: StateFlow<PlaybackQueueState> = _playbackQueue.asStateFlow()
 
     private val _playbackDiagnostics = MutableStateFlow(PlaybackDiagnosticsState())
     val playbackDiagnostics: StateFlow<PlaybackDiagnosticsState> = _playbackDiagnostics.asStateFlow()
@@ -157,6 +162,32 @@ internal class PlaybackController(
 
     fun skipPrevious() {
         controller?.seekToPreviousMediaItem()
+    }
+
+    fun playQueueItem(index: Int) {
+        controller?.run {
+            if (index !in 0 until mediaItemCount) return
+            seekTo(index, 0L)
+            prepare()
+            play()
+            updatePlaybackCore(this)
+        }
+    }
+
+    fun removeQueueItem(index: Int) {
+        controller?.run {
+            if (index !in 0 until mediaItemCount) return
+            removeMediaItem(index)
+            updatePlaybackCore(this)
+        }
+    }
+
+    fun clearQueue() {
+        controller?.run {
+            if (mediaItemCount <= 0) return
+            removeMediaItems(0, mediaItemCount)
+            updatePlaybackCore(this)
+        }
     }
 
     fun cycleRepeatMode() {
@@ -288,12 +319,14 @@ internal class PlaybackController(
             sourceSampleRateHz = sourceSampleRateHz,
         )
         val position = player.toPlaybackPositionState()
+        val queue = player.toPlaybackQueueState()
         val status = player.toEchoPlaybackStatus(diagnostics.diagnostics)
 
         updateState(_playbackMetadata, metadata)
         updateState(_playbackControls, controls)
         updateState(_playbackDiagnostics, diagnostics)
         updateState(_playbackPosition, position)
+        updateState(_playbackQueue, queue)
         updateState(_playbackStatus, status)
 
         val trackId = metadata.track?.id

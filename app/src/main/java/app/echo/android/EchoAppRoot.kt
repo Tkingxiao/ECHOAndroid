@@ -21,27 +21,17 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -53,8 +43,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -63,14 +51,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import app.echo.android.connect.EchoRemoteClient
 import app.echo.android.design.EchoContentMaxWidth
-import app.echo.android.design.EchoGlassBorder
-import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.EchoMobileTheme
 import app.echo.android.feature.connect.ConnectScreen
 import app.echo.android.feature.home.HomeScreen
 import app.echo.android.feature.library.LibraryScreen
 import app.echo.android.feature.player.MiniPlayer
 import app.echo.android.feature.player.NowPlayingScreen
+import app.echo.android.feature.player.PlaybackQueueSheet
 import app.echo.android.feature.settings.DiagnosticsScreen
 import app.echo.android.feature.settings.SettingsScreen
 import app.echo.android.data.EchoAppSettings
@@ -195,6 +182,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val remoteClient = remember { EchoRemoteClient() }
     val remoteStatus by remoteClient.status.collectAsStateWithLifecycle()
     val playbackStatus by viewModel.playbackStatus.collectAsStateWithLifecycle()
+    val playbackQueue by viewModel.playbackQueue.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle(EchoAppSettings())
     val lastFmState by viewModel.lastFmState.collectAsStateWithLifecycle()
     val usbExclusiveTestResult by viewModel.usbExclusiveTestResult.collectAsStateWithLifecycle()
@@ -240,6 +228,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     var selectedTab by remember { mutableIntStateOf(EchoTab.Now.ordinal) }
     var bottomDockExpanded by remember { mutableStateOf(true) }
     var nowPlayingExpanded by remember { mutableStateOf(false) }
+    var queueSheetVisible by remember { mutableStateOf(false) }
     val libraryDetailOpen = selectedAlbum != null || selectedArtist != null || selectedFolder != null
     val systemDarkTheme = isSystemInDarkTheme()
     var currentMinuteOfDay by remember { mutableIntStateOf(currentMinuteNow()) }
@@ -356,6 +345,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     }
 
     BackHandler(enabled = nowPlayingExpanded) { nowPlayingExpanded = false }
+    BackHandler(enabled = queueSheetVisible) { queueSheetVisible = false }
     BackHandler(enabled = !nowPlayingExpanded && libraryDetailOpen) {
         closeLibraryDetail()
     }
@@ -677,7 +667,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 positionState = playbackPosition,
                                 onPlayPause = viewModel::playPause,
                                 onShowDock = { bottomDockExpanded = true },
-                                onOpenQueue = {},
+                                onOpenQueue = { queueSheetVisible = true },
                                 onExpand = { nowPlayingExpanded = true },
                                 onNext = viewModel::skipNext,
                                 onPrevious = viewModel::skipPrevious,
@@ -710,6 +700,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     onNext = viewModel::skipNext,
                     onPrevious = viewModel::skipPrevious,
                     onSeek = viewModel::seekTo,
+                    onOpenQueue = { queueSheetVisible = true },
                     onImportLyrics = { lyricsImportLauncher.launch(LyricsDocumentMimeTypes) },
                     onAdjustLyricsOffset = viewModel::adjustLyricsOffset,
                     onResetLyricsOffset = viewModel::resetLyricsOffset,
@@ -736,6 +727,23 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+            PlaybackQueueSheet(
+                visible = queueSheetVisible,
+                status = playbackStatus,
+                queueState = playbackQueue,
+                onDismiss = { queueSheetVisible = false },
+                onPlayItem = viewModel::playQueueItem,
+                onRemoveItem = viewModel::removeQueueItem,
+                onClearQueue = viewModel::clearQueue,
+                onCycleRepeatMode = viewModel::cycleRepeatMode,
+                onToggleShuffle = viewModel::toggleShuffle,
+                onOpenLibrary = {
+                    queueSheetVisible = false
+                    nowPlayingExpanded = false
+                    selectDockTab(EchoTab.Library)
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -792,66 +800,19 @@ private fun CompactBottomControls(
     onPrevious: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RoundDockButton(
-            icon = Icons.Rounded.KeyboardArrowUp,
-            description = "显示底栏",
-            onClick = onShowDock,
-        )
-        MiniPlayer(
-            status = status,
-            positionState = positionState,
-            onPlayPause = onPlayPause,
-            onExpand = onExpand,
-            onNext = onNext,
-            onPrevious = onPrevious,
-            modifier = Modifier.weight(1f),
-        )
-        RoundDockButton(
-            icon = Icons.AutoMirrored.Rounded.QueueMusic,
-            description = "播放队列",
-            onClick = onOpenQueue,
-        )
-    }
-}
-
-@Composable
-private fun RoundDockButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    description: String,
-    onClick: () -> Unit,
-) {
-    val scheme = androidx.compose.material3.MaterialTheme.colorScheme
-    val dark = LocalEchoDarkTheme.current
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .shadow(
-                elevation = 9.dp,
-                shape = CircleShape,
-                ambientColor = Color.Black.copy(alpha = 0.05f),
-                spotColor = Color.Black.copy(alpha = 0.09f),
-            )
-            .clip(CircleShape)
-            .background(scheme.surface.copy(alpha = 0.92f))
-            .border(
-                BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else EchoGlassBorder),
-                CircleShape,
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = description,
-            tint = scheme.primary,
-            modifier = Modifier.size(24.dp),
-        )
-    }
+    MiniPlayer(
+        status = status,
+        positionState = positionState,
+        onPlayPause = onPlayPause,
+        onShowDock = onShowDock,
+        onOpenQueue = onOpenQueue,
+        onExpand = onExpand,
+        onNext = onNext,
+        onPrevious = onPrevious,
+        modifier = modifier
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .fillMaxWidth(),
+    )
 }
 
 private fun currentMinuteNow(): Int {

@@ -131,10 +131,10 @@ private fun UsbOutputPanel(status: EchoPlaybackStatus) {
                 "链路",
                 when {
                     diagnostics.usbBitPerfectActive -> "USB 独占 · bit-perfect"
-                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionPending -> "USB 独占请求中"
-                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionGranted && diagnostics.usbAudioHasIsochronousOut -> "USB 独占已授权 · ISO 待驱动"
-                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionGranted -> "USB 独占已授权"
-                    diagnostics.usbExclusiveEnabled && diagnostics.usbConnected -> "USB 独占待授权"
+                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionPending -> "等待 USB 授权"
+                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionGranted && diagnostics.usbAudioHasIsochronousOut -> "USB 已授权 · ISO 待驱动"
+                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionGranted -> "USB 已授权 · 待接管"
+                    diagnostics.usbExclusiveEnabled && diagnostics.usbConnected -> "USB 未授权 · 未独占"
                     diagnostics.usbHostPermissionGranted -> "USB host 已授权"
                     diagnostics.usbHostPermissionPending -> "等待 USB 授权"
                     diagnostics.usbBitPerfectSupported -> "支持 bit-perfect"

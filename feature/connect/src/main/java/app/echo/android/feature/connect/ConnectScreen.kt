@@ -113,6 +113,26 @@ fun ConnectScreen(
     var webDavExpanded by rememberSaveable(webDavServerUrl, webDavUsername, webDavPassword) {
         mutableStateOf(!webDavServerUrl.isNullOrBlank() || !webDavUsername.isNullOrBlank() || !webDavPassword.isNullOrBlank())
     }
+    var subsonicExpanded by rememberSaveable(subsonicServerUrl, subsonicUsername, subsonicPassword) {
+        mutableStateOf(!subsonicServerUrl.isNullOrBlank() || !subsonicUsername.isNullOrBlank() || !subsonicPassword.isNullOrBlank())
+    }
+    var remoteSourcesExpanded by rememberSaveable(
+        subsonicServerUrl,
+        subsonicUsername,
+        subsonicPassword,
+        webDavServerUrl,
+        webDavUsername,
+        webDavPassword,
+    ) {
+        mutableStateOf(
+            !subsonicServerUrl.isNullOrBlank() ||
+                !subsonicUsername.isNullOrBlank() ||
+                !subsonicPassword.isNullOrBlank() ||
+                !webDavServerUrl.isNullOrBlank() ||
+                !webDavUsername.isNullOrBlank() ||
+                !webDavPassword.isNullOrBlank(),
+        )
+    }
     PageChrome(title = "连接", subtitle = "串流服务 · PC 联动", badge = "互联", scrollable = true) {
         EchoSectionTitle("音乐服务", "连接你的曲库来源")
         Spacer(Modifier.height(12.dp))
@@ -123,8 +143,12 @@ fun ConnectScreen(
             webDavServerUrl = webDavServerInput,
             webDavUsername = webDavUserInput,
             webDavPassword = webDavPasswordInput,
+            expanded = remoteSourcesExpanded || remoteScanState.isScanning,
+            subsonicExpanded = subsonicExpanded,
             webDavExpanded = webDavExpanded,
             scanState = remoteScanState,
+            onExpandedChange = { remoteSourcesExpanded = it },
+            onSubsonicExpandedChange = { subsonicExpanded = it },
             onWebDavExpandedChange = { webDavExpanded = it },
             onSubsonicServerUrlChange = { subsonicServerInput = it },
             onSubsonicUsernameChange = { subsonicUserInput = it },
@@ -133,6 +157,8 @@ fun ConnectScreen(
                 onSaveSubsonicCredentials(subsonicServerInput, subsonicUserInput, subsonicPasswordInput)
             },
             onSyncSubsonic = {
+                remoteSourcesExpanded = true
+                subsonicExpanded = true
                 onSyncSubsonicLibrary(subsonicServerInput, subsonicUserInput, subsonicPasswordInput)
             },
             onClearSubsonic = {
@@ -148,6 +174,7 @@ fun ConnectScreen(
                 onSaveWebDavCredentials(webDavServerInput, webDavUserInput, webDavPasswordInput)
             },
             onSyncWebDav = {
+                remoteSourcesExpanded = true
                 webDavExpanded = true
                 onSyncWebDavLibrary(webDavServerInput, webDavUserInput, webDavPasswordInput)
             },
@@ -300,8 +327,12 @@ private fun RemoteSourcesPanel(
     webDavServerUrl: String,
     webDavUsername: String,
     webDavPassword: String,
+    expanded: Boolean,
+    subsonicExpanded: Boolean,
     webDavExpanded: Boolean,
     scanState: LibraryScanProgress,
+    onExpandedChange: (Boolean) -> Unit,
+    onSubsonicExpandedChange: (Boolean) -> Unit,
     onWebDavExpandedChange: (Boolean) -> Unit,
     onSubsonicServerUrlChange: (String) -> Unit,
     onSubsonicUsernameChange: (String) -> Unit,
@@ -346,6 +377,9 @@ private fun RemoteSourcesPanel(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onExpandedChange(!expanded) },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(13.dp),
             ) {
@@ -380,51 +414,59 @@ private fun RemoteSourcesPanel(
                     active = readyCount > 0 && scanState.phase != LibraryScanPhase.Error,
                     locked = readyCount == 0 && !scanState.isScanning,
                 )
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = if (expanded) "折叠远程曲库" else "展开远程曲库",
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
+                )
             }
-            RemoteSourceProviderSection(
-                title = "Subsonic / Navidrome",
-                subtitle = "同步服务器曲库、封面和播放地址",
-                serverLabel = "服务器地址",
-                serverPlaceholder = "https://music.example.com",
-                usernameLabel = "用户名",
-                passwordLabel = "密码",
-                serverUrl = subsonicServerUrl,
-                username = subsonicUsername,
-                password = subsonicPassword,
-                expanded = true,
-                expandable = false,
-                scanState = scanState,
-                onExpandedChange = {},
-                onServerUrlChange = onSubsonicServerUrlChange,
-                onUsernameChange = onSubsonicUsernameChange,
-                onPasswordChange = onSubsonicPasswordChange,
-                onSave = onSaveSubsonic,
-                onSync = onSyncSubsonic,
-                onCancel = onCancel,
-                onClear = onClearSubsonic,
-            )
-            RemoteSourceProviderSection(
-                title = "WebDAV / 网盘",
-                subtitle = "按文件夹同步 NAS 或网盘音乐目录",
-                serverLabel = "WebDAV 地址",
-                serverPlaceholder = "https://dav.example.com/music",
-                usernameLabel = "WebDAV 用户名",
-                passwordLabel = "WebDAV 密码",
-                serverUrl = webDavServerUrl,
-                username = webDavUsername,
-                password = webDavPassword,
-                expanded = webDavExpanded,
-                expandable = true,
-                scanState = scanState,
-                onExpandedChange = onWebDavExpandedChange,
-                onServerUrlChange = onWebDavServerUrlChange,
-                onUsernameChange = onWebDavUsernameChange,
-                onPasswordChange = onWebDavPasswordChange,
-                onSave = onSaveWebDav,
-                onSync = onSyncWebDav,
-                onCancel = onCancel,
-                onClear = onClearWebDav,
-            )
+            if (expanded) {
+                RemoteSourceProviderSection(
+                    title = "Subsonic / Navidrome",
+                    subtitle = "同步服务器曲库、封面和播放地址",
+                    serverLabel = "服务器地址",
+                    serverPlaceholder = "https://music.example.com",
+                    usernameLabel = "用户名",
+                    passwordLabel = "密码",
+                    serverUrl = subsonicServerUrl,
+                    username = subsonicUsername,
+                    password = subsonicPassword,
+                    expanded = subsonicExpanded,
+                    expandable = true,
+                    scanState = scanState,
+                    onExpandedChange = onSubsonicExpandedChange,
+                    onServerUrlChange = onSubsonicServerUrlChange,
+                    onUsernameChange = onSubsonicUsernameChange,
+                    onPasswordChange = onSubsonicPasswordChange,
+                    onSave = onSaveSubsonic,
+                    onSync = onSyncSubsonic,
+                    onCancel = onCancel,
+                    onClear = onClearSubsonic,
+                )
+                RemoteSourceProviderSection(
+                    title = "WebDAV / 网盘",
+                    subtitle = "按文件夹同步 NAS 或网盘音乐目录",
+                    serverLabel = "WebDAV 地址",
+                    serverPlaceholder = "https://dav.example.com/music",
+                    usernameLabel = "WebDAV 用户名",
+                    passwordLabel = "WebDAV 密码",
+                    serverUrl = webDavServerUrl,
+                    username = webDavUsername,
+                    password = webDavPassword,
+                    expanded = webDavExpanded,
+                    expandable = true,
+                    scanState = scanState,
+                    onExpandedChange = onWebDavExpandedChange,
+                    onServerUrlChange = onWebDavServerUrlChange,
+                    onUsernameChange = onWebDavUsernameChange,
+                    onPasswordChange = onWebDavPasswordChange,
+                    onSave = onSaveWebDav,
+                    onSync = onSyncWebDav,
+                    onCancel = onCancel,
+                    onClear = onClearWebDav,
+                )
+            }
         }
     }
 }
@@ -644,8 +686,8 @@ private fun remoteSourcesSummary(scanState: LibraryScanProgress, readyCount: Int
         scanState.isScanning -> remoteLibraryDetail(scanState, ready = true)
         scanState.phase == LibraryScanPhase.Completed -> remoteLibraryDetail(scanState, ready = true)
         scanState.phase == LibraryScanPhase.Error -> remoteLibraryDetail(scanState, ready = false)
-        readyCount > 0 -> "Subsonic 已展开 · WebDAV / NAS 按需展开"
-        else -> "优先配置 Subsonic · WebDAV / 网盘默认折叠"
+        readyCount > 0 -> "点按展开 · Subsonic / WebDAV 可独立折叠"
+        else -> "点按配置 Subsonic · WebDAV / 网盘"
     }
 
 private fun remoteScanPhaseLabel(phase: LibraryScanPhase): String =

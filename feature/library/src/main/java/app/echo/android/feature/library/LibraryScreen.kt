@@ -1,5 +1,15 @@
 package app.echo.android.feature.library
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -80,6 +90,8 @@ import app.echo.android.model.library.EchoTrack
 import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanProgress
 
+private val LibraryFolderMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
+
 internal enum class LibraryViewMode(
     val label: String,
     val icon: ImageVector,
@@ -155,99 +167,126 @@ fun LibraryScreen(
     }
 
     val activeFolderDetail = selectedFolder
-    if (activeFolderDetail != null && folderDetailTracks != null) {
-        LibraryDetailPage(
-            title = folderDisplayName(activeFolderDetail),
-            subtitle = folderSubtitle(activeFolderDetail),
-            tracks = folderDetailTracks,
-            onBack = onCloseDetail,
-            onPlayAll = { onPlayFolder(activeFolderDetail) },
-            onPlayTrack = onPlayTrack,
-            modifier = Modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    PageChrome(
-        title = "曲库",
-        subtitle = null,
-        badge = "本地",
-        showBrand = false,
-        compactHeader = true,
-        actions = {
-            LibraryScanAction(
-                hasPermission = hasPermission,
-                scanState = scanState,
-                onRequestPermission = onRequestPermission,
-                onScanFolder = onScanFolder,
-                onScanAll = onScanAll,
-                onCancelScan = onCancelScan,
-            )
+    AnimatedContent(
+        targetState = activeFolderDetail != null && folderDetailTracks != null,
+        transitionSpec = {
+            if (targetState) {
+                val enter = slideInHorizontally(tween(durationMillis = 360, easing = LibraryFolderMotionEasing)) { it / 3 } +
+                    fadeIn(tween(durationMillis = 180, easing = LibraryFolderMotionEasing)) +
+                    scaleIn(
+                        initialScale = 0.985f,
+                        animationSpec = tween(durationMillis = 360, easing = LibraryFolderMotionEasing),
+                    )
+                val exit = slideOutHorizontally(tween(durationMillis = 220, easing = LibraryFolderMotionEasing)) { -it / 8 } +
+                    fadeOut(tween(durationMillis = 140, easing = LibraryFolderMotionEasing)) +
+                    scaleOut(
+                        targetScale = 0.992f,
+                        animationSpec = tween(durationMillis = 220, easing = LibraryFolderMotionEasing),
+                    )
+                enter togetherWith exit
+            } else {
+                val enter = slideInHorizontally(tween(durationMillis = 320, easing = LibraryFolderMotionEasing)) { -it / 5 } +
+                    fadeIn(tween(durationMillis = 160, easing = LibraryFolderMotionEasing))
+                val exit = slideOutHorizontally(tween(durationMillis = 240, easing = LibraryFolderMotionEasing)) { it / 3 } +
+                    fadeOut(tween(durationMillis = 140, easing = LibraryFolderMotionEasing))
+                enter togetherWith exit
+            }
         },
-    ) {
-        when {
-            scanState.isScanning -> LibraryScanStatus(scanState = scanState, onCancelScan = onCancelScan)
-            tracks.loadState.refresh is LoadState.Loading -> {
-                LibraryBrowserHeader(
-                    scanState = scanState,
-                    selectedMode = selectedMode,
-                    onSelectMode = { mode -> selectedModeIndex = mode.ordinal },
-                )
-                EmptyState("正在加载曲库...")
-            }
-            tracks.loadState.refresh is LoadState.Error -> {
-                LibraryBrowserHeader(
-                    scanState = scanState,
-                    selectedMode = selectedMode,
-                    onSelectMode = { mode -> selectedModeIndex = mode.ordinal },
-                )
-                EmptyState("曲库查询失败。")
-            }
-            else -> {
-                LibraryBrowserHeader(
-                    scanState = scanState,
-                    selectedMode = selectedMode,
-                    onSelectMode = { mode -> selectedModeIndex = mode.ordinal },
-                )
-                Box(modifier = Modifier.weight(1f)) {
-                    when (selectedMode) {
-                        LibraryViewMode.Songs -> {
-                            if (!hasPermission) {
-                                EmptyState("授权后即可索引本地音乐；云端曲库可直接进入“网盘”页。")
-                            } else if (tracks.itemCount == 0) {
-                                LibraryBootstrapState()
-                            } else {
-                                TrackList(
-                                    tracks = tracks,
-                                    onPlayTrack = onPlayTrack,
+        label = "library-folder-detail-transition",
+        modifier = Modifier.fillMaxSize(),
+    ) { showFolderDetail ->
+        if (showFolderDetail && activeFolderDetail != null && folderDetailTracks != null) {
+            FolderDetailPage(
+                folder = activeFolderDetail,
+                tracks = folderDetailTracks,
+                onBack = onCloseDetail,
+                onPlayAll = { onPlayFolder(activeFolderDetail) },
+                onPlayTrack = onPlayTrack,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            PageChrome(
+                title = "曲库",
+                subtitle = null,
+                badge = "本地",
+                showBrand = false,
+                compactHeader = true,
+                actions = {
+                    LibraryScanAction(
+                        hasPermission = hasPermission,
+                        scanState = scanState,
+                        onRequestPermission = onRequestPermission,
+                        onScanFolder = onScanFolder,
+                        onScanAll = onScanAll,
+                        onCancelScan = onCancelScan,
+                    )
+                },
+            ) {
+                when {
+                    scanState.isScanning -> LibraryScanStatus(scanState = scanState, onCancelScan = onCancelScan)
+                    tracks.loadState.refresh is LoadState.Loading -> {
+                        LibraryBrowserHeader(
+                            scanState = scanState,
+                            selectedMode = selectedMode,
+                            onSelectMode = { mode -> selectedModeIndex = mode.ordinal },
+                        )
+                        EmptyState("正在加载曲库...")
+                    }
+                    tracks.loadState.refresh is LoadState.Error -> {
+                        LibraryBrowserHeader(
+                            scanState = scanState,
+                            selectedMode = selectedMode,
+                            onSelectMode = { mode -> selectedModeIndex = mode.ordinal },
+                        )
+                        EmptyState("曲库查询失败。")
+                    }
+                    else -> {
+                        LibraryBrowserHeader(
+                            scanState = scanState,
+                            selectedMode = selectedMode,
+                            onSelectMode = { mode -> selectedModeIndex = mode.ordinal },
+                        )
+                        Box(modifier = Modifier.weight(1f)) {
+                            when (selectedMode) {
+                                LibraryViewMode.Songs -> {
+                                    if (!hasPermission) {
+                                        EmptyState("授权后即可索引本地音乐；云端曲库可直接进入“网盘”页。")
+                                    } else if (tracks.itemCount == 0) {
+                                        LibraryBootstrapState()
+                                    } else {
+                                        TrackList(
+                                            tracks = tracks,
+                                            onPlayTrack = onPlayTrack,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    }
+                                }
+
+                                LibraryViewMode.Folders -> FolderList(
+                                    folders = folders,
+                                    onOpenFolder = onOpenFolder,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                LibraryViewMode.Albums -> AlbumWall(
+                                    albums = albums,
+                                    onOpenAlbum = onOpenAlbum,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                LibraryViewMode.Artists -> ArtistWall(
+                                    artists = artists,
+                                    onOpenArtist = onOpenArtist,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                LibraryViewMode.Cloud -> AlbumWall(
+                                    albums = remoteAlbums,
+                                    onOpenAlbum = onOpenAlbum,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
                         }
-
-                        LibraryViewMode.Folders -> FolderList(
-                            folders = folders,
-                            onOpenFolder = onOpenFolder,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-
-                        LibraryViewMode.Albums -> AlbumWall(
-                            albums = albums,
-                            onOpenAlbum = onOpenAlbum,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-
-                        LibraryViewMode.Artists -> ArtistWall(
-                            artists = artists,
-                            onOpenArtist = onOpenArtist,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-
-                        LibraryViewMode.Cloud -> AlbumWall(
-                            albums = remoteAlbums,
-                            onOpenAlbum = onOpenAlbum,
-                            modifier = Modifier.fillMaxSize(),
-                        )
                     }
                 }
             }

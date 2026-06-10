@@ -30,9 +30,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.CloudQueue
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Scanner
@@ -204,8 +207,8 @@ internal fun FolderList(
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(bottom = LibraryBottomControlsPadding),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = 2.dp, bottom = LibraryBottomControlsPadding),
     ) {
         items(
             count = folders.itemCount,
@@ -226,27 +229,56 @@ private fun FolderRow(
     onClick: () -> Unit,
 ) {
     val colors = rememberLibraryGlassColors()
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colors.surface)
-            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(16.dp))
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(22.dp),
+                ambientColor = Color.Black.copy(alpha = 0.04f),
+                spotColor = EchoAccent.copy(alpha = 0.08f),
+            )
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        colors.surface,
+                        colors.elevatedSurface,
+                        EchoAccent.copy(alpha = if (dark) 0.12f else 0.06f),
+                    ),
+                ),
+            )
+            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(22.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 14.dp, vertical = 13.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            EchoIconBadge(Icons.Rounded.LibraryMusic)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(58.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Brush.linearGradient(listOf(EchoAccent.copy(alpha = 0.22f), EchoAccentDeep.copy(alpha = 0.13f))))
+                    .border(BorderStroke(1.dp, EchoAccent.copy(alpha = if (dark) 0.28f else 0.20f)), RoundedCornerShape(18.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.FolderOpen,
+                    contentDescription = null,
+                    tint = EchoAccentDeep,
+                    modifier = Modifier.size(29.dp),
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(
                     folderDisplayName(folder),
                     color = colors.content,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -257,15 +289,52 @@ private fun FolderRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FolderMetaChip(
+                        icon = Icons.Rounded.MusicNote,
+                        text = "${folder.trackCount} 首",
+                    )
+                    folder.albumCount.takeIf { it > 0 }?.let {
+                        FolderMetaChip(
+                            icon = Icons.Rounded.LibraryMusic,
+                            text = "$it 张",
+                        )
+                    }
+                }
             }
-            Text(
-                "${folder.trackCount} 首",
-                color = EchoAccentText,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = "打开文件夹",
+                tint = EchoAccentText,
+                modifier = Modifier.size(26.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun FolderMetaChip(
+    icon: ImageVector,
+    text: String,
+) {
+    val colors = rememberLibraryGlassColors()
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = if (LocalEchoDarkTheme.current) 0.18f else 0.10f))
+            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)), RoundedCornerShape(99.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = EchoAccentText, modifier = Modifier.size(14.dp))
+        Text(
+            text,
+            color = colors.content,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
     }
 }
 
@@ -525,11 +594,11 @@ internal fun ArtistWall(
         return
     }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 158.dp),
+        columns = GridCells.Fixed(3),
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = LibraryBottomControlsPadding),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = PaddingValues(top = 6.dp, bottom = LibraryBottomControlsPadding),
     ) {
         items(
             count = artists.itemCount,
@@ -552,10 +621,11 @@ internal fun ArtistWallCard(
     val colors = rememberLibraryGlassColors()
     Column(
         modifier = Modifier
+            .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 8.dp),
+            .padding(horizontal = 2.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         ArtistWallAvatar(
             artworkUri = artist.artworkUri,
@@ -564,7 +634,7 @@ internal fun ArtistWallCard(
         Text(
             artist.name,
             color = colors.content,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -573,8 +643,10 @@ internal fun ArtistWallCard(
         Text(
             "${artist.albumCount} 张专辑 · ${artist.trackCount} 首",
             color = colors.muted,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelMedium,
             textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -587,9 +659,9 @@ private fun ArtistWallAvatar(
     val shape = CircleShape
     Box(
         modifier = Modifier
-            .size(86.dp)
+            .size(76.dp)
             .shadow(
-                elevation = 8.dp,
+                elevation = 6.dp,
                 shape = shape,
                 clip = false,
                 ambientColor = Color.Black.copy(alpha = 0.06f),

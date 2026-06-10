@@ -1,5 +1,6 @@
 package app.echo.android.feature.settings
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,8 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -27,6 +32,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -239,10 +248,10 @@ internal fun SignalFlowPanel(
 private fun EchoPlaybackDiagnostics.signalOutputStageDetail(fallback: String): String =
     when {
         usbBitPerfectActive -> "USB 独占 · bit-perfect"
-        usbExclusiveEnabled && usbHostPermissionPending -> "USB 独占 · 请求中"
-        usbExclusiveEnabled && usbHostPermissionGranted && usbAudioHasIsochronousOut -> "USB 独占 · ISO 待驱动"
-        usbExclusiveEnabled && usbHostPermissionGranted -> "USB 独占 · 已授权"
-        usbExclusiveEnabled && usbConnected -> "USB 独占 · 待授权"
+        usbExclusiveEnabled && usbHostPermissionPending -> "等待 USB 授权"
+        usbExclusiveEnabled && usbHostPermissionGranted && usbAudioHasIsochronousOut -> "USB 已授权 · ISO 待驱动"
+        usbExclusiveEnabled && usbHostPermissionGranted -> "USB 已授权 · 待接管"
+        usbExclusiveEnabled && usbConnected -> "USB 未授权 · 未独占"
         usbConnected -> "USB mixer"
         else -> fallback
     }
@@ -250,9 +259,9 @@ private fun EchoPlaybackDiagnostics.signalOutputStageDetail(fallback: String): S
 private fun EchoPlaybackDiagnostics.usbExclusiveFlowChipLabel(): String =
     when {
         usbBitPerfectActive -> "独占已接管"
-        usbExclusiveEnabled && usbHostPermissionPending -> "独占请求中"
-        usbExclusiveEnabled && usbHostPermissionGranted -> "独占已授权"
-        usbExclusiveEnabled -> "独占待授权"
+        usbExclusiveEnabled && usbHostPermissionPending -> "等待授权"
+        usbExclusiveEnabled && usbHostPermissionGranted -> "已授权未接管"
+        usbExclusiveEnabled -> "未授权"
         usbConnected -> "独占关闭"
         else -> "USB 未连接"
     }
@@ -273,12 +282,14 @@ internal fun EqualizerPanel(
 ) {
     val scheme = MaterialTheme.colorScheme
     val dark = LocalEchoDarkTheme.current
+    var expanded by rememberSaveable { mutableStateOf(false) }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
             .background(signalPanelColor(0.64f))
             .border(signalPanelBorder(0.84f), RoundedCornerShape(24.dp))
+            .animateContentSize()
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -287,7 +298,14 @@ internal fun EqualizerPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { expanded = !expanded }
+                        .padding(vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
                     EchoSectionTitle("EQ", equalizerDetail(state))
                     state.warning?.let { warning ->
                         Text(
@@ -299,59 +317,76 @@ internal fun EqualizerPanel(
                         )
                     }
                 }
-                Switch(
-                    checked = state.enabled,
-                    onCheckedChange = onEnabledChange,
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = if (expanded) "折叠 EQ" else "展开 EQ",
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { expanded = !expanded }
+                            .padding(2.dp)
+                            .size(24.dp),
+                    )
+                    Switch(
+                        checked = state.enabled,
+                        onCheckedChange = onEnabledChange,
+                    )
+                }
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                EchoEqualizerPresets.presets.forEach { preset ->
+            if (expanded) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    EchoEqualizerPresets.presets.forEach { preset ->
+                        EqualizerPresetChip(
+                            label = preset.name,
+                            selected = state.presetId == preset.id,
+                            enabled = true,
+                            onClick = { onPresetSelected(preset.id) },
+                        )
+                    }
                     EqualizerPresetChip(
-                        label = preset.name,
-                        selected = state.presetId == preset.id,
+                        label = "Reset",
+                        selected = false,
                         enabled = true,
-                        onClick = { onPresetSelected(preset.id) },
+                        onClick = onReset,
                     )
                 }
-                EqualizerPresetChip(
-                    label = "Reset",
-                    selected = false,
-                    enabled = true,
-                    onClick = onReset,
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    state.bands.forEach { band ->
+                        EqualizerBandSlider(
+                            label = formatEqFrequency(band.frequencyHz),
+                            gainDb = band.gainDb,
+                            range = band.minGainDb..band.maxGainDb,
+                            enabled = state.enabled,
+                            dark = dark,
+                            onGainChange = { onBandGainChange(band.index, it) },
+                        )
+                    }
+                }
+                EchoPlaceholderLine(
+                    if (state.active) {
+                        "EQ 正在处理当前音频；bit-perfect 不再成立"
+                    } else {
+                        "关闭或 Flat 时保持原始输出路径"
+                    },
+                )
+                OpraCorrectionPanel(
+                    state = opraState,
+                    onQueryChange = onOpraQueryChange,
+                    onSearch = onOpraSearch,
+                    onRefresh = onOpraRefresh,
+                    onPresetSelected = onOpraPresetSelected,
+                    onApplySelected = onOpraApplySelected,
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                state.bands.forEach { band ->
-                    EqualizerBandSlider(
-                        label = formatEqFrequency(band.frequencyHz),
-                        gainDb = band.gainDb,
-                        range = band.minGainDb..band.maxGainDb,
-                        enabled = state.enabled,
-                        dark = dark,
-                        onGainChange = { onBandGainChange(band.index, it) },
-                    )
-                }
-            }
-            EchoPlaceholderLine(
-                if (state.active) {
-                    "EQ 正在处理当前音频；bit-perfect 不再成立"
-                } else {
-                    "关闭或 Flat 时保持原始输出路径"
-                },
-            )
-            OpraCorrectionPanel(
-                state = opraState,
-                onQueryChange = onOpraQueryChange,
-                onSearch = onOpraSearch,
-                onRefresh = onOpraRefresh,
-                onPresetSelected = onOpraPresetSelected,
-                onApplySelected = onOpraApplySelected,
-            )
         }
     }
 }
