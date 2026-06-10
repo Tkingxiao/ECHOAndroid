@@ -4,6 +4,7 @@ import android.content.Context
 import app.echo.android.model.playback.EchoPlaybackDiagnostics
 import app.echo.android.usbaudio.UsbExclusiveOutputState
 import app.echo.android.usbaudio.UsbExclusivePcmOutput
+import app.echo.android.usbaudio.UsbEndpointTransferType
 import app.echo.android.usbaudio.UsbPcmFormatSpec
 
 class EchoUsbExclusiveDriverTester(context: Context) {
@@ -29,7 +30,11 @@ class EchoUsbExclusiveDriverTester(context: Context) {
             val endpoint = format?.endpointAddress?.let { "0x${it.toString(16)}" } ?: "none"
             when (result.state) {
                 UsbExclusiveOutputState.Ready ->
-                    "Ready: claimed UAC interface ${format?.interfaceNumber}:${format?.alternateSetting}, endpoint=$endpoint, target=$target"
+                    if (format?.endpointTransferType == UsbEndpointTransferType.Isochronous) {
+                        "Claimed: UAC interface ${format.interfaceNumber}:${format.alternateSetting}, endpoint=$endpoint, target=$target; native isochronous writer is still required"
+                    } else {
+                        "Ready: claimed UAC interface ${format?.interfaceNumber}:${format?.alternateSetting}, endpoint=$endpoint, target=$target"
+                    }
                 UsbExclusiveOutputState.PermissionDenied ->
                     "Permission denied: enable USB exclusive and allow ECHO in the system USB dialog"
                 UsbExclusiveOutputState.DeviceUnavailable ->

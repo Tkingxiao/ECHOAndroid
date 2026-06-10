@@ -37,16 +37,32 @@ import app.echo.android.design.PageChrome
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
 import app.echo.android.design.formatDuration
+import app.echo.android.model.playback.EchoEqualizerState
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
+import app.echo.android.model.playback.OpraHeadphoneCorrectionState
 
 @Composable
-fun DiagnosticsScreen(status: EchoPlaybackStatus) {
+fun DiagnosticsScreen(
+    status: EchoPlaybackStatus,
+    equalizerState: EchoEqualizerState,
+    opraState: OpraHeadphoneCorrectionState,
+    onEqualizerEnabledChange: (Boolean) -> Unit,
+    onEqualizerPresetSelected: (String) -> Unit,
+    onEqualizerBandGainChange: (Int, Float) -> Unit,
+    onEqualizerReset: () -> Unit,
+    onOpraQueryChange: (String) -> Unit,
+    onOpraSearch: () -> Unit,
+    onOpraRefresh: () -> Unit,
+    onOpraPresetSelected: (String) -> Unit,
+    onOpraApplySelected: () -> Unit,
+) {
     val diagnostics = status.diagnostics
     val bufferSeconds = "${diagnostics.bufferedMs / 1000}s"
     val codec = diagnostics.codec ?: "Media3"
     val lastCommand = commandLabel(diagnostics.lastCommand)
+    val dspActive = diagnostics.offloadActive || equalizerState.active
     PageChrome(title = "信号", subtitle = "音频链路与解码状态", badge = "状态", scrollable = true) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SignalHeroCard(
@@ -59,7 +75,21 @@ fun DiagnosticsScreen(status: EchoPlaybackStatus) {
             SignalFlowPanel(
                 codec = codec,
                 output = diagnostics.outputRoute,
-                offloadActive = diagnostics.offloadActive,
+                dspActive = dspActive,
+                diagnostics = diagnostics,
+            )
+            EqualizerPanel(
+                state = equalizerState,
+                opraState = opraState,
+                onEnabledChange = onEqualizerEnabledChange,
+                onPresetSelected = onEqualizerPresetSelected,
+                onBandGainChange = onEqualizerBandGainChange,
+                onReset = onEqualizerReset,
+                onOpraQueryChange = onOpraQueryChange,
+                onOpraSearch = onOpraSearch,
+                onOpraRefresh = onOpraRefresh,
+                onOpraPresetSelected = onOpraPresetSelected,
+                onOpraApplySelected = onOpraApplySelected,
             )
             UsbOutputPanel(status = status)
             CurrentStreamPanel(
@@ -100,7 +130,11 @@ private fun UsbOutputPanel(status: EchoPlaybackStatus) {
             UsbOutputLine(
                 "链路",
                 when {
-                    diagnostics.usbBitPerfectActive -> "bit-perfect active"
+                    diagnostics.usbBitPerfectActive -> "USB 独占 · bit-perfect"
+                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionPending -> "USB 独占请求中"
+                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionGranted && diagnostics.usbAudioHasIsochronousOut -> "USB 独占已授权 · ISO 待驱动"
+                    diagnostics.usbExclusiveEnabled && diagnostics.usbHostPermissionGranted -> "USB 独占已授权"
+                    diagnostics.usbExclusiveEnabled && diagnostics.usbConnected -> "USB 独占待授权"
                     diagnostics.usbHostPermissionGranted -> "USB host 已授权"
                     diagnostics.usbHostPermissionPending -> "等待 USB 授权"
                     diagnostics.usbBitPerfectSupported -> "支持 bit-perfect"

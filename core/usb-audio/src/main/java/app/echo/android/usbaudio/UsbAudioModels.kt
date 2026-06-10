@@ -120,3 +120,38 @@ data class UsbPcmWriteResult(
     val bytesWritten: Int = 0,
     val message: String? = null,
 )
+
+enum class UsbExclusiveCapabilityState {
+    ReadyForFrameworkBulkWrite,
+    NativeIsochronousWriterRequired,
+    PermissionRequired,
+    DeviceUnavailable,
+    FormatUnavailable,
+}
+
+data class UsbExclusiveCapability(
+    val state: UsbExclusiveCapabilityState,
+    val selectedFormat: UsbAudioStreamingFormat? = null,
+    val message: String,
+)
+
+enum class PcmEncoding {
+    PcmInteger,
+    PcmFloat,
+}
+
+data class PcmStreamDescriptor(
+    val sampleRateHz: Int,
+    val channelCount: Int,
+    val bitDepth: Int,
+    val encoding: PcmEncoding,
+    val dataOffset: Int,
+    val dataSize: Int,
+) {
+    val formatSpec: UsbPcmFormatSpec
+        get() = UsbPcmFormatSpec(
+            sampleRateHz = sampleRateHz,
+            channelCount = channelCount,
+            bitDepth = bitDepth,
+        )
+}

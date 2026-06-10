@@ -9,6 +9,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.playback.EchoEqualizerState
 import app.echo.android.model.playback.EchoAudioErrorKind
 import app.echo.android.model.playback.EchoPlaybackDiagnostics
 import app.echo.android.model.playback.EchoPlaybackError
@@ -18,6 +19,8 @@ import app.echo.android.model.playback.PlaybackControlsState
 import app.echo.android.model.playback.PlaybackDiagnosticsState
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
+import app.echo.android.model.playback.OpraHeadphoneCorrectionPreset
+import app.echo.android.playback.EchoEqualizerController
 import app.echo.android.playback.EchoPlaybackService
 import app.echo.android.playback.EchoUsbExclusiveDriverTester
 import app.echo.android.playback.EchoUsbAudioMonitor
@@ -58,6 +61,9 @@ internal class PlaybackController(
     private val _playbackDiagnostics = MutableStateFlow(PlaybackDiagnosticsState())
     val playbackDiagnostics: StateFlow<PlaybackDiagnosticsState> = _playbackDiagnostics.asStateFlow()
 
+    private val equalizerController = EchoEqualizerController(scope)
+    val equalizerState: StateFlow<EchoEqualizerState> = equalizerController.state
+
     private val usbAudioMonitor = EchoUsbAudioMonitor(application)
     private val usbExclusiveDriverTester = EchoUsbExclusiveDriverTester(application)
     private var controller: MediaController? = null
@@ -83,6 +89,29 @@ internal class PlaybackController(
             usbAudioMonitor.prepareForTrack(_playbackDiagnostics.value.diagnostics.sampleRateHz)
         }
     }
+
+    fun setEqualizerConfig(enabled: Boolean, presetId: String, gainsDb: List<Float>) {
+        equalizerController.setConfig(enabled, presetId, gainsDb)
+    }
+
+    fun setEqualizerEnabled(enabled: Boolean) {
+        equalizerController.setEnabled(enabled)
+    }
+
+    fun setEqualizerPreset(presetId: String) {
+        equalizerController.setPreset(presetId)
+    }
+
+    fun setEqualizerBandGain(index: Int, gainDb: Float) {
+        equalizerController.setBandGain(index, gainDb)
+    }
+
+    fun resetEqualizer() {
+        equalizerController.reset()
+    }
+
+    fun applyOpraPreset(preset: OpraHeadphoneCorrectionPreset): List<Float> =
+        equalizerController.applyOpraPreset(preset)
 
     fun testUsbExclusiveDriver(): String =
         usbExclusiveDriverTester.testOpen(_playbackDiagnostics.value.diagnostics)
@@ -173,6 +202,7 @@ internal class PlaybackController(
         usbTransitionJob?.cancel()
         usbAudioMonitor.setExclusiveEnabled(false)
         usbAudioMonitor.stop()
+        equalizerController.release()
         controller?.removeListener(playerListener)
         controller?.release()
     }
@@ -249,6 +279,7 @@ internal class PlaybackController(
     }
 
     private fun updatePlaybackCore(player: Player) {
+        equalizerController.syncToAudioSession(player.audioSessionId)
         val metadata = player.toPlaybackMetadataState()
         val controls = player.toPlaybackControlsState()
         val sourceSampleRateHz = metadata.mediaId?.let(sampleRatesByMediaId::get)

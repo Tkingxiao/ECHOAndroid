@@ -56,7 +56,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -91,13 +90,14 @@ import app.echo.android.design.echoFontFamilyForMode
 import java.time.LocalTime
 import kotlin.math.absoluteValue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private val DockMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
 private val RouteMotionEasing = CubicBezierEasing(0.18f, 0.86f, 0.20f, 1f)
-private const val RouteMotionBaseDurationMs = 280
-private const val RouteMotionDistanceDurationMs = 44
-private const val RouteMotionMaxDurationMs = 420
+private const val RouteMotionBaseDurationMs = 240
+private const val RouteMotionDistanceDurationMs = 28
+private const val RouteMotionMaxDurationMs = 320
 private val LyricsDocumentMimeTypes = arrayOf("text/*", "application/xml", "application/octet-stream", "*/*")
 private val FontDocumentMimeTypes = arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream", "*/*")
 
@@ -137,9 +137,6 @@ private fun routeMotionSpec(fromPage: Int, toPage: Int): AnimationSpec<Float> {
         .coerceAtMost(RouteMotionMaxDurationMs)
     return tween(durationMillis = duration, easing = RouteMotionEasing)
 }
-
-private fun routePageOffset(currentPage: Int, currentPageOffsetFraction: Float, page: Int): Float =
-    ((currentPage - page) + currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f)
 
 @Composable
 fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
@@ -206,7 +203,6 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         ?: LastFmApiConfig.apiKey.takeIf { it.isNotBlank() }
     val lastFmSharedSecret = appSettings.lastFmSharedSecret?.takeIf { it.isNotBlank() }
         ?: LastFmApiConfig.sharedSecret.takeIf { it.isNotBlank() }
-    val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
     val lyricsState by viewModel.lyricsState.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val remoteScanState by viewModel.remoteScanState.collectAsStateWithLifecycle()
@@ -300,10 +296,12 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         pageCount = { EchoPagerPage.entries.size },
     )
     val appScope = rememberCoroutineScope()
+    val routeNavigationJob = remember { arrayOfNulls<Job>(1) }
     fun navigateToPage(page: EchoPagerPage) {
         val targetPage = page.ordinal
         page.dockTab?.let { selectedTab = it.ordinal }
-        appScope.launch {
+        routeNavigationJob[0]?.cancel()
+        routeNavigationJob[0] = appScope.launch {
             if (tabPagerState.currentPage != targetPage) {
                 tabPagerState.animateScrollToPage(
                     page = targetPage,
@@ -326,6 +324,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
             return
         }
         returnPage.dockTab?.let { selectedTab = it.ordinal }
+        routeNavigationJob[0]?.cancel()
         appScope.launch {
             try {
                 val targetPage = returnPage.ordinal
@@ -378,25 +377,10 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                 HorizontalPager(
                     state = tabPagerState,
                     userScrollEnabled = !libraryDetailOpen,
-                    beyondViewportPageCount = 1,
-                    pageSpacing = 8.dp,
+                    beyondViewportPageCount = 0,
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->
-                    val pageOffset = routePageOffset(
-                        currentPage = tabPagerState.currentPage,
-                        currentPageOffsetFraction = tabPagerState.currentPageOffsetFraction,
-                        page = page,
-                    )
-                    val pageScale = 0.972f + (1f - pageOffset) * 0.028f
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                alpha = 0.74f + (1f - pageOffset) * 0.26f
-                                scaleX = pageScale
-                                scaleY = pageScale
-                            },
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
                         when (EchoPagerPage.entries[page]) {
                             EchoPagerPage.Library -> LibraryScreen(
                                 hasPermission = hasAudioPermission,
@@ -625,7 +609,24 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onCancelRemoteSync = viewModel::cancelRemoteSync,
                             )
 
-                            EchoPagerPage.Diagnostics -> DiagnosticsScreen(status = playbackStatus)
+                            EchoPagerPage.Diagnostics -> {
+                                val equalizerState by viewModel.equalizerState.collectAsStateWithLifecycle()
+                                val opraState by viewModel.opraState.collectAsStateWithLifecycle()
+                                DiagnosticsScreen(
+                                    status = playbackStatus,
+                                    equalizerState = equalizerState,
+                                    opraState = opraState,
+                                    onEqualizerEnabledChange = viewModel::setEqualizerEnabled,
+                                    onEqualizerPresetSelected = viewModel::setEqualizerPreset,
+                                    onEqualizerBandGainChange = viewModel::setEqualizerBandGain,
+                                    onEqualizerReset = viewModel::resetEqualizer,
+                                    onOpraQueryChange = viewModel::updateOpraQuery,
+                                    onOpraSearch = { viewModel.searchOpraHeadphoneCorrections(refresh = false) },
+                                    onOpraRefresh = { viewModel.searchOpraHeadphoneCorrections(refresh = true) },
+                                    onOpraPresetSelected = viewModel::selectOpraPreset,
+                                    onOpraApplySelected = viewModel::applySelectedOpraPreset,
+                                )
+                            }
                         }
                     }
                 }
@@ -655,6 +656,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                         },
                         label = "bottom-controls-transition",
                     ) {
+                        val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
                         if (it) {
                             ExpandedBottomControls(
                                 status = playbackStatus,
@@ -695,6 +697,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                 exit = slideOutVertically(tween(durationMillis = 180, easing = DockMotionEasing)) { height -> height / 10 } +
                     fadeOut(tween(durationMillis = 140)),
             ) {
+                val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
                 NowPlayingScreen(
                     status = playbackStatus,
                     positionState = playbackPosition,

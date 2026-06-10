@@ -11,6 +11,7 @@ import app.echo.android.data.EchoLibraryRepository
 import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoSettingsStore
 import app.echo.android.data.MediaStoreTrackScanner
+import app.echo.android.data.OpraHeadphoneCorrectionRepository
 import app.echo.android.data.SubsonicEndpoint
 import app.echo.android.data.WebDavEndpoint
 import app.echo.android.lyrics.ImportedLyricsStore
@@ -28,8 +29,10 @@ import app.echo.android.model.connect.EchoRemotePlaybackState
 import app.echo.android.model.connect.EchoRemoteTrack
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoPlaybackState
+import app.echo.android.model.playback.EchoEqualizerState
 import app.echo.android.model.playback.PlaybackControlsState
 import app.echo.android.model.playback.PlaybackDiagnosticsState
+import app.echo.android.model.playback.OpraHeadphoneCorrectionState
 import app.echo.android.model.playback.PlaybackHeatmapDay
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
@@ -42,6 +45,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -53,6 +57,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         scanner = MediaStoreTrackScanner(application.contentResolver),
     )
     private val settingsStore = EchoSettingsStore(application)
+    private val opraRepository = OpraHeadphoneCorrectionRepository(application)
 
     private val libraryController = LibraryController(
         repository = repository,
@@ -96,6 +101,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val playbackPosition: StateFlow<PlaybackPositionState> = playbackController.playbackPosition
     val playbackControls: StateFlow<PlaybackControlsState> = playbackController.playbackControls
     val playbackDiagnostics: StateFlow<PlaybackDiagnosticsState> = playbackController.playbackDiagnostics
+    val equalizerState: StateFlow<EchoEqualizerState> = playbackController.equalizerState
     val lyricsState: StateFlow<EchoLyricsLoadState> = lyricsController.lyricsState
     val appSettings: Flow<EchoAppSettings> = settingsStore.appSettings
     val lastFmState: StateFlow<LastFmUiState> = lastFmController.uiState
@@ -120,6 +126,8 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val recentPlaybackHeatmap: StateFlow<List<PlaybackHeatmapDay>> = _recentPlaybackHeatmap.asStateFlow()
     private val _usbExclusiveTestResult = MutableStateFlow("尚未测试")
     val usbExclusiveTestResult: StateFlow<String> = _usbExclusiveTestResult.asStateFlow()
+    private val _opraState = MutableStateFlow(OpraHeadphoneCorrectionState())
+    val opraState: StateFlow<OpraHeadphoneCorrectionState> = _opraState.asStateFlow()
 
     private val albumPlaybackCounts = mutableMapOf<String, Int>()
     private val artistPlaybackCounts = mutableMapOf<String, Int>()
@@ -142,6 +150,11 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
                     settings.usbExclusiveEnabled
                 }
                 playbackController.setUsbExclusiveEnabled(shouldEnableUsbExclusive)
+                playbackController.setEqualizerConfig(
+                    enabled = settings.equalizerEnabled,
+                    presetId = settings.equalizerPreset,
+                    gainsDb = settings.equalizerBandGains,
+                )
                 if (firstSettingsEmission &&
                     settings.usbExclusiveEnabled &&
                     !settings.usbExclusiveAutoRequestOnStartup
@@ -341,6 +354,91 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     fun setUsbExclusiveAutoRequestOnStartup(enabled: Boolean) {
         updateSettings {
             setUsbExclusiveAutoRequestOnStartup(enabled)
+        }
+    }
+
+    fun setEqualizerEnabled(enabled: Boolean) {
+        playbackController.setEqualizerEnabled(enabled)
+        updateSettings {
+            setEqualizerEnabled(enabled)
+        }
+    }
+
+    fun setEqualizerPreset(presetId: String) {
+        playbackController.setEqualizerPreset(presetId)
+        updateSettings {
+            setEqualizerPreset(presetId)
+        }
+    }
+
+    fun setEqualizerBandGain(index: Int, gainDb: Float) {
+        playbackController.setEqualizerBandGain(index, gainDb)
+        val gainsDb = playbackController.equalizerState.value.gainsDb
+        updateSettings {
+            setEqualizerBandGains(gainsDb)
+        }
+    }
+
+    fun resetEqualizer() {
+        playbackController.resetEqualizer()
+        updateSettings {
+            resetEqualizer()
+        }
+    }
+
+    fun updateOpraQuery(query: String) {
+        _opraState.update { it.copy(query = query) }
+    }
+
+    fun searchOpraHeadphoneCorrections(refresh: Boolean = false) {
+        val query = _opraState.value.query.trim()
+        if (query.isBlank()) {
+            _opraState.update { it.copy(message = "输入耳机型号后再搜索") }
+            return
+        }
+        _opraState.update { it.copy(loading = true, message = null) }
+        viewModelScope.launch {
+            val result = opraRepository.search(query = query, refresh = refresh)
+            result
+                .onSuccess { searchResult ->
+                    _opraState.update {
+                        it.copy(
+                            loading = false,
+                            results = searchResult.products,
+                            status = searchResult.status,
+                            selectedEqId = searchResult.products.firstOrNull()?.presets?.firstOrNull()?.eqId,
+                            message = if (searchResult.products.isEmpty()) "OPRA 未找到匹配型号" else null,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _opraState.update {
+                        it.copy(
+                            loading = false,
+                            message = error.message ?: "OPRA 搜索失败",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun selectOpraPreset(eqId: String) {
+        _opraState.update { it.copy(selectedEqId = eqId) }
+    }
+
+    fun applySelectedOpraPreset() {
+        val preset = _opraState.value.selectedPreset
+        if (preset == null) {
+            _opraState.update { it.copy(message = "先选择一个 OPRA preset") }
+            return
+        }
+        val gainsDb = playbackController.applyOpraPreset(preset)
+        updateSettings {
+            setEqualizerEnabled(true)
+            setEqualizerBandGains(gainsDb)
+        }
+        _opraState.update {
+            it.copy(message = "已近似应用 ${preset.vendorName} ${preset.productName}")
         }
     }
 

@@ -3,6 +3,8 @@ package app.echo.android.feature.settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,10 +13,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -37,9 +47,15 @@ import app.echo.android.design.PageChrome
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
 import app.echo.android.design.formatDuration
+import app.echo.android.model.playback.EchoEqualizerPresets
+import app.echo.android.model.playback.EchoEqualizerState
+import app.echo.android.model.playback.EchoPlaybackDiagnostics
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
+import app.echo.android.model.playback.OpraHeadphoneCorrectionProduct
+import app.echo.android.model.playback.OpraHeadphoneCorrectionState
+import kotlin.math.roundToInt
 
 @Composable
 private fun signalPanelColor(lightAlpha: Float = 0.64f): Color {
@@ -185,8 +201,12 @@ internal fun SignalStatTile(
 internal fun SignalFlowPanel(
     codec: String,
     output: String,
-    offloadActive: Boolean,
+    dspActive: Boolean,
+    diagnostics: EchoPlaybackDiagnostics,
 ) {
+    val outputDetail = diagnostics.signalOutputStageDetail(output)
+    val usbExclusiveActive = diagnostics.usbExclusiveEnabled || diagnostics.usbBitPerfectActive
+    val outputAccent = if (usbExclusiveActive) Color(0xFF35C28E) else EchoAccent
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -205,14 +225,327 @@ internal fun SignalFlowPanel(
                 FlowArrow()
                 SignalFlowStage("解码", codec, EchoAccent, Modifier.weight(1f))
                 FlowArrow()
-                SignalFlowStage("输出", output, EchoAccent, Modifier.weight(1f))
+                SignalFlowStage("输出", outputDetail, outputAccent, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 FlowChip("本机优先", selected = true, Modifier.weight(1f))
-                FlowChip("DSP ${if (offloadActive) "开启" else "关闭"}", selected = offloadActive, Modifier.weight(1f))
-                FlowChip("PC 待接力", selected = false, Modifier.weight(1f))
+                FlowChip("DSP ${if (dspActive) "开启" else "关闭"}", selected = dspActive, Modifier.weight(1f))
+                FlowChip(diagnostics.usbExclusiveFlowChipLabel(), selected = usbExclusiveActive, Modifier.weight(1f))
             }
         }
+    }
+}
+
+private fun EchoPlaybackDiagnostics.signalOutputStageDetail(fallback: String): String =
+    when {
+        usbBitPerfectActive -> "USB 独占 · bit-perfect"
+        usbExclusiveEnabled && usbHostPermissionPending -> "USB 独占 · 请求中"
+        usbExclusiveEnabled && usbHostPermissionGranted && usbAudioHasIsochronousOut -> "USB 独占 · ISO 待驱动"
+        usbExclusiveEnabled && usbHostPermissionGranted -> "USB 独占 · 已授权"
+        usbExclusiveEnabled && usbConnected -> "USB 独占 · 待授权"
+        usbConnected -> "USB mixer"
+        else -> fallback
+    }
+
+private fun EchoPlaybackDiagnostics.usbExclusiveFlowChipLabel(): String =
+    when {
+        usbBitPerfectActive -> "独占已接管"
+        usbExclusiveEnabled && usbHostPermissionPending -> "独占请求中"
+        usbExclusiveEnabled && usbHostPermissionGranted -> "独占已授权"
+        usbExclusiveEnabled -> "独占待授权"
+        usbConnected -> "独占关闭"
+        else -> "USB 未连接"
+    }
+
+@Composable
+internal fun EqualizerPanel(
+    state: EchoEqualizerState,
+    opraState: OpraHeadphoneCorrectionState,
+    onEnabledChange: (Boolean) -> Unit,
+    onPresetSelected: (String) -> Unit,
+    onBandGainChange: (Int, Float) -> Unit,
+    onReset: () -> Unit,
+    onOpraQueryChange: (String) -> Unit,
+    onOpraSearch: () -> Unit,
+    onOpraRefresh: () -> Unit,
+    onOpraPresetSelected: (String) -> Unit,
+    onOpraApplySelected: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(signalPanelColor(0.64f))
+            .border(signalPanelBorder(0.84f), RoundedCornerShape(24.dp))
+            .padding(16.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    EchoSectionTitle("EQ", equalizerDetail(state))
+                    state.warning?.let { warning ->
+                        Text(
+                            warning,
+                            color = scheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Switch(
+                    checked = state.enabled,
+                    onCheckedChange = onEnabledChange,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                EchoEqualizerPresets.presets.forEach { preset ->
+                    EqualizerPresetChip(
+                        label = preset.name,
+                        selected = state.presetId == preset.id,
+                        enabled = true,
+                        onClick = { onPresetSelected(preset.id) },
+                    )
+                }
+                EqualizerPresetChip(
+                    label = "Reset",
+                    selected = false,
+                    enabled = true,
+                    onClick = onReset,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                state.bands.forEach { band ->
+                    EqualizerBandSlider(
+                        label = formatEqFrequency(band.frequencyHz),
+                        gainDb = band.gainDb,
+                        range = band.minGainDb..band.maxGainDb,
+                        enabled = state.enabled,
+                        dark = dark,
+                        onGainChange = { onBandGainChange(band.index, it) },
+                    )
+                }
+            }
+            EchoPlaceholderLine(
+                if (state.active) {
+                    "EQ 正在处理当前音频；bit-perfect 不再成立"
+                } else {
+                    "关闭或 Flat 时保持原始输出路径"
+                },
+            )
+            OpraCorrectionPanel(
+                state = opraState,
+                onQueryChange = onOpraQueryChange,
+                onSearch = onOpraSearch,
+                onRefresh = onOpraRefresh,
+                onPresetSelected = onOpraPresetSelected,
+                onApplySelected = onOpraApplySelected,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OpraCorrectionPanel(
+    state: OpraHeadphoneCorrectionState,
+    onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onRefresh: () -> Unit,
+    onPresetSelected: (String) -> Unit,
+    onApplySelected: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        EchoSectionTitle("OPRA", "耳机校正 · 近似映射到系统 EQ")
+        OutlinedTextField(
+            value = state.query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("耳机型号") },
+            placeholder = { Text("HD 650 / IER-M9 / AirPods Max") },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            EqualizerPresetChip(
+                label = if (state.loading) "搜索中" else "搜索",
+                selected = false,
+                enabled = !state.loading,
+                onClick = onSearch,
+            )
+            EqualizerPresetChip(
+                label = "刷新库",
+                selected = false,
+                enabled = !state.loading,
+                onClick = onRefresh,
+            )
+            Button(
+                onClick = onApplySelected,
+                enabled = state.selectedPreset != null && !state.loading,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("近似应用")
+            }
+        }
+        if (state.loading) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("正在读取 OPRA 数据库", color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        state.message?.let { message ->
+            Text(
+                message,
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (state.status.eqCount > 0) {
+            Text(
+                "${state.status.vendorCount} 品牌 · ${state.status.productCount} 型号 · ${state.status.eqCount} 曲线 · ${state.status.source}",
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        state.results.take(5).forEach { product ->
+            OpraProductResult(
+                product = product,
+                selectedEqId = state.selectedEqId,
+                onPresetSelected = onPresetSelected,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OpraProductResult(
+    product: OpraHeadphoneCorrectionProduct,
+    selectedEqId: String?,
+    onPresetSelected: (String) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                product.productName,
+                color = scheme.onSurface,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                listOf(product.vendorName, product.subtype ?: "${product.presets.size} preset").joinToString(" · "),
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            product.presets.take(6).forEach { preset ->
+                EqualizerPresetChip(
+                    label = preset.details ?: preset.author,
+                    selected = preset.eqId == selectedEqId,
+                    enabled = true,
+                    onClick = { onPresetSelected(preset.eqId) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EqualizerPresetChip(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val accent = if (selected) EchoAccent else scheme.onSurfaceVariant
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) EchoAccent.copy(alpha = 0.16f) else signalPanelColor(0.50f),
+        border = BorderStroke(1.dp, accent.copy(alpha = if (selected) 0.38f else 0.22f)),
+        modifier = Modifier.clickable(enabled = enabled, onClick = onClick),
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            color = accent,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun EqualizerBandSlider(
+    label: String,
+    gainDb: Float,
+    range: ClosedFloatingPointRange<Float>,
+    enabled: Boolean,
+    dark: Boolean,
+    onGainChange: (Float) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                color = scheme.onSurface,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                formatEqGain(gainDb),
+                color = if (gainDb == 0f) scheme.onSurfaceVariant else EchoAccent,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Slider(
+            value = gainDb.coerceIn(range.start, range.endInclusive),
+            onValueChange = { onGainChange((it * 10f).roundToInt() / 10f) },
+            valueRange = range,
+            enabled = enabled,
+            steps = 0,
+            colors = SliderDefaults.colors(
+                thumbColor = scheme.primary,
+                activeTrackColor = scheme.primary.copy(alpha = 0.84f),
+                inactiveTrackColor = scheme.outlineVariant.copy(alpha = if (dark) 0.42f else 0.72f),
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
+        )
     }
 }
 
@@ -417,5 +750,33 @@ internal fun commandLabel(command: String?): String =
         "seek" -> "跳转"
         "stop" -> "停止"
         else -> command
+    }
+
+private fun equalizerDetail(state: EchoEqualizerState): String =
+    when {
+        state.enabled && state.supported -> "${state.presetName} · ${state.bands.size} bands"
+        state.enabled && !state.available -> "${state.presetName} · 等待播放"
+        state.enabled -> "${state.presetName} · 等待系统 EQ"
+        else -> "关闭 · ${state.bands.size} bands"
+    }
+
+private fun formatEqFrequency(frequencyHz: Int): String =
+    if (frequencyHz >= 1000) {
+        "${formatEqNumber((frequencyHz / 100f).roundToInt() / 10f)} kHz"
+    } else {
+        "$frequencyHz Hz"
+    }
+
+private fun formatEqGain(gainDb: Float): String {
+    val rounded = (gainDb * 10f).roundToInt() / 10f
+    val prefix = if (rounded > 0f) "+" else ""
+    return "$prefix${formatEqNumber(rounded)} dB"
+}
+
+private fun formatEqNumber(value: Float): String =
+    if (value == value.roundToInt().toFloat()) {
+        value.roundToInt().toString()
+    } else {
+        value.toString()
     }
 

@@ -2,7 +2,7 @@ package app.echo.android
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -123,10 +124,10 @@ private fun DockItem(
         animationSpec = tween(durationMillis = 220, easing = DockItemMotionEasing),
         label = "dock-item-container",
     )
-    val iconSize by animateDpAsState(
-        targetValue = if (selected) 24.dp else 22.dp,
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.92f,
         animationSpec = tween(durationMillis = 220, easing = DockItemMotionEasing),
-        label = "dock-icon-size",
+        label = "dock-icon-scale",
     )
     Box(
         modifier = modifier
@@ -147,7 +148,12 @@ private fun DockItem(
                 tab.icon,
                 contentDescription = tab.label,
                 tint = iconColor,
-                modifier = Modifier.size(iconSize),
+                modifier = Modifier
+                    .size(24.dp)
+                    .graphicsLayer {
+                        scaleX = iconScale
+                        scaleY = iconScale
+                    },
             )
             Text(
                 text = tab.label,

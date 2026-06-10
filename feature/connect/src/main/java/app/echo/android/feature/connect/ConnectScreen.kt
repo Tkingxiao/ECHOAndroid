@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,8 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CloudQueue
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Pause
@@ -107,60 +110,49 @@ fun ConnectScreen(
     var webDavServerInput by rememberSaveable(webDavServerUrl) { mutableStateOf(webDavServerUrl.orEmpty()) }
     var webDavUserInput by rememberSaveable(webDavUsername) { mutableStateOf(webDavUsername.orEmpty()) }
     var webDavPasswordInput by rememberSaveable(webDavPassword) { mutableStateOf(webDavPassword.orEmpty()) }
+    var webDavExpanded by rememberSaveable(webDavServerUrl, webDavUsername, webDavPassword) {
+        mutableStateOf(!webDavServerUrl.isNullOrBlank() || !webDavUsername.isNullOrBlank() || !webDavPassword.isNullOrBlank())
+    }
     PageChrome(title = "连接", subtitle = "串流服务 · PC 联动", badge = "互联", scrollable = true) {
         EchoSectionTitle("音乐服务", "连接你的曲库来源")
         Spacer(Modifier.height(12.dp))
-        RemoteSourcePanel(
-            title = "Subsonic / Navidrome",
-            subtitle = "同步服务器曲库、封面和播放地址",
-            serverLabel = "服务器地址",
-            serverPlaceholder = "https://music.example.com",
-            usernameLabel = "用户名",
-            passwordLabel = "密码",
-            serverUrl = subsonicServerInput,
-            username = subsonicUserInput,
-            password = subsonicPasswordInput,
+        RemoteSourcesPanel(
+            subsonicServerUrl = subsonicServerInput,
+            subsonicUsername = subsonicUserInput,
+            subsonicPassword = subsonicPasswordInput,
+            webDavServerUrl = webDavServerInput,
+            webDavUsername = webDavUserInput,
+            webDavPassword = webDavPasswordInput,
+            webDavExpanded = webDavExpanded,
             scanState = remoteScanState,
-            onServerUrlChange = { subsonicServerInput = it },
-            onUsernameChange = { subsonicUserInput = it },
-            onPasswordChange = { subsonicPasswordInput = it },
-            onSave = {
+            onWebDavExpandedChange = { webDavExpanded = it },
+            onSubsonicServerUrlChange = { subsonicServerInput = it },
+            onSubsonicUsernameChange = { subsonicUserInput = it },
+            onSubsonicPasswordChange = { subsonicPasswordInput = it },
+            onSaveSubsonic = {
                 onSaveSubsonicCredentials(subsonicServerInput, subsonicUserInput, subsonicPasswordInput)
             },
-            onSync = {
+            onSyncSubsonic = {
                 onSyncSubsonicLibrary(subsonicServerInput, subsonicUserInput, subsonicPasswordInput)
             },
-            onCancel = onCancelRemoteSync,
-            onClear = {
+            onClearSubsonic = {
                 subsonicServerInput = ""
                 subsonicUserInput = ""
                 subsonicPasswordInput = ""
                 onClearSubsonicCredentials()
             },
-        )
-        Spacer(Modifier.height(10.dp))
-        RemoteSourcePanel(
-            title = "WebDAV / 网盘",
-            subtitle = "按文件夹同步 NAS 或网盘音乐目录",
-            serverLabel = "WebDAV 地址",
-            serverPlaceholder = "https://dav.example.com/music",
-            usernameLabel = "WebDAV 用户名",
-            passwordLabel = "WebDAV 密码",
-            serverUrl = webDavServerInput,
-            username = webDavUserInput,
-            password = webDavPasswordInput,
-            scanState = remoteScanState,
-            onServerUrlChange = { webDavServerInput = it },
-            onUsernameChange = { webDavUserInput = it },
-            onPasswordChange = { webDavPasswordInput = it },
-            onSave = {
+            onWebDavServerUrlChange = { webDavServerInput = it },
+            onWebDavUsernameChange = { webDavUserInput = it },
+            onWebDavPasswordChange = { webDavPasswordInput = it },
+            onSaveWebDav = {
                 onSaveWebDavCredentials(webDavServerInput, webDavUserInput, webDavPasswordInput)
             },
-            onSync = {
+            onSyncWebDav = {
+                webDavExpanded = true
                 onSyncWebDavLibrary(webDavServerInput, webDavUserInput, webDavPasswordInput)
             },
             onCancel = onCancelRemoteSync,
-            onClear = {
+            onClearWebDav = {
                 webDavServerInput = ""
                 webDavUserInput = ""
                 webDavPasswordInput = ""
@@ -301,26 +293,33 @@ fun ConnectScreen(
 }
 
 @Composable
-private fun RemoteSourcePanel(
-    title: String,
-    subtitle: String,
-    serverLabel: String,
-    serverPlaceholder: String,
-    usernameLabel: String,
-    passwordLabel: String,
-    serverUrl: String,
-    username: String,
-    password: String,
+private fun RemoteSourcesPanel(
+    subsonicServerUrl: String,
+    subsonicUsername: String,
+    subsonicPassword: String,
+    webDavServerUrl: String,
+    webDavUsername: String,
+    webDavPassword: String,
+    webDavExpanded: Boolean,
     scanState: LibraryScanProgress,
-    onServerUrlChange: (String) -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onSync: () -> Unit,
+    onWebDavExpandedChange: (Boolean) -> Unit,
+    onSubsonicServerUrlChange: (String) -> Unit,
+    onSubsonicUsernameChange: (String) -> Unit,
+    onSubsonicPasswordChange: (String) -> Unit,
+    onSaveSubsonic: () -> Unit,
+    onSyncSubsonic: () -> Unit,
+    onClearSubsonic: () -> Unit,
+    onWebDavServerUrlChange: (String) -> Unit,
+    onWebDavUsernameChange: (String) -> Unit,
+    onWebDavPasswordChange: (String) -> Unit,
+    onSaveWebDav: () -> Unit,
+    onSyncWebDav: () -> Unit,
     onCancel: () -> Unit,
-    onClear: () -> Unit,
+    onClearWebDav: () -> Unit,
 ) {
-    val ready = serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()
+    val subsonicReady = subsonicServerUrl.isNotBlank() && subsonicUsername.isNotBlank() && subsonicPassword.isNotBlank()
+    val webDavReady = webDavServerUrl.isNotBlank() && webDavUsername.isNotBlank() && webDavPassword.isNotBlank()
+    val readyCount = (if (subsonicReady) 1 else 0) + (if (webDavReady) 1 else 0)
     val scheme = MaterialTheme.colorScheme
     val dark = LocalEchoDarkTheme.current
     Box(
@@ -345,7 +344,7 @@ private fun RemoteSourcePanel(
             )
             .padding(15.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(13.dp),
@@ -361,7 +360,7 @@ private fun RemoteSourcePanel(
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        title,
+                        "远程曲库",
                         color = scheme.onSurface,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium,
@@ -369,7 +368,7 @@ private fun RemoteSourcePanel(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        remoteLibraryDetail(scanState, ready).takeIf { scanState.phase != LibraryScanPhase.Idle } ?: subtitle,
+                        remoteSourcesSummary(scanState, readyCount),
                         color = scheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
@@ -377,11 +376,155 @@ private fun RemoteSourcePanel(
                     )
                 }
                 ServiceStatusPill(
-                    label = if (scanState.isScanning) "同步中" else if (ready) "可同步" else "待配置",
-                    active = ready && scanState.phase != LibraryScanPhase.Error,
-                    locked = !ready && !scanState.isScanning,
+                    label = if (scanState.isScanning) "同步中" else if (readyCount > 0) "${readyCount} 个可用" else "待配置",
+                    active = readyCount > 0 && scanState.phase != LibraryScanPhase.Error,
+                    locked = readyCount == 0 && !scanState.isScanning,
                 )
             }
+            RemoteSourceProviderSection(
+                title = "Subsonic / Navidrome",
+                subtitle = "同步服务器曲库、封面和播放地址",
+                serverLabel = "服务器地址",
+                serverPlaceholder = "https://music.example.com",
+                usernameLabel = "用户名",
+                passwordLabel = "密码",
+                serverUrl = subsonicServerUrl,
+                username = subsonicUsername,
+                password = subsonicPassword,
+                expanded = true,
+                expandable = false,
+                scanState = scanState,
+                onExpandedChange = {},
+                onServerUrlChange = onSubsonicServerUrlChange,
+                onUsernameChange = onSubsonicUsernameChange,
+                onPasswordChange = onSubsonicPasswordChange,
+                onSave = onSaveSubsonic,
+                onSync = onSyncSubsonic,
+                onCancel = onCancel,
+                onClear = onClearSubsonic,
+            )
+            RemoteSourceProviderSection(
+                title = "WebDAV / 网盘",
+                subtitle = "按文件夹同步 NAS 或网盘音乐目录",
+                serverLabel = "WebDAV 地址",
+                serverPlaceholder = "https://dav.example.com/music",
+                usernameLabel = "WebDAV 用户名",
+                passwordLabel = "WebDAV 密码",
+                serverUrl = webDavServerUrl,
+                username = webDavUsername,
+                password = webDavPassword,
+                expanded = webDavExpanded,
+                expandable = true,
+                scanState = scanState,
+                onExpandedChange = onWebDavExpandedChange,
+                onServerUrlChange = onWebDavServerUrlChange,
+                onUsernameChange = onWebDavUsernameChange,
+                onPasswordChange = onWebDavPasswordChange,
+                onSave = onSaveWebDav,
+                onSync = onSyncWebDav,
+                onCancel = onCancel,
+                onClear = onClearWebDav,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RemoteSourceProviderSection(
+    title: String,
+    subtitle: String,
+    serverLabel: String,
+    serverPlaceholder: String,
+    usernameLabel: String,
+    passwordLabel: String,
+    serverUrl: String,
+    username: String,
+    password: String,
+    expanded: Boolean,
+    expandable: Boolean,
+    scanState: LibraryScanProgress,
+    onExpandedChange: (Boolean) -> Unit,
+    onServerUrlChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onSync: () -> Unit,
+    onCancel: () -> Unit,
+    onClear: () -> Unit,
+) {
+    val ready = serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()
+    val hasInput = serverUrl.isNotBlank() || username.isNotBlank() || password.isNotBlank()
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    val statusLabel = when {
+        scanState.isScanning && expanded -> "同步中"
+        ready -> "可同步"
+        hasInput -> "待补全"
+        else -> "待配置"
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(scheme.surface.copy(alpha = if (dark) 0.42f else 0.30f))
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (ready) scheme.primary.copy(alpha = if (dark) 0.36f else 0.24f)
+                    else if (dark) scheme.outlineVariant.copy(alpha = 0.42f)
+                    else EchoGlassBorder.copy(alpha = 0.58f),
+                ),
+                RoundedCornerShape(16.dp),
+            )
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (expandable) Modifier.clickable { onExpandedChange(!expanded) } else Modifier),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(if (expanded) 38.dp else 30.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(if (ready) EchoHomeBlue else scheme.outlineVariant.copy(alpha = if (dark) 0.70f else 0.82f)),
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    title,
+                    color = scheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    remoteLibraryDetail(scanState, ready).takeIf { expanded && scanState.phase != LibraryScanPhase.Idle } ?: subtitle,
+                    color = scheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            ServiceStatusPill(
+                label = statusLabel,
+                active = ready && scanState.phase != LibraryScanPhase.Error,
+                locked = !ready && !scanState.isScanning,
+            )
+            if (expandable) {
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = if (expanded) "折叠" else "展开",
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+        if (expanded) {
             RemoteTextInput(
                 label = serverLabel,
                 value = serverUrl,
@@ -416,7 +559,7 @@ private fun RemoteSourcePanel(
                 )
                 RemoteCompactAction(
                     text = "清除",
-                    enabled = serverUrl.isNotBlank() || username.isNotBlank() || password.isNotBlank(),
+                    enabled = hasInput,
                     modifier = Modifier.weight(1f),
                     onClick = onClear,
                 )
@@ -494,6 +637,15 @@ private fun remoteLibraryDetail(scanState: LibraryScanProgress, ready: Boolean):
         scanState.phase == LibraryScanPhase.Error -> scanState.error ?: "远程曲库同步失败"
         ready -> "可同步到云端专辑墙"
         else -> "填写服务器、用户名和密码"
+    }
+
+private fun remoteSourcesSummary(scanState: LibraryScanProgress, readyCount: Int): String =
+    when {
+        scanState.isScanning -> remoteLibraryDetail(scanState, ready = true)
+        scanState.phase == LibraryScanPhase.Completed -> remoteLibraryDetail(scanState, ready = true)
+        scanState.phase == LibraryScanPhase.Error -> remoteLibraryDetail(scanState, ready = false)
+        readyCount > 0 -> "Subsonic 已展开 · WebDAV / NAS 按需展开"
+        else -> "优先配置 Subsonic · WebDAV / 网盘默认折叠"
     }
 
 private fun remoteScanPhaseLabel(phase: LibraryScanPhase): String =

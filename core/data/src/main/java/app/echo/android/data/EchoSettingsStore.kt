@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import app.echo.android.model.playback.EchoEqualizerPreset
+import app.echo.android.model.playback.EchoEqualizerPresets
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -22,6 +24,9 @@ data class EchoAppSettings(
     val onlineLyricsEnabled: Boolean = false,
     val usbExclusiveEnabled: Boolean = false,
     val usbExclusiveAutoRequestOnStartup: Boolean = true,
+    val equalizerEnabled: Boolean = false,
+    val equalizerPreset: String = EchoEqualizerPreset.Flat,
+    val equalizerBandGains: List<Float> = EchoEqualizerPresets.gainsForPreset(EchoEqualizerPreset.Flat),
     val customBackgroundMode: String = EchoBackgroundMode.Default,
     val customBackgroundUri: String? = null,
     val customBackgroundBlur: Float = 32f,
@@ -86,6 +91,12 @@ class EchoSettingsStore(
                 onlineLyricsEnabled = preferences[Keys.OnlineLyricsEnabled] ?: false,
                 usbExclusiveEnabled = preferences[Keys.UsbExclusiveEnabled] ?: false,
                 usbExclusiveAutoRequestOnStartup = preferences[Keys.UsbExclusiveAutoRequestOnStartup] ?: true,
+                equalizerEnabled = preferences[Keys.EqualizerEnabled] ?: false,
+                equalizerPreset = EchoEqualizerPresets.normalizePresetId(preferences[Keys.EqualizerPreset]),
+                equalizerBandGains = parseEqualizerBandGains(
+                    preferences[Keys.EqualizerBandGains],
+                    EchoEqualizerPresets.normalizePresetId(preferences[Keys.EqualizerPreset]),
+                ),
                 customBackgroundMode = preferences[Keys.CustomBackgroundMode] ?: EchoBackgroundMode.Default,
                 customBackgroundUri = preferences[Keys.CustomBackgroundUri],
                 customBackgroundBlur = (preferences[Keys.CustomBackgroundBlur] ?: 32f).coerceIn(0f, 80f),
@@ -150,6 +161,36 @@ class EchoSettingsStore(
 
     suspend fun setUsbExclusiveAutoRequestOnStartup(enabled: Boolean) {
         context.echoSettings.edit { it[Keys.UsbExclusiveAutoRequestOnStartup] = enabled }
+    }
+
+    suspend fun setEqualizerEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.EqualizerEnabled] = enabled }
+    }
+
+    suspend fun setEqualizerPreset(presetId: String) {
+        val safePresetId = EchoEqualizerPresets.normalizePresetId(presetId)
+        context.echoSettings.edit {
+            it[Keys.EqualizerPreset] = safePresetId
+            it[Keys.EqualizerBandGains] = formatEqualizerBandGains(
+                EchoEqualizerPresets.gainsForPreset(safePresetId),
+            )
+        }
+    }
+
+    suspend fun setEqualizerBandGains(gainsDb: List<Float>) {
+        context.echoSettings.edit {
+            it[Keys.EqualizerPreset] = EchoEqualizerPreset.Custom
+            it[Keys.EqualizerBandGains] = formatEqualizerBandGains(gainsDb)
+        }
+    }
+
+    suspend fun resetEqualizer() {
+        context.echoSettings.edit {
+            it[Keys.EqualizerPreset] = EchoEqualizerPreset.Flat
+            it[Keys.EqualizerBandGains] = formatEqualizerBandGains(
+                EchoEqualizerPresets.gainsForPreset(EchoEqualizerPreset.Flat),
+            )
+        }
     }
 
     suspend fun setCustomBackground(mode: String, uri: String?) {
@@ -322,6 +363,9 @@ class EchoSettingsStore(
         val OnlineLyricsEnabled = booleanPreferencesKey("online_lyrics_enabled")
         val UsbExclusiveEnabled = booleanPreferencesKey("usb_exclusive_enabled")
         val UsbExclusiveAutoRequestOnStartup = booleanPreferencesKey("usb_exclusive_auto_request_on_startup")
+        val EqualizerEnabled = booleanPreferencesKey("equalizer_enabled")
+        val EqualizerPreset = stringPreferencesKey("equalizer_preset")
+        val EqualizerBandGains = stringPreferencesKey("equalizer_band_gains")
         val CustomBackgroundMode = stringPreferencesKey("custom_background_mode")
         val CustomBackgroundUri = stringPreferencesKey("custom_background_uri")
         val CustomBackgroundBlur = floatPreferencesKey("custom_background_blur")
@@ -351,3 +395,16 @@ class EchoSettingsStore(
         val WebDavPassword = stringPreferencesKey("webdav_password")
     }
 }
+
+private fun parseEqualizerBandGains(value: String?, presetId: String): List<Float> {
+    val parsed = value
+        ?.split(',')
+        ?.mapNotNull { raw -> raw.trim().toFloatOrNull()?.coerceIn(-18f, 18f) }
+        .orEmpty()
+    return parsed.ifEmpty { EchoEqualizerPresets.gainsForPreset(presetId) }
+}
+
+private fun formatEqualizerBandGains(gainsDb: List<Float>): String =
+    gainsDb.joinToString(",") { value ->
+        ((value.coerceIn(-18f, 18f) * 10f).toInt() / 10f).toString()
+    }
