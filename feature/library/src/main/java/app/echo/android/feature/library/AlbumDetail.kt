@@ -683,8 +683,14 @@ private fun formatInsight(tracks: List<EchoTrack>): DetailInsight {
 
 private fun sourceLabel(sourceId: String): String = when (sourceId.lowercase()) {
     "mediastore" -> "本机媒体库"
+    "subsonic" -> "Subsonic / Navidrome"
+    "webdav" -> "WebDAV"
     "unknown" -> "未知来源"
-    else -> sourceId
+    else -> when {
+        sourceId.startsWith("subsonic:", ignoreCase = true) -> "Subsonic / Navidrome"
+        sourceId.startsWith("webdav:", ignoreCase = true) -> "WebDAV"
+        else -> sourceId
+    }
 }
 
 private fun formatMimeType(mimeType: String?): String? {

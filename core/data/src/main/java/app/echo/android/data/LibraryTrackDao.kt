@@ -185,6 +185,47 @@ interface LibraryTrackDao {
 
     @Query(
         """
+        SELECT ('remote||' || source || '||' || (
+                   COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+                   '::' ||
+                   COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+               )) AS albumKey,
+               CASE WHEN album IS NULL OR trim(album) = '' THEN '未知专辑' ELSE album END AS title,
+               CASE
+                   WHEN albumArtist IS NOT NULL AND trim(albumArtist) != '' THEN albumArtist
+                   WHEN artist IS NOT NULL AND trim(artist) != '' THEN artist
+                   ELSE NULL
+               END AS albumArtist,
+               CASE WHEN artist IS NULL OR trim(artist) = '' THEN NULL ELSE artist END AS artist,
+               MAX(artworkUri) AS artworkUri,
+               COUNT(*) AS trackCount,
+               COALESCE(SUM(durationMs), 0) AS durationMs,
+               MIN(CASE WHEN year IS NOT NULL AND year > 0 THEN year ELSE NULL END) AS year,
+               MAX(dateModifiedSeconds) AS addedAtSeconds
+        FROM library_tracks
+        WHERE source != 'mediastore'
+          AND (:query IS NULL OR
+               normalizedTitle LIKE '%' || lower(trim(:query)) || '%' OR
+               normalizedArtist LIKE '%' || lower(trim(:query)) || '%' OR
+               normalizedAlbum LIKE '%' || lower(trim(:query)) || '%' OR
+               normalizedAlbumArtist LIKE '%' || lower(trim(:query)) || '%')
+        GROUP BY source, (
+            COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+            '::' ||
+            COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+        )
+        ORDER BY
+            CASE WHEN :sort = 'Artist' THEN albumArtist END COLLATE NOCASE ASC,
+            CASE WHEN :sort = 'Year' THEN year END DESC,
+            CASE WHEN :sort = 'TrackCount' THEN trackCount END DESC,
+            CASE WHEN :sort = 'Duration' THEN durationMs END DESC,
+            title COLLATE NOCASE ASC
+        """,
+    )
+    fun pageRemoteAlbums(query: String?, sort: String): PagingSource<Int, AlbumSummary>
+
+    @Query(
+        """
         SELECT (
                    COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
                    '::' ||
@@ -300,6 +341,42 @@ interface LibraryTrackDao {
 
     @Query(
         """
+        SELECT ('remote||' || source || '||' || (
+                   COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+                   '::' ||
+                   COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+               )) AS albumKey,
+               CASE WHEN album IS NULL OR trim(album) = '' THEN '未知专辑' ELSE album END AS title,
+               CASE
+                   WHEN albumArtist IS NOT NULL AND trim(albumArtist) != '' THEN albumArtist
+                   WHEN artist IS NOT NULL AND trim(artist) != '' THEN artist
+                   ELSE NULL
+               END AS albumArtist,
+               CASE WHEN artist IS NULL OR trim(artist) = '' THEN NULL ELSE artist END AS artist,
+               MAX(artworkUri) AS artworkUri,
+               COUNT(*) AS trackCount,
+               COALESCE(SUM(durationMs), 0) AS durationMs,
+               MIN(CASE WHEN year IS NOT NULL AND year > 0 THEN year ELSE NULL END) AS year,
+               MAX(dateModifiedSeconds) AS addedAtSeconds
+        FROM library_tracks
+        WHERE source = :source
+          AND (
+            COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+            '::' ||
+            COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+          ) = :albumKey
+        GROUP BY source, (
+            COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+            '::' ||
+            COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+        )
+        LIMIT 1
+        """,
+    )
+    suspend fun getRemoteAlbumSummary(source: String, albumKey: String): AlbumSummary?
+
+    @Query(
+        """
         SELECT COALESCE(NULLIF(normalizedArtist, ''), '未知艺术家') AS artistKey,
                CASE WHEN artist IS NULL OR trim(artist) = '' THEN '未知艺术家' ELSE artist END AS name,
                MAX(artworkUri) AS artworkUri,
@@ -333,6 +410,23 @@ interface LibraryTrackDao {
         """,
     )
     fun pageTracksByAlbum(albumKey: String): PagingSource<Int, LibraryTrackEntity>
+
+    @Query(
+        """
+        SELECT * FROM library_tracks
+        WHERE source = :source
+          AND (
+            COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+            '::' ||
+            COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+          ) = :albumKey
+        ORDER BY
+            CASE WHEN discNumber IS NULL THEN 0 ELSE discNumber END ASC,
+            CASE WHEN trackNumber IS NULL THEN 0 ELSE trackNumber END ASC,
+            title COLLATE NOCASE ASC
+        """,
+    )
+    fun pageTracksByRemoteAlbum(source: String, albumKey: String): PagingSource<Int, LibraryTrackEntity>
 
     @Query(
         """
@@ -376,6 +470,23 @@ interface LibraryTrackDao {
         """,
     )
     suspend fun getTracksByAlbum(albumKey: String): List<LibraryTrackEntity>
+
+    @Query(
+        """
+        SELECT * FROM library_tracks
+        WHERE source = :source
+          AND (
+            COALESCE(NULLIF(normalizedAlbum, ''), '未知专辑') ||
+            '::' ||
+            COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), '未知艺术家')
+          ) = :albumKey
+        ORDER BY
+            CASE WHEN discNumber IS NULL THEN 0 ELSE discNumber END ASC,
+            CASE WHEN trackNumber IS NULL THEN 0 ELSE trackNumber END ASC,
+            title COLLATE NOCASE ASC
+        """,
+    )
+    suspend fun getTracksByRemoteAlbum(source: String, albumKey: String): List<LibraryTrackEntity>
 
     @RawQuery
     suspend fun getAlbumTracksForPlayback(query: SupportSQLiteQuery): List<LibraryTrackEntity>

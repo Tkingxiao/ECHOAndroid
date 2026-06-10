@@ -97,6 +97,7 @@ fun LibraryScreen(
     scanState: LibraryScanProgress,
     tracks: LazyPagingItems<EchoTrack>,
     albums: LazyPagingItems<AlbumSummary>,
+    remoteAlbums: LazyPagingItems<AlbumSummary>,
     artists: LazyPagingItems<ArtistSummary>,
     folders: LazyPagingItems<FolderSummary>,
     selectedAlbum: AlbumSummary?,
@@ -125,7 +126,7 @@ fun LibraryScreen(
 
     // 专辑详情走全屏沉浸式页面，不套用曲库的 PageChrome
     val activeAlbumDetail = selectedAlbum
-    if (hasPermission && activeAlbumDetail != null && albumDetailTracks != null) {
+    if (activeAlbumDetail != null && albumDetailTracks != null) {
         AlbumDetailPage(
             album = activeAlbumDetail,
             tracks = albumDetailTracks,
@@ -140,7 +141,7 @@ fun LibraryScreen(
 
     // 艺术家详情同样走全屏沉浸式页面
     val activeArtistDetail = selectedArtist
-    if (hasPermission && activeArtistDetail != null && artistDetailTracks != null) {
+    if (activeArtistDetail != null && artistDetailTracks != null) {
         ArtistDetailPage(
             artist = activeArtistDetail,
             tracks = artistDetailTracks,
@@ -154,7 +155,7 @@ fun LibraryScreen(
     }
 
     val activeFolderDetail = selectedFolder
-    if (hasPermission && activeFolderDetail != null && folderDetailTracks != null) {
+    if (activeFolderDetail != null && folderDetailTracks != null) {
         LibraryDetailPage(
             title = folderDisplayName(activeFolderDetail),
             subtitle = folderSubtitle(activeFolderDetail),
@@ -185,7 +186,6 @@ fun LibraryScreen(
         },
     ) {
         when {
-            !hasPermission -> EmptyState("授权后即可索引本机音乐。")
             scanState.isScanning -> LibraryScanStatus(scanState = scanState, onCancelScan = onCancelScan)
             tracks.loadState.refresh is LoadState.Loading -> {
                 LibraryBrowserHeader(
@@ -212,7 +212,9 @@ fun LibraryScreen(
                 Box(modifier = Modifier.weight(1f)) {
                     when (selectedMode) {
                         LibraryViewMode.Songs -> {
-                            if (tracks.itemCount == 0) {
+                            if (!hasPermission) {
+                                EmptyState("授权后即可索引本地音乐；云端曲库可直接进入“网盘”页。")
+                            } else if (tracks.itemCount == 0) {
                                 LibraryBootstrapState()
                             } else {
                                 TrackList(
@@ -241,9 +243,10 @@ fun LibraryScreen(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        LibraryViewMode.Cloud -> LibraryPlaceholderPage(
-                            title = "网盘音乐",
-                            subtitle = "之后可以接入云端曲库和同步播放列表。",
+                        LibraryViewMode.Cloud -> AlbumWall(
+                            albums = remoteAlbums,
+                            onOpenAlbum = onOpenAlbum,
+                            modifier = Modifier.fillMaxSize(),
                         )
                     }
                 }

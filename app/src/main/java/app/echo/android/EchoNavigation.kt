@@ -1,5 +1,9 @@
 package app.echo.android
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -20,14 +25,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.LocalEchoDarkTheme
+
+private val DockItemMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
 
 enum class EchoTab(
     val label: String,
@@ -81,18 +90,44 @@ private fun DockItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val iconColor = when {
-        selected && onLightSurface -> MaterialTheme.colorScheme.onSurface
+    val scheme = MaterialTheme.colorScheme
+    val targetIconColor = when {
+        selected && onLightSurface -> scheme.onSurface
         selected -> Color.White
-        onLightSurface -> MaterialTheme.colorScheme.onSurfaceVariant
+        onLightSurface -> scheme.onSurfaceVariant
         else -> Color.White.copy(alpha = 0.62f)
     }
-    val labelColor = when {
-        selected && onLightSurface -> MaterialTheme.colorScheme.onSurface
+    val targetLabelColor = when {
+        selected && onLightSurface -> scheme.onSurface
         selected -> Color.White
-        onLightSurface -> MaterialTheme.colorScheme.onSurfaceVariant
+        onLightSurface -> scheme.onSurfaceVariant
         else -> Color.White.copy(alpha = 0.62f)
     }
+    val targetContainerColor = when {
+        !selected -> Color.Transparent
+        onLightSurface -> scheme.primary.copy(alpha = 0.14f)
+        else -> Color.White.copy(alpha = 0.13f)
+    }
+    val iconColor by animateColorAsState(
+        targetValue = targetIconColor,
+        animationSpec = tween(durationMillis = 180, easing = DockItemMotionEasing),
+        label = "dock-icon-color",
+    )
+    val labelColor by animateColorAsState(
+        targetValue = targetLabelColor,
+        animationSpec = tween(durationMillis = 180, easing = DockItemMotionEasing),
+        label = "dock-label-color",
+    )
+    val containerColor by animateColorAsState(
+        targetValue = targetContainerColor,
+        animationSpec = tween(durationMillis = 220, easing = DockItemMotionEasing),
+        label = "dock-item-container",
+    )
+    val iconSize by animateDpAsState(
+        targetValue = if (selected) 24.dp else 22.dp,
+        animationSpec = tween(durationMillis = 220, easing = DockItemMotionEasing),
+        label = "dock-icon-size",
+    )
     Box(
         modifier = modifier
             .clickable(onClick = onClick)
@@ -102,6 +137,8 @@ private fun DockItem(
         Column(
             modifier = Modifier
                 .defaultMinSize(minWidth = 56.dp, minHeight = 48.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(containerColor)
                 .padding(horizontal = 2.dp, vertical = 1.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -110,7 +147,7 @@ private fun DockItem(
                 tab.icon,
                 contentDescription = tab.label,
                 tint = iconColor,
-                modifier = Modifier.size(if (selected) 24.dp else 22.dp),
+                modifier = Modifier.size(iconSize),
             )
             Text(
                 text = tab.label,

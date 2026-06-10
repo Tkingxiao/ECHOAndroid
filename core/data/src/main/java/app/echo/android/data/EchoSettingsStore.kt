@@ -43,6 +43,12 @@ data class EchoAppSettings(
     val lastFmUsername: String? = null,
     val lastFmSessionKey: String? = null,
     val discordPresenceViaPcEnabled: Boolean = false,
+    val subsonicServerUrl: String? = null,
+    val subsonicUsername: String? = null,
+    val subsonicPassword: String? = null,
+    val webDavServerUrl: String? = null,
+    val webDavUsername: String? = null,
+    val webDavPassword: String? = null,
 )
 
 object EchoBackgroundMode {
@@ -101,6 +107,12 @@ class EchoSettingsStore(
                 lastFmUsername = preferences[Keys.LastFmUsername],
                 lastFmSessionKey = preferences[Keys.LastFmSessionKey],
                 discordPresenceViaPcEnabled = preferences[Keys.DiscordPresenceViaPcEnabled] ?: false,
+                subsonicServerUrl = preferences[Keys.SubsonicServerUrl],
+                subsonicUsername = preferences[Keys.SubsonicUsername],
+                subsonicPassword = preferences[Keys.SubsonicPassword],
+                webDavServerUrl = preferences[Keys.WebDavServerUrl],
+                webDavUsername = preferences[Keys.WebDavUsername],
+                webDavPassword = preferences[Keys.WebDavPassword],
             )
         }
 
@@ -246,6 +258,60 @@ class EchoSettingsStore(
         context.echoSettings.edit { it[Keys.DiscordPresenceViaPcEnabled] = enabled }
     }
 
+    suspend fun setSubsonicCredentials(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ) {
+        context.echoSettings.edit {
+            val normalizedUrl = serverUrl.trim().trimEnd('/')
+            if (normalizedUrl.isBlank() || username.isBlank() || password.isBlank()) {
+                it.remove(Keys.SubsonicServerUrl)
+                it.remove(Keys.SubsonicUsername)
+                it.remove(Keys.SubsonicPassword)
+            } else {
+                it[Keys.SubsonicServerUrl] = normalizedUrl
+                it[Keys.SubsonicUsername] = username.trim()
+                it[Keys.SubsonicPassword] = password
+            }
+        }
+    }
+
+    suspend fun clearSubsonicCredentials() {
+        context.echoSettings.edit {
+            it.remove(Keys.SubsonicServerUrl)
+            it.remove(Keys.SubsonicUsername)
+            it.remove(Keys.SubsonicPassword)
+        }
+    }
+
+    suspend fun setWebDavCredentials(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ) {
+        context.echoSettings.edit {
+            val normalizedUrl = serverUrl.trim().trimEnd('/')
+            if (normalizedUrl.isBlank() || username.isBlank() || password.isBlank()) {
+                it.remove(Keys.WebDavServerUrl)
+                it.remove(Keys.WebDavUsername)
+                it.remove(Keys.WebDavPassword)
+            } else {
+                it[Keys.WebDavServerUrl] = normalizedUrl
+                it[Keys.WebDavUsername] = username.trim()
+                it[Keys.WebDavPassword] = password
+            }
+        }
+    }
+
+    suspend fun clearWebDavCredentials() {
+        context.echoSettings.edit {
+            it.remove(Keys.WebDavServerUrl)
+            it.remove(Keys.WebDavUsername)
+            it.remove(Keys.WebDavPassword)
+        }
+    }
+
     private object Keys {
         val PreferOffload = booleanPreferencesKey("prefer_offload")
         val LastOutputRoute = stringPreferencesKey("last_output_route")
@@ -277,5 +343,11 @@ class EchoSettingsStore(
         val LastFmUsername = stringPreferencesKey("lastfm_username")
         val LastFmSessionKey = stringPreferencesKey("lastfm_session_key")
         val DiscordPresenceViaPcEnabled = booleanPreferencesKey("discord_presence_via_pc_enabled")
+        val SubsonicServerUrl = stringPreferencesKey("subsonic_server_url")
+        val SubsonicUsername = stringPreferencesKey("subsonic_username")
+        val SubsonicPassword = stringPreferencesKey("subsonic_password")
+        val WebDavServerUrl = stringPreferencesKey("webdav_server_url")
+        val WebDavUsername = stringPreferencesKey("webdav_username")
+        val WebDavPassword = stringPreferencesKey("webdav_password")
     }
 }

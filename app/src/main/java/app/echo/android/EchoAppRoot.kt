@@ -18,6 +18,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -55,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -87,10 +89,15 @@ import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.playback.PlaybackPositionState
 import app.echo.android.design.echoFontFamilyForMode
 import java.time.LocalTime
+import kotlin.math.absoluteValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val DockMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
+private val RouteMotionEasing = CubicBezierEasing(0.18f, 0.86f, 0.20f, 1f)
+private const val RouteMotionBaseDurationMs = 280
+private const val RouteMotionDistanceDurationMs = 44
+private const val RouteMotionMaxDurationMs = 420
 private val LyricsDocumentMimeTypes = arrayOf("text/*", "application/xml", "application/octet-stream", "*/*")
 private val FontDocumentMimeTypes = arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream", "*/*")
 
@@ -123,6 +130,16 @@ private val EchoPagerPage.dockTab: EchoTab?
         EchoPagerPage.Diagnostics -> EchoTab.Diagnostics
         EchoPagerPage.Settings -> null
     }
+
+private fun routeMotionSpec(fromPage: Int, toPage: Int): AnimationSpec<Float> {
+    val distance = (toPage - fromPage).absoluteValue.coerceAtLeast(1)
+    val duration = (RouteMotionBaseDurationMs + (distance - 1) * RouteMotionDistanceDurationMs)
+        .coerceAtMost(RouteMotionMaxDurationMs)
+    return tween(durationMillis = duration, easing = RouteMotionEasing)
+}
+
+private fun routePageOffset(currentPage: Int, currentPageOffsetFraction: Float, page: Int): Float =
+    ((currentPage - page) + currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f)
 
 @Composable
 fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
@@ -192,6 +209,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
     val lyricsState by viewModel.lyricsState.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
+    val remoteScanState by viewModel.remoteScanState.collectAsStateWithLifecycle()
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle(LibraryStats())
     val recentPlaybackAlbums by viewModel.recentPlaybackAlbums.collectAsStateWithLifecycle()
     val recentPlaybackArtists by viewModel.recentPlaybackArtists.collectAsStateWithLifecycle()
@@ -199,6 +217,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val recentlyAddedAlbums by viewModel.recentlyAddedAlbums.collectAsStateWithLifecycle(emptyList())
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     val albums = viewModel.albums.collectAsLazyPagingItems()
+    val remoteAlbums = viewModel.remoteAlbums.collectAsLazyPagingItems()
     val artists = viewModel.artists.collectAsLazyPagingItems()
     val folders = viewModel.folders.collectAsLazyPagingItems()
     val homeAlbumSnapshot = albums.itemSnapshotList.items
@@ -282,9 +301,15 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     )
     val appScope = rememberCoroutineScope()
     fun navigateToPage(page: EchoPagerPage) {
+        val targetPage = page.ordinal
         page.dockTab?.let { selectedTab = it.ordinal }
         appScope.launch {
-            if (tabPagerState.currentPage != page.ordinal) tabPagerState.animateScrollToPage(page.ordinal)
+            if (tabPagerState.currentPage != targetPage) {
+                tabPagerState.animateScrollToPage(
+                    page = targetPage,
+                    animationSpec = routeMotionSpec(tabPagerState.currentPage, targetPage),
+                )
+            }
         }
     }
     fun selectDockTab(tab: EchoTab) = navigateToPage(tab.pagerPage)
@@ -303,8 +328,12 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         returnPage.dockTab?.let { selectedTab = it.ordinal }
         appScope.launch {
             try {
-                if (tabPagerState.currentPage != returnPage.ordinal) {
-                    tabPagerState.animateScrollToPage(returnPage.ordinal)
+                val targetPage = returnPage.ordinal
+                if (tabPagerState.currentPage != targetPage) {
+                    tabPagerState.animateScrollToPage(
+                        page = targetPage,
+                        animationSpec = routeMotionSpec(tabPagerState.currentPage, targetPage),
+                    )
                 }
             } finally {
                 clearLibraryDetail()
@@ -349,14 +378,32 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                 HorizontalPager(
                     state = tabPagerState,
                     userScrollEnabled = !libraryDetailOpen,
+                    beyondViewportPageCount = 1,
+                    pageSpacing = 8.dp,
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->
-                    when (EchoPagerPage.entries[page]) {
-                        EchoPagerPage.Library -> LibraryScreen(
+                    val pageOffset = routePageOffset(
+                        currentPage = tabPagerState.currentPage,
+                        currentPageOffsetFraction = tabPagerState.currentPageOffsetFraction,
+                        page = page,
+                    )
+                    val pageScale = 0.972f + (1f - pageOffset) * 0.028f
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                alpha = 0.74f + (1f - pageOffset) * 0.26f
+                                scaleX = pageScale
+                                scaleY = pageScale
+                            },
+                    ) {
+                        when (EchoPagerPage.entries[page]) {
+                            EchoPagerPage.Library -> LibraryScreen(
                                 hasPermission = hasAudioPermission,
                                 scanState = scanState,
                                 tracks = tracks,
                                 albums = albums,
+                                remoteAlbums = remoteAlbums,
                                 artists = artists,
                                 folders = folders,
                                 selectedAlbum = selectedAlbum,
@@ -396,7 +443,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onCloseDetail = { closeLibraryDetail() },
                             )
 
-                        EchoPagerPage.Now -> HomeScreen(
+                            EchoPagerPage.Now -> HomeScreen(
                                 status = playbackStatus,
                                 trackCount = libraryStats.trackCount,
                                 albumCount = libraryStats.albumCount,
@@ -434,7 +481,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onOpenConnect = { selectDockTab(EchoTab.Connect) },
                             )
 
-                        EchoPagerPage.Settings -> SettingsScreen(
+                            EchoPagerPage.Settings -> SettingsScreen(
                                 status = playbackStatus,
                                 trackCount = libraryStats.trackCount,
                                 albumCount = libraryStats.albumCount,
@@ -538,7 +585,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onOpenConnect = { selectDockTab(EchoTab.Connect) },
                             )
 
-                        EchoPagerPage.Connect -> ConnectScreen(
+                            EchoPagerPage.Connect -> ConnectScreen(
                                 remoteState = remoteStatus.connectionState,
                                 pcTitle = remoteStatus.endpoint?.name ?: "PC ECHO",
                                 trackTitle = remoteStatus.playback.track?.title ?: "未连接",
@@ -548,6 +595,13 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 discordPresenceReady = remoteStatus.connectionState == EchoRemoteConnectionState.Connected &&
                                     remoteStatus.mobileDiscordPresence?.enabled == true,
                                 discordPresenceTrackTitle = remoteStatus.mobileDiscordPresence?.track?.title,
+                                subsonicServerUrl = appSettings.subsonicServerUrl,
+                                subsonicUsername = appSettings.subsonicUsername,
+                                subsonicPassword = appSettings.subsonicPassword,
+                                webDavServerUrl = appSettings.webDavServerUrl,
+                                webDavUsername = appSettings.webDavUsername,
+                                webDavPassword = appSettings.webDavPassword,
+                                remoteScanState = remoteScanState,
                                 onPairDemo = {
                                     remoteClient.pair(
                                         EchoRemoteEndpoint(
@@ -562,9 +616,17 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onPlayPause = { remoteClient.send(EchoRemoteCommand.PlayPause) },
                                 onNext = { remoteClient.send(EchoRemoteCommand.Next) },
                                 onDisconnect = remoteClient::disconnect,
+                                onSyncSubsonicLibrary = viewModel::syncSubsonicLibrary,
+                                onSaveSubsonicCredentials = viewModel::saveSubsonicCredentials,
+                                onClearSubsonicCredentials = viewModel::clearSubsonicCredentials,
+                                onSyncWebDavLibrary = viewModel::syncWebDavLibrary,
+                                onSaveWebDavCredentials = viewModel::saveWebDavCredentials,
+                                onClearWebDavCredentials = viewModel::clearWebDavCredentials,
+                                onCancelRemoteSync = viewModel::cancelRemoteSync,
                             )
 
-                        EchoPagerPage.Diagnostics -> DiagnosticsScreen(status = playbackStatus)
+                            EchoPagerPage.Diagnostics -> DiagnosticsScreen(status = playbackStatus)
+                        }
                     }
                 }
                 Column(

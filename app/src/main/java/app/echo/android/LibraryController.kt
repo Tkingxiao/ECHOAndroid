@@ -6,6 +6,8 @@ import androidx.paging.cachedIn
 import androidx.paging.map
 import app.echo.android.data.EchoLibraryRepository
 import app.echo.android.data.MediaStoreAudioFolder
+import app.echo.android.data.SubsonicEndpoint
+import app.echo.android.data.WebDavEndpoint
 import app.echo.android.data.toEchoTrack
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
@@ -56,6 +58,11 @@ internal class LibraryController(
             .flatMapLatest { query -> repository.pagedAlbums(query) }
             .cachedIn(scope)
 
+    val remoteAlbums: Flow<PagingData<AlbumSummary>> =
+        debouncedLibraryQuery
+            .flatMapLatest { query -> repository.pagedRemoteAlbums(query) }
+            .cachedIn(scope)
+
     val artists: Flow<PagingData<ArtistSummary>> =
         debouncedLibraryQuery
             .flatMapLatest { query -> repository.pagedArtists(query) }
@@ -77,8 +84,11 @@ internal class LibraryController(
 
     private val _scanState = MutableStateFlow(LibraryScanProgress())
     val scanState: StateFlow<LibraryScanProgress> = _scanState.asStateFlow()
+    private val _remoteScanState = MutableStateFlow(LibraryScanProgress())
+    val remoteScanState: StateFlow<LibraryScanProgress> = _remoteScanState.asStateFlow()
 
     private var scanJob: Job? = null
+    private var remoteScanJob: Job? = null
 
     val currentQuery: String
         get() = _libraryQuery.value
@@ -157,6 +167,72 @@ internal class LibraryController(
         }
     }
 
+    fun refreshSubsonic(endpoint: SubsonicEndpoint) {
+        startRemoteSync(
+            duplicateMessage = "已有远程曲库同步正在进行，请先取消或等待完成",
+            fallbackError = "Subsonic / Navidrome 同步失败",
+        ) {
+            repository.refreshSubsonicSnapshot(endpoint)
+        }
+    }
+
+    fun refreshWebDav(endpoint: WebDavEndpoint) {
+        startRemoteSync(
+            duplicateMessage = "已有远程曲库同步正在进行，请先取消或等待完成",
+            fallbackError = "WebDAV 同步失败",
+        ) {
+            repository.refreshWebDavSnapshot(endpoint)
+        }
+    }
+
+    private fun startRemoteSync(
+        duplicateMessage: String,
+        fallbackError: String,
+        progressFlow: () -> Flow<LibraryScanProgress>,
+    ) {
+        if (remoteScanJob?.isActive == true) {
+            _remoteScanState.value = _remoteScanState.value.copy(
+                currentTitle = duplicateMessage,
+                error = duplicateMessage,
+            )
+            return
+        }
+        _remoteScanState.value = LibraryScanProgress(phase = LibraryScanPhase.Preparing)
+        remoteScanJob = scope.launch {
+            try {
+                progressFlow().collect { progress -> _remoteScanState.value = progress }
+            } catch (error: CancellationException) {
+                _remoteScanState.value = _remoteScanState.value.copy(
+                    phase = LibraryScanPhase.Cancelled,
+                    currentTitle = null,
+                    error = null,
+                    isCompleted = true,
+                )
+                throw error
+            } catch (error: Throwable) {
+                _remoteScanState.value = _remoteScanState.value.copy(
+                    phase = LibraryScanPhase.Error,
+                    currentTitle = null,
+                    error = error.message ?: fallbackError,
+                    isCompleted = true,
+                )
+            }
+        }
+    }
+
+    fun cancelRemoteScan() {
+        val job = remoteScanJob
+        if (job?.isActive == true) {
+            job.cancel()
+            _remoteScanState.value = _remoteScanState.value.copy(
+                phase = LibraryScanPhase.Cancelled,
+                currentTitle = null,
+                error = null,
+                isCompleted = true,
+            )
+        }
+    }
+
     suspend fun queueAroundTrack(trackId: String): List<EchoTrack> =
         withContext(Dispatchers.IO) {
             repository.queueAroundTrack(
@@ -192,5 +268,6 @@ internal class LibraryController(
 
     fun clear() {
         scanJob?.cancel()
+        remoteScanJob?.cancel()
     }
 }

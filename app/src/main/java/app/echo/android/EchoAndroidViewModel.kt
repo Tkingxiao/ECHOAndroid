@@ -11,6 +11,8 @@ import app.echo.android.data.EchoLibraryRepository
 import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoSettingsStore
 import app.echo.android.data.MediaStoreTrackScanner
+import app.echo.android.data.SubsonicEndpoint
+import app.echo.android.data.WebDavEndpoint
 import app.echo.android.lyrics.ImportedLyricsStore
 import app.echo.android.lyrics.LocalLyricsResolver
 import app.echo.android.lyrics.OnlineLyricsResolver
@@ -31,6 +33,8 @@ import app.echo.android.model.playback.PlaybackDiagnosticsState
 import app.echo.android.model.playback.PlaybackHeatmapDay
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
+import app.echo.android.playback.EchoRemotePlaybackAuthRegistry
+import app.echo.android.playback.EchoWebDavPlaybackCredential
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -78,12 +82,14 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val libraryQuery: StateFlow<String> = libraryController.libraryQuery
     val tracks: Flow<PagingData<EchoTrack>> = libraryController.tracks
     val albums: Flow<PagingData<AlbumSummary>> = libraryController.albums
+    val remoteAlbums: Flow<PagingData<AlbumSummary>> = libraryController.remoteAlbums
     val artists: Flow<PagingData<ArtistSummary>> = libraryController.artists
     val folders: Flow<PagingData<FolderSummary>> = libraryController.folders
     val libraryStats: Flow<LibraryStats> = libraryController.libraryStats
     val recommendedTracks: Flow<List<EchoTrack>> = libraryController.recommendedTracks
     val recentlyAddedAlbums: Flow<List<AlbumSummary>> = libraryController.recentlyAddedAlbums
     val scanState: StateFlow<LibraryScanProgress> = libraryController.scanState
+    val remoteScanState: StateFlow<LibraryScanProgress> = libraryController.remoteScanState
 
     val playbackStatus: StateFlow<EchoPlaybackStatus> = playbackController.playbackStatus
     val playbackMetadata: StateFlow<PlaybackMetadataState> = playbackController.playbackMetadata
@@ -147,6 +153,9 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
                 if (settings.lastFmEnabled && !settings.lastFmUsername.isNullOrBlank()) {
                     lastFmController.setConnected(settings.lastFmUsername.orEmpty())
                 }
+                EchoRemotePlaybackAuthRegistry.replaceWebDavCredentials(
+                    listOfNotNull(webDavPlaybackCredential(settings)),
+                )
             }
         }
     }
@@ -170,6 +179,10 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
 
     fun cancelScan() {
         libraryController.cancelScan()
+    }
+
+    fun cancelRemoteSync() {
+        libraryController.cancelRemoteScan()
     }
 
     fun updateLibraryQuery(query: String) {
@@ -437,6 +450,66 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun saveSubsonicCredentials(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ) {
+        updateSettings {
+            setSubsonicCredentials(serverUrl, username, password)
+        }
+    }
+
+    fun clearSubsonicCredentials() {
+        updateSettings {
+            clearSubsonicCredentials()
+        }
+    }
+
+    fun syncSubsonicLibrary(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ) {
+        val endpoint = SubsonicEndpoint(
+            baseUrl = serverUrl,
+            username = username,
+            password = password,
+        )
+        libraryController.refreshSubsonic(endpoint)
+        saveSubsonicCredentials(serverUrl, username, password)
+    }
+
+    fun saveWebDavCredentials(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ) {
+        updateSettings {
+            setWebDavCredentials(serverUrl, username, password)
+        }
+    }
+
+    fun clearWebDavCredentials() {
+        updateSettings {
+            clearWebDavCredentials()
+        }
+    }
+
+    fun syncWebDavLibrary(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ) {
+        val endpoint = WebDavEndpoint(
+            baseUrl = serverUrl,
+            username = username,
+            password = password,
+        )
+        libraryController.refreshWebDav(endpoint)
+        saveWebDavCredentials(serverUrl, username, password)
+    }
+
     fun connectLastFm(
         apiKey: String,
         sharedSecret: String,
@@ -659,4 +732,15 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     private companion object {
         const val HomeHeatmapVisibleDays = 84L
     }
+}
+
+private fun webDavPlaybackCredential(settings: EchoAppSettings): EchoWebDavPlaybackCredential? {
+    val serverUrl = settings.webDavServerUrl?.takeIf { it.isNotBlank() } ?: return null
+    val username = settings.webDavUsername?.takeIf { it.isNotBlank() } ?: return null
+    val password = settings.webDavPassword?.takeIf { it.isNotBlank() } ?: return null
+    return EchoWebDavPlaybackCredential(
+        baseUrl = serverUrl,
+        username = username,
+        password = password,
+    )
 }

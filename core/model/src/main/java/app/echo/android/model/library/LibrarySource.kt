@@ -5,6 +5,8 @@ data class LibrarySource(
 ) {
     companion object {
         val MediaStore = LibrarySource("mediastore")
+        val Subsonic = LibrarySource("subsonic")
+        val WebDav = LibrarySource("webdav")
         val Unknown = LibrarySource("unknown")
     }
 }

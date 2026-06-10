@@ -83,6 +83,17 @@ class EchoLibraryRepository(
             },
         ).flow
 
+    fun pagedRemoteAlbums(
+        query: String? = null,
+        sort: AlbumSortMode = AlbumSortMode.Title,
+    ): Flow<PagingData<AlbumSummary>> =
+        Pager(
+            config = defaultPagingConfig(),
+            pagingSourceFactory = {
+                database.trackDao().pageRemoteAlbums(query?.trim()?.takeIf { it.isNotBlank() }, sort.name)
+            },
+        ).flow
+
     fun pagedArtists(
         query: String? = null,
         sort: ArtistSortMode = ArtistSortMode.Name,
@@ -105,7 +116,14 @@ class EchoLibraryRepository(
     fun pagedAlbumTracks(albumKey: String): Flow<PagingData<LibraryTrackEntity>> =
         Pager(
             config = defaultPagingConfig(),
-            pagingSourceFactory = { database.trackDao().pageTracksByAlbum(albumKey) },
+            pagingSourceFactory = {
+                val remoteAlbum = RemoteAlbumKey.parse(albumKey)
+                if (remoteAlbum == null) {
+                    database.trackDao().pageTracksByAlbum(albumKey)
+                } else {
+                    database.trackDao().pageTracksByRemoteAlbum(remoteAlbum.source, remoteAlbum.albumKey)
+                }
+            },
         ).flow
 
     fun pagedArtistTracks(artistKey: String): Flow<PagingData<LibraryTrackEntity>> =
@@ -121,7 +139,9 @@ class EchoLibraryRepository(
         ).flow
 
     suspend fun albumTracks(albumKey: String): List<LibraryTrackEntity> =
-        database.trackDao().getTracksByAlbum(albumKey)
+        RemoteAlbumKey.parse(albumKey)?.let { remoteAlbum ->
+            database.trackDao().getTracksByRemoteAlbum(remoteAlbum.source, remoteAlbum.albumKey)
+        } ?: database.trackDao().getTracksByAlbum(albumKey)
 
     suspend fun artistTracks(artistKey: String): List<LibraryTrackEntity> =
         database.trackDao().getTracksByArtist(artistKey)
@@ -144,7 +164,11 @@ class EchoLibraryRepository(
 
     suspend fun albumSummaryForTrack(trackId: String): AlbumSummary? {
         val track = database.trackDao().getTrackById(trackId) ?: return null
-        return database.trackDao().getAlbumSummary(track.albumKey())
+        return if (track.source == LibrarySource.MediaStore.id) {
+            database.trackDao().getAlbumSummary(track.albumKey())
+        } else {
+            database.trackDao().getRemoteAlbumSummary(track.source, track.albumKey())
+        }
     }
 
     suspend fun artistSummaryForTrack(trackId: String): ArtistSummary? {
@@ -158,8 +182,21 @@ class EchoLibraryRepository(
     suspend fun albumTracksForPlayback(
         albumKey: String,
         limit: Int = AggregationQueueLimit,
-    ): List<LibraryTrackEntity> =
-        database.trackDao().getAlbumTracksForPlayback(albumPlaybackQuery(albumKey, limit.coerceAtLeast(1)))
+    ): List<LibraryTrackEntity> {
+        val safeLimit = limit.coerceAtLeast(1)
+        val remoteAlbum = RemoteAlbumKey.parse(albumKey)
+        return if (remoteAlbum == null) {
+            database.trackDao().getAlbumTracksForPlayback(albumPlaybackQuery(albumKey, safeLimit))
+        } else {
+            database.trackDao().getAlbumTracksForPlayback(
+                remoteAlbumPlaybackQuery(
+                    source = remoteAlbum.source,
+                    albumKey = remoteAlbum.albumKey,
+                    limit = safeLimit,
+                ),
+            )
+        }
+    }
 
     suspend fun artistTracksForPlayback(
         artistKey: String,
@@ -308,6 +345,180 @@ class EchoLibraryRepository(
         }
     }.flowOn(Dispatchers.IO)
 
+    fun refreshSubsonicSnapshot(
+        endpoint: SubsonicEndpoint,
+        batchSize: Int = ScanBatchSize,
+    ): Flow<LibraryScanProgress> = flow {
+        val client = SubsonicClient(endpoint)
+        val dao = database.trackDao()
+        val source = endpoint.sourceId
+        val scanRunId = System.currentTimeMillis()
+        var progress = LibraryScanProgress(phase = LibraryScanPhase.Preparing)
+        var insertedCount = 0
+        var updatedCount = 0
+        var scannedCount = 0
+        var totalCount: Int? = null
+        var deletedCount = 0
+
+        suspend fun emitProgress(
+            phase: LibraryScanPhase = progress.phase,
+            currentTitle: String? = progress.currentTitle,
+            error: String? = null,
+            isCompleted: Boolean = false,
+        ) {
+            progress = LibraryScanProgress(
+                phase = phase,
+                scannedCount = scannedCount,
+                insertedCount = insertedCount,
+                updatedCount = updatedCount,
+                deletedCount = deletedCount,
+                totalCount = totalCount,
+                currentTitle = currentTitle,
+                error = error,
+                isCompleted = isCompleted,
+            )
+            emit(progress)
+        }
+
+        try {
+            emitProgress()
+            coroutineContext.ensureActive()
+
+            emitProgress(phase = LibraryScanPhase.Diffing, currentTitle = "读取远程曲库索引")
+            val existingFingerprints = dao.getExistingMediaStoreFingerprints(source)
+                .associateBy(TrackFingerprint::id)
+
+            emitProgress(phase = LibraryScanPhase.QueryingMediaStore, currentTitle = "连接 Navidrome/Subsonic")
+            client.ping()
+            val albums = client.fetchAlbums()
+            totalCount = albums.sumOf { it.songCount.coerceAtLeast(1) }
+            emitProgress(phase = LibraryScanPhase.QueryingMediaStore, currentTitle = "发现 ${albums.size} 张远程专辑")
+
+            val pending = ArrayList<LibraryTrackEntity>(batchSize)
+            for (album in albums) {
+                coroutineContext.ensureActive()
+                val songs = client.fetchAlbumSongs(album)
+                for (song in songs) {
+                    coroutineContext.ensureActive()
+                    scannedCount += 1
+                    pending += song.toLibraryTrackEntity(endpoint, client, scanRunId)
+                    if (pending.size >= batchSize) {
+                        val counts = writeRemoteBatch(dao, pending, existingFingerprints)
+                        insertedCount += counts.first
+                        updatedCount += counts.second
+                        pending.clear()
+                        emitProgress(phase = LibraryScanPhase.WritingDatabase, currentTitle = album.name)
+                    }
+                }
+                emitProgress(phase = LibraryScanPhase.QueryingMediaStore, currentTitle = album.name)
+            }
+            if (pending.isNotEmpty()) {
+                val counts = writeRemoteBatch(dao, pending, existingFingerprints)
+                insertedCount += counts.first
+                updatedCount += counts.second
+                pending.clear()
+            }
+
+            emitProgress(phase = LibraryScanPhase.CleaningRemoved, currentTitle = null)
+            val missingTrackIds = dao.getMissingTrackIdsFromSource(source, scanRunId)
+            deletedCount = dao.deleteMissingFromSource(source, scanRunId)
+            missingTrackIds.chunked(DatabaseBatchSize).forEach { trackIds ->
+                dao.deleteFtsByTrackIds(trackIds)
+            }
+            emitProgress(phase = LibraryScanPhase.Completed, currentTitle = null, isCompleted = true)
+        } catch (error: CancellationException) {
+            emitProgress(phase = LibraryScanPhase.Cancelled, currentTitle = null, isCompleted = true)
+            throw error
+        } catch (error: Throwable) {
+            emitProgress(
+                phase = LibraryScanPhase.Error,
+                currentTitle = null,
+                error = error.message ?: "远程曲库同步失败",
+                isCompleted = true,
+            )
+        }
+    }.flowOn(Dispatchers.IO)
+
+    fun refreshWebDavSnapshot(
+        endpoint: WebDavEndpoint,
+        batchSize: Int = ScanBatchSize,
+    ): Flow<LibraryScanProgress> = flow {
+        val client = WebDavClient(endpoint)
+        val dao = database.trackDao()
+        val source = endpoint.sourceId
+        val scanRunId = System.currentTimeMillis()
+        var progress = LibraryScanProgress(phase = LibraryScanPhase.Preparing)
+        var insertedCount = 0
+        var updatedCount = 0
+        var scannedCount = 0
+        var deletedCount = 0
+        val pending = ArrayList<LibraryTrackEntity>(batchSize)
+
+        suspend fun emitProgress(
+            phase: LibraryScanPhase = progress.phase,
+            currentTitle: String? = progress.currentTitle,
+            error: String? = null,
+            isCompleted: Boolean = false,
+        ) {
+            progress = LibraryScanProgress(
+                phase = phase,
+                scannedCount = scannedCount,
+                insertedCount = insertedCount,
+                updatedCount = updatedCount,
+                deletedCount = deletedCount,
+                currentTitle = currentTitle,
+                error = error,
+                isCompleted = isCompleted,
+            )
+            emit(progress)
+        }
+
+        try {
+            emitProgress()
+            coroutineContext.ensureActive()
+            emitProgress(phase = LibraryScanPhase.Diffing, currentTitle = "读取 WebDAV 索引")
+            val existingFingerprints = dao.getExistingMediaStoreFingerprints(source)
+                .associateBy(TrackFingerprint::id)
+
+            emitProgress(phase = LibraryScanPhase.QueryingMediaStore, currentTitle = "扫描 WebDAV 目录")
+            client.scanAudioFiles { file ->
+                coroutineContext.ensureActive()
+                scannedCount += 1
+                pending += file.toLibraryTrackEntity(endpoint, scanRunId)
+                if (pending.size >= batchSize) {
+                    val counts = writeRemoteBatch(dao, pending, existingFingerprints)
+                    insertedCount += counts.first
+                    updatedCount += counts.second
+                    pending.clear()
+                }
+            }
+            if (pending.isNotEmpty()) {
+                val counts = writeRemoteBatch(dao, pending, existingFingerprints)
+                insertedCount += counts.first
+                updatedCount += counts.second
+                pending.clear()
+            }
+
+            emitProgress(phase = LibraryScanPhase.CleaningRemoved, currentTitle = null)
+            val missingTrackIds = dao.getMissingTrackIdsFromSource(source, scanRunId)
+            deletedCount = dao.deleteMissingFromSource(source, scanRunId)
+            missingTrackIds.chunked(DatabaseBatchSize).forEach { trackIds ->
+                dao.deleteFtsByTrackIds(trackIds)
+            }
+            emitProgress(phase = LibraryScanPhase.Completed, currentTitle = null, isCompleted = true)
+        } catch (error: CancellationException) {
+            emitProgress(phase = LibraryScanPhase.Cancelled, currentTitle = null, isCompleted = true)
+            throw error
+        } catch (error: Throwable) {
+            emitProgress(
+                phase = LibraryScanPhase.Error,
+                currentTitle = null,
+                error = error.message ?: "WebDAV 曲库同步失败",
+                isCompleted = true,
+            )
+        }
+    }.flowOn(Dispatchers.IO)
+
     suspend fun countTracks(): Int = database.trackDao().countTracks()
 
     private suspend fun canUseFts(dao: LibraryTrackDao, matchQuery: String): Boolean =
@@ -376,6 +587,29 @@ class EchoLibraryRepository(
         )
     }
 
+    private fun remoteAlbumPlaybackQuery(source: String, albumKey: String, limit: Int): SimpleSQLiteQuery {
+        val fallbackParts = albumKey.split("::", limit = 2)
+        val fallbackAlbum = fallbackParts.getOrElse(0) { albumKey }
+        val fallbackArtist = fallbackParts.getOrElse(1) { albumKey }
+        return SimpleSQLiteQuery(
+            """
+            SELECT * FROM library_tracks
+            WHERE source = ?
+              AND (
+                COALESCE(NULLIF(normalizedAlbum, ''), ?) ||
+                '::' ||
+                COALESCE(NULLIF(normalizedAlbumArtist, ''), NULLIF(normalizedArtist, ''), ?)
+              ) = ?
+            ORDER BY
+                CASE WHEN discNumber IS NULL THEN 0 ELSE discNumber END ASC,
+                CASE WHEN trackNumber IS NULL THEN 0 ELSE trackNumber END ASC,
+                title COLLATE NOCASE ASC
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf<Any>(source, fallbackAlbum, fallbackArtist, albumKey, limit),
+        )
+    }
+
     private fun artistPlaybackQuery(artistKey: String, limit: Int): SimpleSQLiteQuery =
         SimpleSQLiteQuery(
             """
@@ -408,4 +642,41 @@ class EchoLibraryRepository(
         const val TrackQueueLimit = 200
         const val AggregationQueueLimit = 500
     }
+}
+
+private data class RemoteAlbumKey(
+    val source: String,
+    val albumKey: String,
+) {
+    companion object {
+        fun parse(value: String): RemoteAlbumKey? {
+            if (!value.startsWith(Prefix)) return null
+            val parts = value.split("||", limit = 3)
+            if (parts.size != 3 || parts[1].isBlank() || parts[2].isBlank()) return null
+            return RemoteAlbumKey(source = parts[1], albumKey = parts[2])
+        }
+
+        private const val Prefix = "remote||"
+    }
+}
+
+private suspend fun writeRemoteBatch(
+    dao: LibraryTrackDao,
+    tracks: List<LibraryTrackEntity>,
+    existingFingerprints: Map<String, TrackFingerprint>,
+): Pair<Int, Int> {
+    val inserts = ArrayList<LibraryTrackEntity>(tracks.size)
+    val updates = ArrayList<LibraryTrackEntity>(tracks.size)
+    val unchangedIds = ArrayList<String>(tracks.size)
+    tracks.forEach { track ->
+        val existing = existingFingerprints[track.id]
+        when {
+            existing == null -> inserts += track
+            existing.fingerprint != track.fingerprint -> updates += track
+            else -> unchangedIds += track.id
+        }
+    }
+    (inserts + updates).chunked(500).forEach { chunk -> dao.upsertBatchWithFts(chunk) }
+    unchangedIds.chunked(500).forEach { ids -> dao.markSeen(ids, tracks.first().lastSeenScanRunId) }
+    return inserts.size to updates.size
 }
