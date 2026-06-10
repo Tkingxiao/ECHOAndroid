@@ -21,6 +21,7 @@ data class EchoAppSettings(
     val showLyricsControlDeck: Boolean = false,
     val onlineLyricsEnabled: Boolean = false,
     val usbExclusiveEnabled: Boolean = false,
+    val usbExclusiveAutoRequestOnStartup: Boolean = true,
     val customBackgroundMode: String = EchoBackgroundMode.Default,
     val customBackgroundUri: String? = null,
     val customBackgroundBlur: Float = 32f,
@@ -41,6 +42,7 @@ data class EchoAppSettings(
     val lastFmSharedSecret: String? = null,
     val lastFmUsername: String? = null,
     val lastFmSessionKey: String? = null,
+    val discordPresenceViaPcEnabled: Boolean = false,
 )
 
 object EchoBackgroundMode {
@@ -77,6 +79,7 @@ class EchoSettingsStore(
                 showLyricsControlDeck = preferences[Keys.ShowLyricsControlDeck] ?: false,
                 onlineLyricsEnabled = preferences[Keys.OnlineLyricsEnabled] ?: false,
                 usbExclusiveEnabled = preferences[Keys.UsbExclusiveEnabled] ?: false,
+                usbExclusiveAutoRequestOnStartup = preferences[Keys.UsbExclusiveAutoRequestOnStartup] ?: true,
                 customBackgroundMode = preferences[Keys.CustomBackgroundMode] ?: EchoBackgroundMode.Default,
                 customBackgroundUri = preferences[Keys.CustomBackgroundUri],
                 customBackgroundBlur = (preferences[Keys.CustomBackgroundBlur] ?: 32f).coerceIn(0f, 80f),
@@ -97,6 +100,7 @@ class EchoSettingsStore(
                 lastFmSharedSecret = preferences[Keys.LastFmSharedSecret],
                 lastFmUsername = preferences[Keys.LastFmUsername],
                 lastFmSessionKey = preferences[Keys.LastFmSessionKey],
+                discordPresenceViaPcEnabled = preferences[Keys.DiscordPresenceViaPcEnabled] ?: false,
             )
         }
 
@@ -130,6 +134,10 @@ class EchoSettingsStore(
 
     suspend fun setUsbExclusiveEnabled(enabled: Boolean) {
         context.echoSettings.edit { it[Keys.UsbExclusiveEnabled] = enabled }
+    }
+
+    suspend fun setUsbExclusiveAutoRequestOnStartup(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.UsbExclusiveAutoRequestOnStartup] = enabled }
     }
 
     suspend fun setCustomBackground(mode: String, uri: String?) {
@@ -234,6 +242,10 @@ class EchoSettingsStore(
         }
     }
 
+    suspend fun setDiscordPresenceViaPcEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.DiscordPresenceViaPcEnabled] = enabled }
+    }
+
     private object Keys {
         val PreferOffload = booleanPreferencesKey("prefer_offload")
         val LastOutputRoute = stringPreferencesKey("last_output_route")
@@ -243,6 +255,7 @@ class EchoSettingsStore(
         val ShowLyricsControlDeck = booleanPreferencesKey("show_lyrics_control_deck")
         val OnlineLyricsEnabled = booleanPreferencesKey("online_lyrics_enabled")
         val UsbExclusiveEnabled = booleanPreferencesKey("usb_exclusive_enabled")
+        val UsbExclusiveAutoRequestOnStartup = booleanPreferencesKey("usb_exclusive_auto_request_on_startup")
         val CustomBackgroundMode = stringPreferencesKey("custom_background_mode")
         val CustomBackgroundUri = stringPreferencesKey("custom_background_uri")
         val CustomBackgroundBlur = floatPreferencesKey("custom_background_blur")
@@ -263,5 +276,6 @@ class EchoSettingsStore(
         val LastFmSharedSecret = stringPreferencesKey("lastfm_shared_secret")
         val LastFmUsername = stringPreferencesKey("lastfm_username")
         val LastFmSessionKey = stringPreferencesKey("lastfm_session_key")
+        val DiscordPresenceViaPcEnabled = booleanPreferencesKey("discord_presence_via_pc_enabled")
     }
 }

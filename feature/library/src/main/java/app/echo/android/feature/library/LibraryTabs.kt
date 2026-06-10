@@ -130,17 +130,35 @@ internal fun LibraryPagerTabs(
     ) {
         LibraryViewMode.entries.forEach { mode ->
             val selected = selectedMode == mode
-            Text(
-                text = mode.label,
+            Column(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
                     .clickable { onSelectMode(mode) }
                     .padding(horizontal = 4.dp, vertical = 8.dp),
-                color = if (selected) EchoAccentText else colors.muted,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-                maxLines = 1,
-            )
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = mode.label,
+                    color = if (selected) EchoAccentText else colors.muted,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                Box(
+                    modifier = Modifier
+                        .width(20.dp)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(
+                            if (selected) {
+                                Brush.horizontalGradient(listOf(EchoAccent, EchoAccentDeep))
+                            } else {
+                                Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
+                            },
+                        ),
+                )
+            }
         }
     }
 }

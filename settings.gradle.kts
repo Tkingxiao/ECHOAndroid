@@ -19,6 +19,7 @@ rootProject.name = "ECHOAndroid"
 include(":app")
 include(":core:data")
 include(":core:model")
+include(":core:usb-audio")
 include(":core:playback")
 include(":core:connect")
 include(":core:design")

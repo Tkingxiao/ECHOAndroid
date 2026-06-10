@@ -90,7 +90,8 @@ internal fun TrackRow(
                 track.artworkUri,
                 Modifier.size(68.dp),
                 accent = EchoAccent,
-                cornerRadius = 6.dp,
+                cornerRadius = 12.dp,
+                elevation = 3.dp,
             )
             Column(
                 modifier = Modifier.weight(1f),
@@ -153,7 +154,7 @@ internal fun TrackRow(
                 .fillMaxWidth()
                 .height(1.dp)
                 .padding(start = 82.dp)
-                .background(scheme.outlineVariant.copy(alpha = 0.58f)),
+                .background(scheme.outlineVariant.copy(alpha = 0.36f)),
         )
     }
 }

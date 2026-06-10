@@ -67,6 +67,9 @@ fun ConnectScreen(
     trackTitle: String,
     trackArtist: String,
     isPlaying: Boolean,
+    discordPresenceEnabled: Boolean,
+    discordPresenceReady: Boolean,
+    discordPresenceTrackTitle: String?,
     onPairDemo: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -99,13 +102,28 @@ fun ConnectScreen(
             locked = false,
             onClick = {},
         )
+        Spacer(Modifier.height(10.dp))
+        ServiceCard(
+            name = "Discord Rich Presence",
+            subtitle = discordPresenceTrackTitle?.let { "手机播放：$it" } ?: "通过 PC ECHO 转发手机播放状态",
+            icon = Icons.Rounded.GraphicEq,
+            brandColor = Color(0xFF5865F2),
+            statusLabel = when {
+                !discordPresenceEnabled -> "未开启"
+                discordPresenceReady -> "待转发"
+                else -> "等待 PC"
+            },
+            active = discordPresenceEnabled && discordPresenceReady,
+            locked = !discordPresenceEnabled,
+            onClick = {},
+        )
         Spacer(Modifier.height(20.dp))
         EchoSectionTitle("设备联动", if (connected) "手机控制，PC 输出" else "配对后接管 PC ECHO 播放")
         Spacer(Modifier.height(12.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .background(
                     Brush.linearGradient(
                         listOf(
@@ -120,7 +138,7 @@ fun ConnectScreen(
                         1.dp,
                         if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else EchoGlassBorder.copy(alpha = 0.86f),
                     ),
-                    RoundedCornerShape(20.dp),
+                    RoundedCornerShape(24.dp),
                 ),
         ) {
             Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

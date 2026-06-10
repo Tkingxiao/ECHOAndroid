@@ -19,6 +19,7 @@ import app.echo.android.model.playback.PlaybackDiagnosticsState
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
 import app.echo.android.playback.EchoPlaybackService
+import app.echo.android.playback.EchoUsbExclusiveDriverTester
 import app.echo.android.playback.EchoUsbAudioMonitor
 import app.echo.android.playback.toEchoPlaybackStatus
 import app.echo.android.playback.toMediaItem
@@ -58,6 +59,7 @@ internal class PlaybackController(
     val playbackDiagnostics: StateFlow<PlaybackDiagnosticsState> = _playbackDiagnostics.asStateFlow()
 
     private val usbAudioMonitor = EchoUsbAudioMonitor(application)
+    private val usbExclusiveDriverTester = EchoUsbExclusiveDriverTester(application)
     private var controller: MediaController? = null
     private var progressJob: Job? = null
     private var usbAudioJob: Job? = null
@@ -81,6 +83,9 @@ internal class PlaybackController(
             usbAudioMonitor.prepareForTrack(_playbackDiagnostics.value.diagnostics.sampleRateHz)
         }
     }
+
+    fun testUsbExclusiveDriver(): String =
+        usbExclusiveDriverTester.testOpen(_playbackDiagnostics.value.diagnostics)
 
     fun play(track: EchoTrack) {
         sampleRatesByMediaId.clear()
@@ -166,6 +171,7 @@ internal class PlaybackController(
         progressJob?.cancel()
         usbAudioJob?.cancel()
         usbTransitionJob?.cancel()
+        usbAudioMonitor.setExclusiveEnabled(false)
         usbAudioMonitor.stop()
         controller?.removeListener(playerListener)
         controller?.release()
@@ -245,7 +251,11 @@ internal class PlaybackController(
     private fun updatePlaybackCore(player: Player) {
         val metadata = player.toPlaybackMetadataState()
         val controls = player.toPlaybackControlsState()
-        val diagnostics = player.toPlaybackDiagnosticsState(usbAudioMonitor.status.value)
+        val sourceSampleRateHz = metadata.mediaId?.let(sampleRatesByMediaId::get)
+        val diagnostics = player.toPlaybackDiagnosticsState(
+            usbAudioStatus = usbAudioMonitor.status.value,
+            sourceSampleRateHz = sourceSampleRateHz,
+        )
         val position = player.toPlaybackPositionState()
         val status = player.toEchoPlaybackStatus(diagnostics.diagnostics)
 

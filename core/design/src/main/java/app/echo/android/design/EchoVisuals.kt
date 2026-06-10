@@ -38,6 +38,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -58,6 +59,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -119,13 +122,13 @@ fun GlassIconButton(
 @Composable
 fun EchoGlassBackground(modifier: Modifier = Modifier) {
     val dark = LocalEchoDarkTheme.current
-    // Roon 风格：平面中性炭灰，极克制的顶部冷光，无光斑、无星点
+    // 大胆现代：深邃蓝黑底 + 多彩弥散光晕（蓝 / 紫 / 粉 / 青），类磨砂玻璃氛围
     val baseGradient = Brush.verticalGradient(
         if (dark) {
             listOf(
-                Color(0xFF0D0F14),
-                Color(0xFF151821),
-                Color(0xFF10131A),
+                Color(0xFF0A0C13),
+                Color(0xFF121520),
+                Color(0xFF0C0E17),
             )
         } else {
             listOf(
@@ -138,26 +141,36 @@ fun EchoGlassBackground(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.background(baseGradient)) {
         val w = size.width
         val h = size.height
-        // 顶部一抹极淡的 Roon 蓝冷光，给纯黑一点层次
+        // 左上：主蓝色冷光
         drawRect(
             brush = Brush.radialGradient(
-                colors = listOf(EchoHomeBlue.copy(alpha = if (dark) 0.12f else 0.22f), Color.Transparent),
-                center = Offset(w * 0.08f, h * 0.18f),
+                colors = listOf(EchoHomeBlue.copy(alpha = if (dark) 0.20f else 0.30f), Color.Transparent),
+                center = Offset(w * 0.06f, h * 0.14f),
+                radius = h * 0.48f,
+            ),
+        )
+        // 右上：电光紫
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(EchoAccentDeep.copy(alpha = if (dark) 0.18f else 0.24f), Color.Transparent),
+                center = Offset(w * 0.94f, h * 0.24f),
+                radius = h * 0.52f,
+            ),
+        )
+        // 中下：霓虹粉晕
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFFFF8AC2).copy(alpha = if (dark) 0.10f else 0.20f), Color.Transparent),
+                center = Offset(w * 0.38f, h * 0.80f),
+                radius = h * 0.48f,
+            ),
+        )
+        // 右下：一抹青色，平衡整体色温
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFF3FD8C7).copy(alpha = if (dark) 0.08f else 0.14f), Color.Transparent),
+                center = Offset(w * 0.88f, h * 0.92f),
                 radius = h * 0.40f,
-            ),
-        )
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(EchoAccentDeep.copy(alpha = if (dark) 0.10f else 0.18f), Color.Transparent),
-                center = Offset(w * 0.92f, h * 0.28f),
-                radius = h * 0.46f,
-            ),
-        )
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0xFFFFC7E3).copy(alpha = if (dark) 0.06f else 0.18f), Color.Transparent),
-                center = Offset(w * 0.40f, h * 0.78f),
-                radius = h * 0.44f,
             ),
         )
     }
@@ -205,9 +218,9 @@ fun PageChrome(
         val chromeGradient = if (dark) {
             Brush.verticalGradient(
                 listOf(
-                    scheme.background.copy(alpha = 0.96f),
+                    Color(0xFF11141E).copy(alpha = 0.97f),
                     scheme.surface.copy(alpha = 0.90f),
-                    Color(0xFF10131A).copy(alpha = 0.96f),
+                    Color(0xFF0C0E17).copy(alpha = 0.97f),
                 ),
             )
         } else {
@@ -469,6 +482,15 @@ fun BlurredArtworkBackground(
     overlayMidAlpha: Float = 0.05f,
     overlayEndAlpha: Float = 0.42f,
 ) {
+    val context = LocalContext.current
+    val artworkModel = remember(context, artworkUri) {
+        ImageRequest.Builder(context)
+            .data(artworkUri)
+            .size(Size.ORIGINAL)
+            .bitmapConfig(Bitmap.Config.ARGB_8888)
+            .crossfade(false)
+            .build()
+    }
     Box(modifier = modifier.fillMaxSize()) {
         // 取色底，保证无封面/低于 API 31 时也有沉浸色
         Box(
@@ -486,7 +508,7 @@ fun BlurredArtworkBackground(
         )
         if (!artworkUri.isNullOrBlank()) {
             AsyncImage(
-                model = artworkUri,
+                model = artworkModel,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

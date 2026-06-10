@@ -77,6 +77,7 @@ import app.echo.android.data.EchoBackgroundMode
 import app.echo.android.data.EchoFontFamilyMode
 import app.echo.android.data.EchoThemeMode
 import app.echo.android.model.connect.EchoRemoteCommand
+import app.echo.android.model.connect.EchoRemoteConnectionState
 import app.echo.android.model.connect.EchoRemoteEndpoint
 import app.echo.android.model.connect.EchoRemotePlaybackState
 import app.echo.android.model.library.AlbumSummary
@@ -182,6 +183,8 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val playbackStatus by viewModel.playbackStatus.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle(EchoAppSettings())
     val lastFmState by viewModel.lastFmState.collectAsStateWithLifecycle()
+    val usbExclusiveTestResult by viewModel.usbExclusiveTestResult.collectAsStateWithLifecycle()
+    val discordPresenceSnapshot by viewModel.discordPresenceSnapshot.collectAsStateWithLifecycle(null)
     val lastFmApiKey = appSettings.lastFmApiKey?.takeIf { it.isNotBlank() }
         ?: LastFmApiConfig.apiKey.takeIf { it.isNotBlank() }
     val lastFmSharedSecret = appSettings.lastFmSharedSecret?.takeIf { it.isNotBlank() }
@@ -320,6 +323,10 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         }
     }
 
+    LaunchedEffect(discordPresenceSnapshot) {
+        remoteClient.publishMobileDiscordPresence(discordPresenceSnapshot)
+    }
+
     BackHandler(enabled = nowPlayingExpanded) { nowPlayingExpanded = false }
     BackHandler(enabled = !nowPlayingExpanded && libraryDetailOpen) {
         closeLibraryDetail()
@@ -435,9 +442,12 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 dynamicArtworkEnabled = appSettings.dynamicArtworkEnabled,
                                 compactModeEnabled = appSettings.compactModeEnabled,
                                 pcHandoffEnabled = appSettings.pcHandoffEnabled,
+                                discordPresenceViaPcEnabled = appSettings.discordPresenceViaPcEnabled,
                                 showLyricsControlDeck = appSettings.showLyricsControlDeck,
                                 onlineLyricsEnabled = appSettings.onlineLyricsEnabled,
                                 usbExclusiveEnabled = appSettings.usbExclusiveEnabled,
+                                usbExclusiveAutoRequestOnStartup = appSettings.usbExclusiveAutoRequestOnStartup,
+                                usbExclusiveTestResult = usbExclusiveTestResult,
                                 customBackgroundMode = appSettings.customBackgroundMode,
                                 customBackgroundUri = appSettings.customBackgroundUri,
                                 customBackgroundBlur = appSettings.customBackgroundBlur,
@@ -454,20 +464,23 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 scheduledDarkStartMinute = appSettings.scheduledDarkStartMinute,
                                 scheduledDarkEndMinute = appSettings.scheduledDarkEndMinute,
                                 lastFmEnabled = appSettings.lastFmEnabled,
-                                lastFmUsername = appSettings.lastFmUsername,
                                 lastFmApiKey = lastFmApiKey,
                                 lastFmSharedSecret = lastFmSharedSecret,
                                 lastFmSessionKey = appSettings.lastFmSessionKey,
                                 lastFmStatusLabel = lastFmState.lastMessage,
                                 lastFmErrorLabel = lastFmState.lastError,
+                                lastFmWebAuthPending = lastFmState.webAuthPending,
                                 lastFmApiKeyLocked = LastFmApiConfig.hasApiKey,
                                 lastFmSharedSecretLocked = LastFmApiConfig.hasSharedSecret,
                                 onDynamicArtworkEnabledChange = viewModel::setDynamicArtworkEnabled,
                                 onCompactModeEnabledChange = viewModel::setCompactModeEnabled,
                                 onPcHandoffEnabledChange = viewModel::setPcHandoffEnabled,
+                                onDiscordPresenceViaPcEnabledChange = viewModel::setDiscordPresenceViaPcEnabled,
                                 onShowLyricsControlDeckChange = viewModel::setShowLyricsControlDeck,
                                 onOnlineLyricsEnabledChange = viewModel::setOnlineLyricsEnabled,
                                 onUsbExclusiveEnabledChange = viewModel::setUsbExclusiveEnabled,
+                                onUsbExclusiveAutoRequestOnStartupChange = viewModel::setUsbExclusiveAutoRequestOnStartup,
+                                onTestUsbExclusiveDriver = viewModel::testUsbExclusiveDriver,
                                 onPickImageBackground = { backgroundImageLauncher.launch(arrayOf("image/*")) },
                                 onPickVideoBackground = { backgroundVideoLauncher.launch(arrayOf("video/*")) },
                                 onClearCustomBackground = {
@@ -497,7 +510,19 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onScheduledDarkStartMinuteChange = viewModel::setScheduledDarkStartMinute,
                                 onScheduledDarkEndMinuteChange = viewModel::setScheduledDarkEndMinute,
                                 onLastFmEnabledChange = viewModel::setLastFmEnabled,
-                                onConnectLastFm = viewModel::connectLastFm,
+                                onStartLastFmWebAuth = {
+                                    viewModel.startLastFmWebAuth { authUrl ->
+                                        runCatching {
+                                            context.startActivity(
+                                                Intent(
+                                                    Intent.ACTION_VIEW,
+                                                    android.net.Uri.parse(authUrl),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                },
+                                onCompleteLastFmWebAuth = viewModel::completeLastFmWebAuth,
                                 onDisconnectLastFm = viewModel::disconnectLastFm,
                                 onOpenLastFmApiAccounts = {
                                     runCatching {
@@ -519,6 +544,10 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 trackTitle = remoteStatus.playback.track?.title ?: "未连接",
                                 trackArtist = remoteStatus.playback.track?.artist ?: "点按配对",
                                 isPlaying = remoteStatus.playback.state == EchoRemotePlaybackState.Playing,
+                                discordPresenceEnabled = appSettings.discordPresenceViaPcEnabled,
+                                discordPresenceReady = remoteStatus.connectionState == EchoRemoteConnectionState.Connected &&
+                                    remoteStatus.mobileDiscordPresence?.enabled == true,
+                                discordPresenceTrackTitle = remoteStatus.mobileDiscordPresence?.track?.title,
                                 onPairDemo = {
                                     remoteClient.pair(
                                         EchoRemoteEndpoint(

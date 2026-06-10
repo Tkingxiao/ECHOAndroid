@@ -101,6 +101,8 @@ private fun UsbOutputPanel(status: EchoPlaybackStatus) {
                 "链路",
                 when {
                     diagnostics.usbBitPerfectActive -> "bit-perfect active"
+                    diagnostics.usbHostPermissionGranted -> "USB host 已授权"
+                    diagnostics.usbHostPermissionPending -> "等待 USB 授权"
                     diagnostics.usbBitPerfectSupported -> "支持 bit-perfect"
                     diagnostics.usbConnected -> "Android mixer"
                     else -> "Media3 / AudioTrack"
@@ -114,6 +116,38 @@ private fun UsbOutputPanel(status: EchoPlaybackStatus) {
                 "请求",
                 diagnostics.usbLastRequestedSampleRateHz?.let { "${it}Hz" } ?: "未请求",
             )
+            if (diagnostics.usbConnected) {
+                UsbOutputLine(
+                    "USB 权限",
+                    when {
+                        diagnostics.usbHostPermissionGranted -> "已授权"
+                        diagnostics.usbHostPermissionPending -> "等待确认"
+                        diagnostics.usbExclusiveEnabled -> "未授权"
+                        else -> "未请求"
+                    },
+                )
+            }
+            diagnostics.usbAudioClass?.let { UsbOutputLine("UAC", it) }
+            if (diagnostics.usbAudioInterfaceCount > 0) {
+                UsbOutputLine(
+                    "接口",
+                    "${diagnostics.usbAudioInterfaceCount} audio / ${diagnostics.usbAudioStreamingInterfaceCount} stream",
+                )
+            }
+            diagnostics.usbAudioEndpointSummary?.let { UsbOutputLine("端点", it) }
+            if (diagnostics.usbAudioHasIsochronousOut || diagnostics.usbAudioHasFeedbackEndpoint) {
+                UsbOutputLine(
+                    "传输",
+                    when {
+                        diagnostics.usbAudioHasIsochronousOut && diagnostics.usbAudioHasFeedbackEndpoint -> "iso OUT + feedback"
+                        diagnostics.usbAudioHasIsochronousOut -> "iso OUT"
+                        else -> "feedback"
+                    },
+                )
+            }
+            diagnostics.usbAudioDescriptorError?.let { error ->
+                UsbOutputLine("Descriptor", error)
+            }
             diagnostics.usbLastRequestError?.let { error ->
                 UsbOutputLine("回退", error.message)
             }

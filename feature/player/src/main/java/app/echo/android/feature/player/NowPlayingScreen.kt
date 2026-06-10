@@ -591,9 +591,9 @@ private fun LyricsControlDeck(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.10f))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.12f))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
@@ -819,9 +819,9 @@ private fun NowPlayingFormatInfo(diagnostics: EchoPlaybackDiagnostics) {
 private fun FormatChip(text: String, highlight: Boolean) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (highlight) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.09f))
-            .padding(horizontal = 7.dp, vertical = 2.dp),
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (highlight) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.10f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -919,28 +919,28 @@ private fun NowPlayingControlDock(
         GlyphButton(
             icon = Icons.Rounded.SkipPrevious,
             description = "上一首",
-            touchSize = 50.dp,
+            touchSize = 54.dp,
             iconSize = 34.dp,
             tint = OnArt,
-            background = Color.Transparent,
+            background = Color.White.copy(alpha = 0.12f),
             onClick = onPrevious,
         )
         GlyphButton(
             icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
             description = "播放或暂停",
-            touchSize = 72.dp,
-            iconSize = 54.dp,
-            tint = OnArt,
-            background = Color.Transparent,
+            touchSize = 76.dp,
+            iconSize = 42.dp,
+            tint = Color(0xFF15161A),
+            background = Color.White.copy(alpha = 0.96f),
             onClick = onPlayPause,
         )
         GlyphButton(
             icon = Icons.Rounded.SkipNext,
             description = "下一首",
-            touchSize = 50.dp,
+            touchSize = 54.dp,
             iconSize = 34.dp,
             tint = OnArt,
-            background = Color.Transparent,
+            background = Color.White.copy(alpha = 0.12f),
             onClick = onNext,
         )
         GlyphButton(

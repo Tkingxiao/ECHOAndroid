@@ -27,11 +27,17 @@ data class LastFmUiState(
     val lastMessage: String = "Last.fm 未连接",
     val lastError: String? = null,
     val lastSubmittedTrackId: String? = null,
+    val webAuthPending: Boolean = false,
 )
 
 internal data class LastFmSession(
     val username: String,
     val sessionKey: String,
+)
+
+internal data class LastFmWebAuthStart(
+    val token: String,
+    val url: String,
 )
 
 internal data class LastFmCredentials(
@@ -101,6 +107,14 @@ internal class LastFmScrobbleController(
         _uiState.value = LastFmUiState(lastMessage = "Last.fm 已连接：$username")
     }
 
+    fun setWebAuthPending() {
+        active = null
+        _uiState.value = LastFmUiState(
+            lastMessage = "Last.fm 授权页已打开，允许后回到 ECHOAndroid 完成授权",
+            webAuthPending = true,
+        )
+    }
+
     fun setDisconnected() {
         active = null
         _uiState.value = LastFmUiState(lastMessage = "Last.fm 已断开")
@@ -108,6 +122,14 @@ internal class LastFmScrobbleController(
 
     fun setError(message: String) {
         _uiState.value = LastFmUiState(lastMessage = "Last.fm 连接失败", lastError = message)
+    }
+
+    fun setWebAuthError(message: String) {
+        _uiState.value = LastFmUiState(
+            lastMessage = "Last.fm 授权未完成",
+            lastError = message,
+            webAuthPending = true,
+        )
     }
 
     private fun handleSnapshot(snapshot: LastFmPlaybackSnapshot) {
@@ -206,6 +228,38 @@ internal class LastFmScrobbleController(
 internal class LastFmClient(
     private val endpoint: String = "https://ws.audioscrobbler.com/2.0/",
 ) {
+    suspend fun createWebAuthToken(apiKey: String, sharedSecret: String): Result<LastFmWebAuthStart> = runCatching {
+        val normalizedApiKey = apiKey.trim()
+        val params = linkedMapOf(
+            "method" to "auth.getToken",
+            "api_key" to normalizedApiKey,
+        )
+        val response = postSigned(params, sharedSecret)
+        val token = response.getString("token").trim()
+        LastFmWebAuthStart(
+            token = token,
+            url = authorizationUrl(normalizedApiKey, token),
+        )
+    }
+
+    suspend fun completeWebAuth(
+        apiKey: String,
+        sharedSecret: String,
+        token: String,
+    ): Result<LastFmSession> = runCatching {
+        val params = linkedMapOf(
+            "method" to "auth.getSession",
+            "api_key" to apiKey.trim(),
+            "token" to token.trim(),
+        )
+        val response = postSigned(params, sharedSecret)
+        val session = response.getJSONObject("session")
+        LastFmSession(
+            username = session.getString("name"),
+            sessionKey = session.getString("key"),
+        )
+    }
+
     suspend fun authenticate(
         apiKey: String,
         sharedSecret: String,
@@ -312,4 +366,7 @@ internal class LastFmClient(
 
     private fun String.urlEncode(): String =
         URLEncoder.encode(this, StandardCharsets.UTF_8.name())
+
+    private fun authorizationUrl(apiKey: String, token: String): String =
+        "https://www.last.fm/api/auth/?api_key=${apiKey.urlEncode()}&token=${token.urlEncode()}"
 }

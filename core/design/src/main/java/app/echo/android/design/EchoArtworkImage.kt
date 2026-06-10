@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+import coil.size.Size
 
 enum class EchoArtworkSize {
     Tiny,
@@ -69,10 +70,15 @@ internal fun EchoArtworkImage(
     placeholderIconSize: Dp? = null,
 ) {
     val context = LocalContext.current
-    val model = remember(artworkUri) {
+    val model = remember(context, artworkUri, sizeClass) {
         ImageRequest.Builder(context)
             .data(artworkUri)
             .crossfade(false)
+            .apply {
+                if (sizeClass == EchoArtworkSize.Hero) {
+                    size(Size.ORIGINAL)
+                }
+            }
             .build()
     }
     Box(

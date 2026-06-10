@@ -125,15 +125,16 @@ private fun homePanelBrush(): Brush {
     return Brush.linearGradient(
         if (LocalEchoDarkTheme.current) {
             listOf(
-                scheme.surface.copy(alpha = 0.92f),
-                scheme.surfaceVariant.copy(alpha = 0.78f),
-                scheme.primary.copy(alpha = 0.12f),
+                scheme.surface.copy(alpha = 0.94f),
+                scheme.surfaceVariant.copy(alpha = 0.72f),
+                scheme.primary.copy(alpha = 0.18f),
             )
         } else {
             listOf(
                 Color.White,
                 EchoHomeMist,
                 Color(0xFFEFEAFF),
+                Color(0xFFE6F3FF),
             )
         },
     )
@@ -392,8 +393,8 @@ internal fun RecentAlbumCard(
                 .aspectRatio(1f),
             accent = EchoAccent,
             showSignal = album.artworkUri == null,
-            cornerRadius = 8.dp,
-            elevation = 0.dp,
+            cornerRadius = 14.dp,
+            elevation = 6.dp,
         )
         Text(
             album.title,
@@ -451,7 +452,7 @@ private fun RecentActivityEmptyAlbumCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(homePanelColor(0.74f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -496,7 +497,7 @@ internal fun EmptyRecentAlbumsCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(homePanelColor(0.74f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -693,8 +694,8 @@ internal fun RecommendedAlbumCard(
                 .aspectRatio(1f),
             accent = EchoAccentDeep,
             showSignal = album.artworkUri == null,
-            cornerRadius = 8.dp,
-            elevation = 0.dp,
+            cornerRadius = 14.dp,
+            elevation = 6.dp,
         )
         Text(
             album.title,
@@ -771,7 +772,19 @@ private fun ArtistRankRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .background(if (rank == 1) EchoAccentDeep.copy(alpha = 0.06f) else Color.Transparent)
+            .background(
+                if (rank == 1) {
+                    Brush.horizontalGradient(
+                        listOf(
+                            EchoAccent.copy(alpha = 0.12f),
+                            EchoAccentDeep.copy(alpha = 0.10f),
+                            Color.Transparent,
+                        ),
+                    )
+                } else {
+                    Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
+                },
+            )
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -895,14 +908,14 @@ private fun FavoriteAlbumHeatmap(days: List<PlaybackHeatmapDay>) {
         modifier = Modifier
             .padding(horizontal = 18.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(if (dark) scheme.surfaceVariant.copy(alpha = 0.42f) else EchoHomeMist.copy(alpha = 0.52f))
             .border(
                 BorderStroke(
                     1.dp,
                     if (dark) scheme.outlineVariant.copy(alpha = 0.48f) else EchoGlassBorder,
                 ),
-                RoundedCornerShape(8.dp),
+                RoundedCornerShape(14.dp),
             )
             .padding(11.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -2110,8 +2123,8 @@ internal fun TransportControls(
                 .shadow(elevation = 10.dp, shape = CircleShape, clip = false)
                 .clip(CircleShape)
                 .background(
-                    Brush.verticalGradient(
-                        listOf(Color.White, Color(0xFFD9E6EE)),
+                    Brush.linearGradient(
+                        listOf(EchoHomeBlue, EchoHomeBlueDeep),
                     ),
                 )
                 .clickable(onClick = onPlayPause),
@@ -2120,7 +2133,7 @@ internal fun TransportControls(
             Icon(
                 if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = "播放或暂停",
-                tint = EchoHomeBlue,
+                tint = Color.White,
                 modifier = Modifier.size(30.dp),
             )
         }

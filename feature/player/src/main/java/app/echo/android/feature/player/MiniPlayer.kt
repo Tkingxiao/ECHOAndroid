@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoAccent
+import app.echo.android.design.EchoAccentDeep
 import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.progressFraction
 import app.echo.android.model.playback.EchoPlaybackState
@@ -68,7 +69,7 @@ fun MiniPlayer(
     onNext: (() -> Unit)? = null,
     onPrevious: (() -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(20.dp)
     val scope = rememberCoroutineScope()
     val scheme = MaterialTheme.colorScheme
     val dark = LocalEchoDarkTheme.current
@@ -81,10 +82,10 @@ fun MiniPlayer(
         modifier = modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 9.dp,
+                elevation = 14.dp,
                 shape = shape,
-                ambientColor = Color.Black.copy(alpha = 0.05f),
-                spotColor = Color.Black.copy(alpha = 0.09f),
+                ambientColor = Color.Black.copy(alpha = 0.08f),
+                spotColor = scheme.primary.copy(alpha = 0.16f),
             )
             .clip(shape)
             .background(
@@ -162,11 +163,11 @@ fun MiniPlayer(
             ) {
                 ArtworkTile(
                     artworkUri = status.track?.artworkUri,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(40.dp),
                     accent = EchoAccent,
                     showSignal = false,
-                    cornerRadius = 8.dp,
-                    elevation = 1.dp,
+                    cornerRadius = 11.dp,
+                    elevation = 2.dp,
                     placeholderIconSize = 22.dp,
                 )
                 Column(
@@ -200,16 +201,22 @@ fun MiniPlayer(
                             .fillMaxWidth()
                             .height(2.dp)
                             .clip(RoundedCornerShape(99.dp)),
-                        color = scheme.primary.copy(alpha = 0.78f),
+                        color = scheme.primary,
                         trackColor = scheme.outlineVariant.copy(alpha = if (dark) 0.44f else 0.90f),
                     )
                 }
             }
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(38.dp)
+                    .shadow(
+                        elevation = 6.dp,
+                        shape = CircleShape,
+                        ambientColor = EchoAccent.copy(alpha = 0.30f),
+                        spotColor = EchoAccentDeep.copy(alpha = 0.34f),
+                    )
                     .clip(CircleShape)
-                    .background(Color.Transparent)
+                    .background(Brush.linearGradient(listOf(EchoAccent, EchoAccentDeep)))
                     .clickable(
                         enabled = status.state != EchoPlaybackState.Idle || status.track != null,
                         onClick = onPlayPause,
@@ -219,8 +226,8 @@ fun MiniPlayer(
                 Icon(
                     if (status.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                     contentDescription = "播放或暂停",
-                    tint = scheme.onSurface.copy(alpha = 0.90f),
-                    modifier = Modifier.size(29.dp),
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
                 )
             }
             if (onHideDock != null) {

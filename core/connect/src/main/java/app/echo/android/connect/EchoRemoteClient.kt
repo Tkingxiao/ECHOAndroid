@@ -3,6 +3,7 @@ package app.echo.android.connect
 import app.echo.android.model.connect.EchoRemoteCommand
 import app.echo.android.model.connect.EchoRemoteConnectionState
 import app.echo.android.model.connect.EchoRemoteEndpoint
+import app.echo.android.model.connect.EchoMobileDiscordPresenceSnapshot
 import app.echo.android.model.connect.EchoRemoteMessage
 import app.echo.android.model.connect.EchoRemotePlaybackSnapshot
 import app.echo.android.model.connect.EchoRemotePlaybackState
@@ -54,6 +55,8 @@ class EchoRemoteClient {
                 )
             }
 
+            is EchoRemoteMessage.MobileDiscordPresence -> publishMobileDiscordPresence(message.payload)
+
             is EchoRemoteMessage.Error -> _status.update {
                 it.copy(connectionState = EchoRemoteConnectionState.Error, error = message.message)
             }
@@ -62,6 +65,19 @@ class EchoRemoteClient {
             EchoRemoteMessage.Ping,
             EchoRemoteMessage.Pong,
             -> Unit
+        }
+    }
+
+    fun publishMobileDiscordPresence(snapshot: EchoMobileDiscordPresenceSnapshot?) {
+        _status.update { current ->
+            current.copy(
+                mobileDiscordPresence = snapshot,
+                error = when {
+                    snapshot?.enabled != true -> null
+                    current.connectionState != EchoRemoteConnectionState.Connected -> "Discord Presence 等待 PC ECHO 配对"
+                    else -> current.error
+                },
+            )
         }
     }
 

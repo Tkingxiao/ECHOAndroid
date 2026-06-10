@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -33,13 +34,30 @@ fun EchoPanel(
 ) {
     val scheme = MaterialTheme.colorScheme
     val dark = LocalEchoDarkTheme.current
+    val shape = RoundedCornerShape(24.dp)
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(scheme.surface.copy(alpha = if (dark) 0.82f else 0.92f))
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    if (dark) {
+                        listOf(
+                            scheme.surface.copy(alpha = 0.90f),
+                            scheme.surfaceVariant.copy(alpha = 0.66f),
+                            scheme.primary.copy(alpha = 0.10f),
+                        )
+                    } else {
+                        listOf(
+                            Color.White.copy(alpha = 0.96f),
+                            Color.White.copy(alpha = 0.88f),
+                            scheme.primary.copy(alpha = 0.08f),
+                        )
+                    },
+                ),
+            )
             .border(
                 BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.96f)),
-                RoundedCornerShape(20.dp),
+                shape,
             ),
     ) {
         content()
@@ -71,9 +89,9 @@ fun EchoIconBadge(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)),
     ) {
         Icon(
             icon,
@@ -94,7 +112,7 @@ fun EchoInfoChip(
     val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = scheme.surface.copy(alpha = if (dark) 0.78f else 0.92f),
         border = BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.56f) else Color.White.copy(alpha = 0.96f)),
     ) {
@@ -116,7 +134,7 @@ fun EchoMetricTile(
     val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = scheme.surface.copy(alpha = if (dark) 0.78f else 0.92f),
         border = BorderStroke(1.dp, if (dark) scheme.outlineVariant.copy(alpha = 0.56f) else Color.White.copy(alpha = 0.96f)),
     ) {
@@ -149,16 +167,16 @@ fun EchoSegmentChip(
     val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (selected) {
-            scheme.primary.copy(alpha = if (dark) 0.18f else 0.14f)
+            scheme.primary.copy(alpha = if (dark) 0.26f else 0.18f)
         } else {
             scheme.surface.copy(alpha = if (dark) 0.78f else 0.92f)
         },
         border = BorderStroke(
             1.dp,
             if (selected) {
-                scheme.primary.copy(alpha = if (dark) 0.26f else 0.18f)
+                scheme.primary.copy(alpha = if (dark) 0.42f else 0.30f)
             } else {
                 if (dark) scheme.outlineVariant.copy(alpha = 0.56f) else Color.White.copy(alpha = 0.96f)
             },
@@ -197,7 +215,7 @@ fun EchoPlaceholderLine(
     val dark = LocalEchoDarkTheme.current
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = scheme.surface.copy(alpha = if (dark) 0.78f else 0.90f),
     ) {
         Text(

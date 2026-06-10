@@ -88,11 +88,11 @@ internal fun SignalHeroCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(
                 signalHeroBrush(),
             )
-            .border(signalPanelBorder(0.86f), RoundedCornerShape(22.dp))
+            .border(signalPanelBorder(0.86f), RoundedCornerShape(24.dp))
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -190,9 +190,9 @@ internal fun SignalFlowPanel(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(signalPanelColor(0.64f))
-            .border(signalPanelBorder(0.84f), RoundedCornerShape(20.dp))
+            .border(signalPanelBorder(0.84f), RoundedCornerShape(24.dp))
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -297,9 +297,9 @@ internal fun CurrentStreamPanel(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(signalPanelColor(0.64f))
-            .border(signalPanelBorder(0.84f), RoundedCornerShape(20.dp))
+            .border(signalPanelBorder(0.84f), RoundedCornerShape(24.dp))
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -318,9 +318,9 @@ internal fun HealthPanel(status: EchoPlaybackStatus) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(signalPanelColor(0.64f))
-            .border(signalPanelBorder(0.84f), RoundedCornerShape(20.dp))
+            .border(signalPanelBorder(0.84f), RoundedCornerShape(24.dp))
             .padding(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

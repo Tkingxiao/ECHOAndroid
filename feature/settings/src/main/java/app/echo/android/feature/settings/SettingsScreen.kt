@@ -74,9 +74,12 @@ fun SettingsScreen(
     dynamicArtworkEnabled: Boolean,
     compactModeEnabled: Boolean,
     pcHandoffEnabled: Boolean,
+    discordPresenceViaPcEnabled: Boolean,
     showLyricsControlDeck: Boolean,
     onlineLyricsEnabled: Boolean,
     usbExclusiveEnabled: Boolean,
+    usbExclusiveAutoRequestOnStartup: Boolean,
+    usbExclusiveTestResult: String,
     customBackgroundMode: String,
     customBackgroundUri: String?,
     customBackgroundBlur: Float,
@@ -93,20 +96,23 @@ fun SettingsScreen(
     scheduledDarkStartMinute: Int,
     scheduledDarkEndMinute: Int,
     lastFmEnabled: Boolean,
-    lastFmUsername: String?,
     lastFmApiKey: String?,
     lastFmSharedSecret: String?,
     lastFmSessionKey: String?,
     lastFmStatusLabel: String,
     lastFmErrorLabel: String?,
+    lastFmWebAuthPending: Boolean,
     lastFmApiKeyLocked: Boolean,
     lastFmSharedSecretLocked: Boolean,
     onDynamicArtworkEnabledChange: (Boolean) -> Unit,
     onCompactModeEnabledChange: (Boolean) -> Unit,
     onPcHandoffEnabledChange: (Boolean) -> Unit,
+    onDiscordPresenceViaPcEnabledChange: (Boolean) -> Unit,
     onShowLyricsControlDeckChange: (Boolean) -> Unit,
     onOnlineLyricsEnabledChange: (Boolean) -> Unit,
     onUsbExclusiveEnabledChange: (Boolean) -> Unit,
+    onUsbExclusiveAutoRequestOnStartupChange: (Boolean) -> Unit,
+    onTestUsbExclusiveDriver: () -> Unit,
     onPickImageBackground: () -> Unit,
     onPickVideoBackground: () -> Unit,
     onClearCustomBackground: () -> Unit,
@@ -126,7 +132,8 @@ fun SettingsScreen(
     onScheduledDarkStartMinuteChange: (Int) -> Unit,
     onScheduledDarkEndMinuteChange: (Int) -> Unit,
     onLastFmEnabledChange: (Boolean) -> Unit,
-    onConnectLastFm: (apiKey: String, sharedSecret: String, username: String, password: String) -> Unit,
+    onStartLastFmWebAuth: () -> Unit,
+    onCompleteLastFmWebAuth: () -> Unit,
     onDisconnectLastFm: () -> Unit,
     onOpenLastFmApiAccounts: () -> Unit,
     onOpenLibrary: () -> Unit,
@@ -137,8 +144,6 @@ fun SettingsScreen(
     var fontSectionExpanded by rememberSaveable { mutableStateOf(false) }
     var lastFmApiKeyInput by rememberSaveable(lastFmApiKey) { mutableStateOf(lastFmApiKey.orEmpty()) }
     var lastFmSecretInput by rememberSaveable(lastFmSharedSecret) { mutableStateOf(lastFmSharedSecret.orEmpty()) }
-    var lastFmUsernameInput by rememberSaveable(lastFmUsername) { mutableStateOf(lastFmUsername.orEmpty()) }
-    var lastFmPasswordInput by rememberSaveable { mutableStateOf("") }
 
     PageChrome(
         title = "设置",
@@ -347,6 +352,25 @@ fun SettingsScreen(
                     checked = usbExclusiveEnabled,
                     onCheckedChange = onUsbExclusiveEnabledChange,
                 )
+                SettingsSwitchRow(
+                    icon = Icons.Rounded.Speed,
+                    title = "启动时自动请求独占",
+                    detail = if (usbExclusiveAutoRequestOnStartup) {
+                        "上次未关闭独占时，下次启动会自动请求 USB DAC"
+                    } else {
+                        "重启后默认关闭独占，需要手动打开"
+                    },
+                    checked = usbExclusiveAutoRequestOnStartup,
+                    onCheckedChange = onUsbExclusiveAutoRequestOnStartupChange,
+                )
+                SettingsActionRow(
+                    icon = Icons.Rounded.Speed,
+                    title = "测试 USB 独占驱动",
+                    detail = usbExclusiveTestDetail(status, usbExclusiveTestResult),
+                    enabled = status.diagnostics.usbConnected,
+                    actionLabel = "测试",
+                    onClick = onTestUsbExclusiveDriver,
+                )
             }
             SettingsSectionCard(title = "互联") {
                 LastFmSettingsPanel(
@@ -354,26 +378,16 @@ fun SettingsScreen(
                     connected = !lastFmSessionKey.isNullOrBlank(),
                     statusLabel = lastFmStatusLabel,
                     errorLabel = lastFmErrorLabel,
+                    webAuthPending = lastFmWebAuthPending,
                     apiKey = lastFmApiKeyInput,
                     sharedSecret = lastFmSecretInput,
                     apiKeyLocked = lastFmApiKeyLocked,
                     sharedSecretLocked = lastFmSharedSecretLocked,
-                    username = lastFmUsernameInput,
-                    password = lastFmPasswordInput,
                     onEnabledChange = onLastFmEnabledChange,
                     onApiKeyChange = { lastFmApiKeyInput = it },
                     onSharedSecretChange = { lastFmSecretInput = it },
-                    onUsernameChange = { lastFmUsernameInput = it },
-                    onPasswordChange = { lastFmPasswordInput = it },
-                    onConnect = {
-                        onConnectLastFm(
-                            lastFmApiKeyInput,
-                            lastFmSecretInput,
-                            lastFmUsernameInput,
-                            lastFmPasswordInput,
-                        )
-                        lastFmPasswordInput = ""
-                    },
+                    onStartWebAuth = onStartLastFmWebAuth,
+                    onCompleteWebAuth = onCompleteLastFmWebAuth,
                     onDisconnect = onDisconnectLastFm,
                     onOpenApiAccounts = onOpenLastFmApiAccounts,
                 )
@@ -383,6 +397,17 @@ fun SettingsScreen(
                     detail = "保留桌面端连接与远程控制入口",
                     checked = pcHandoffEnabled,
                     onCheckedChange = onPcHandoffEnabledChange,
+                )
+                SettingsSwitchRow(
+                    icon = Icons.Rounded.Devices,
+                    title = "Discord Rich Presence",
+                    detail = if (pcHandoffEnabled) {
+                        "通过 PC ECHO 把手机播放状态同步到 Discord"
+                    } else {
+                        "需要先开启 PC 接力入口"
+                    },
+                    checked = discordPresenceViaPcEnabled,
+                    onCheckedChange = onDiscordPresenceViaPcEnabledChange,
                 )
                 SettingsActionRow(
                     icon = Icons.Rounded.Devices,
@@ -411,18 +436,16 @@ private fun LastFmSettingsPanel(
     connected: Boolean,
     statusLabel: String,
     errorLabel: String?,
+    webAuthPending: Boolean,
     apiKey: String,
     sharedSecret: String,
     apiKeyLocked: Boolean,
     sharedSecretLocked: Boolean,
-    username: String,
-    password: String,
     onEnabledChange: (Boolean) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onSharedSecretChange: (String) -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-    onConnect: () -> Unit,
+    onStartWebAuth: () -> Unit,
+    onCompleteWebAuth: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenApiAccounts: () -> Unit,
 ) {
@@ -469,30 +492,19 @@ private fun LastFmSettingsPanel(
                 onValueChange = onSharedSecretChange,
             )
         }
-        SettingsTextInputRow(
-            icon = Icons.Rounded.Devices,
-            title = "Last.fm 用户名",
-            value = username,
-            placeholder = "username",
-            onValueChange = onUsernameChange,
-        )
-        SettingsTextInputRow(
-            icon = Icons.Rounded.Settings,
-            title = "临时密码",
-            value = password,
-            placeholder = if (connected) "已连接；重新连接时再输入" else "仅用于换取 session key",
-            secret = true,
-            onValueChange = onPasswordChange,
-        )
         SettingsActionRow(
             icon = Icons.Rounded.Devices,
-            title = if (connected) "重新连接 Last.fm" else "连接 Last.fm",
-            detail = if (connected) "密码不会保存，连接成功后只保留 session key" else "提交 now playing 与 scrobble 前需要授权",
-            enabled = (apiKeyLocked || apiKey.isNotBlank()) &&
-                (sharedSecretLocked || sharedSecret.isNotBlank()) &&
-                username.isNotBlank() &&
-                password.isNotBlank(),
-            onClick = onConnect,
+            title = if (connected) "重新授权 Last.fm" else "打开 Last.fm 授权网页",
+            detail = "在 Last.fm 网站登录并允许 ECHOAndroid 访问",
+            enabled = (apiKeyLocked || apiKey.isNotBlank()) && (sharedSecretLocked || sharedSecret.isNotBlank()),
+            onClick = onStartWebAuth,
+        )
+        SettingsActionRow(
+            icon = Icons.Rounded.Settings,
+            title = "完成网页授权",
+            detail = if (webAuthPending) "授权网页点 Allow 后回到这里完成连接" else "请先打开授权网页",
+            enabled = webAuthPending,
+            onClick = onCompleteWebAuth,
         )
         SettingsActionRow(
             icon = Icons.Rounded.Settings,
@@ -903,6 +915,7 @@ private fun SettingsActionRow(
     title: String,
     detail: String,
     enabled: Boolean = true,
+    actionLabel: String = "进入",
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -913,7 +926,7 @@ private fun SettingsActionRow(
         modifier = if (enabled) Modifier.clickable(onClick = onClick) else Modifier,
     ) {
         Text(
-            if (enabled) "进入" else "关闭",
+            if (enabled) actionLabel else "关闭",
             color = if (enabled) scheme.primary else scheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
@@ -1150,8 +1163,20 @@ private fun usbExclusiveDetail(status: EchoPlaybackStatus): String {
     val diagnostics = status.diagnostics
     return when {
         diagnostics.usbBitPerfectActive -> "USB DAC 已使用 bit-perfect 链路"
+        diagnostics.usbAudioHasIsochronousOut -> "已识别 UAC 独占端点：${diagnostics.usbAudioEndpointSummary ?: "iso OUT"}"
+        diagnostics.usbHostPermissionGranted -> "已获得 USB DAC 访问授权；系统输出仍按设备能力决定"
+        diagnostics.usbHostPermissionPending -> "请在系统弹窗中允许 ECHO 访问 USB DAC"
         diagnostics.usbBitPerfectSupported -> "插入的 USB DAC 支持 bit-perfect，可按曲目采样率请求"
         diagnostics.usbConnected -> "已连接 USB DAC，但当前只走 Android mixer"
         else -> "高级输出模式；无 USB DAC 或不支持时自动回退"
+    }
+}
+
+private fun usbExclusiveTestDetail(status: EchoPlaybackStatus, result: String): String {
+    val diagnostics = status.diagnostics
+    return when {
+        !diagnostics.usbConnected -> "未检测到 USB DAC"
+        !diagnostics.usbHostPermissionGranted -> "先打开 USB 独占输出并允许系统 USB 授权"
+        else -> result
     }
 }

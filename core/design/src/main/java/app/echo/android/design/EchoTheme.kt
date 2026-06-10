@@ -18,10 +18,10 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 
 object EchoColors {
-    // Roon 风格中性炭灰 + Shakespeare 蓝
-    val Night = Color(0xFF161618)
-    val Ink = Color(0xFF222226)
-    val Slate = Color(0xFF2E2E33)
+    // 深邃蓝黑 + Shakespeare 蓝：更现代的沉浸底色
+    val Night = Color(0xFF0F1117)
+    val Ink = Color(0xFF1A1D25)
+    val Slate = Color(0xFF262A34)
     val DeepBlue = Color(0xFF3E7BA8)
     val Brass = Color(0xFFE1A33A)
     val Coral = Color(0xFFD7675D)
@@ -44,8 +44,8 @@ private val EchoDarkScheme = darkColorScheme(
     onSurface = EchoColors.Paper,
     surfaceVariant = EchoColors.Slate,
     onSurfaceVariant = EchoColors.Smoke,
-    outline = Color(0xFF4A4A52),
-    outlineVariant = Color(0xFF323238),
+    outline = Color(0xFF4A4E5C),
+    outlineVariant = Color(0xFF2E323E),
 )
 
 private val EchoLightScheme = lightColorScheme(

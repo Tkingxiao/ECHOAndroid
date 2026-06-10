@@ -18,6 +18,7 @@ android {
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:usb-audio"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.media3.common)

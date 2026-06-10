@@ -21,7 +21,11 @@ import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.lyrics.EchoLyricsLoadState
+import app.echo.android.model.connect.EchoMobileDiscordPresenceSnapshot
+import app.echo.android.model.connect.EchoRemotePlaybackState
+import app.echo.android.model.connect.EchoRemoteTrack
 import app.echo.android.model.playback.EchoPlaybackStatus
+import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.PlaybackControlsState
 import app.echo.android.model.playback.PlaybackDiagnosticsState
 import app.echo.android.model.playback.PlaybackHeatmapDay
@@ -33,6 +37,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -67,6 +72,8 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         scope = viewModelScope,
         client = lastFmClient,
     )
+    private var pendingLastFmAuthToken: String? = null
+    private var usbStartupPolicyApplied = false
 
     val libraryQuery: StateFlow<String> = libraryController.libraryQuery
     val tracks: Flow<PagingData<EchoTrack>> = libraryController.tracks
@@ -86,6 +93,18 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val lyricsState: StateFlow<EchoLyricsLoadState> = lyricsController.lyricsState
     val appSettings: Flow<EchoAppSettings> = settingsStore.appSettings
     val lastFmState: StateFlow<LastFmUiState> = lastFmController.uiState
+    val discordPresenceSnapshot: Flow<EchoMobileDiscordPresenceSnapshot?> =
+        combine(
+            settingsStore.appSettings,
+            playbackController.playbackStatus,
+            playbackController.playbackPosition,
+        ) { settings, status, position ->
+            if (!settings.discordPresenceViaPcEnabled) {
+                null
+            } else {
+                status.toMobileDiscordPresence(position)
+            }
+        }
 
     private val _recentPlaybackAlbums = MutableStateFlow<List<AlbumSummary>>(emptyList())
     val recentPlaybackAlbums: StateFlow<List<AlbumSummary>> = _recentPlaybackAlbums.asStateFlow()
@@ -93,6 +112,8 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val recentPlaybackArtists: StateFlow<List<ArtistSummary>> = _recentPlaybackArtists.asStateFlow()
     private val _recentPlaybackHeatmap = MutableStateFlow<List<PlaybackHeatmapDay>>(emptyList())
     val recentPlaybackHeatmap: StateFlow<List<PlaybackHeatmapDay>> = _recentPlaybackHeatmap.asStateFlow()
+    private val _usbExclusiveTestResult = MutableStateFlow("尚未测试")
+    val usbExclusiveTestResult: StateFlow<String> = _usbExclusiveTestResult.asStateFlow()
 
     private val albumPlaybackCounts = mutableMapOf<String, Int>()
     private val artistPlaybackCounts = mutableMapOf<String, Int>()
@@ -107,7 +128,22 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             settingsStore.appSettings.collect { settings ->
                 lyricsController.setOnlineLyricsEnabled(settings.onlineLyricsEnabled, playbackController.currentTrackId)
-                playbackController.setUsbExclusiveEnabled(settings.usbExclusiveEnabled)
+                val firstSettingsEmission = !usbStartupPolicyApplied
+                usbStartupPolicyApplied = true
+                val shouldEnableUsbExclusive = if (firstSettingsEmission) {
+                    settings.usbExclusiveEnabled && settings.usbExclusiveAutoRequestOnStartup
+                } else {
+                    settings.usbExclusiveEnabled
+                }
+                playbackController.setUsbExclusiveEnabled(shouldEnableUsbExclusive)
+                if (firstSettingsEmission &&
+                    settings.usbExclusiveEnabled &&
+                    !settings.usbExclusiveAutoRequestOnStartup
+                ) {
+                    withContext(Dispatchers.IO) {
+                        settingsStore.setUsbExclusiveEnabled(false)
+                    }
+                }
                 if (settings.lastFmEnabled && !settings.lastFmUsername.isNullOrBlank()) {
                     lastFmController.setConnected(settings.lastFmUsername.orEmpty())
                 }
@@ -289,6 +325,22 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setUsbExclusiveAutoRequestOnStartup(enabled: Boolean) {
+        updateSettings {
+            setUsbExclusiveAutoRequestOnStartup(enabled)
+        }
+    }
+
+    fun testUsbExclusiveDriver() {
+        _usbExclusiveTestResult.value = "正在测试 USB 独占驱动..."
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                playbackController.testUsbExclusiveDriver()
+            }
+            _usbExclusiveTestResult.value = result
+        }
+    }
+
     fun setCustomBackground(mode: String, uri: Uri?) {
         updateSettings {
             setCustomBackground(mode, uri?.toString())
@@ -379,6 +431,12 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setDiscordPresenceViaPcEnabled(enabled: Boolean) {
+        updateSettings {
+            setDiscordPresenceViaPcEnabled(enabled)
+        }
+    }
+
     fun connectLastFm(
         apiKey: String,
         sharedSecret: String,
@@ -423,7 +481,79 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun startLastFmWebAuth(onOpenAuthUrl: (String) -> Unit) {
+        viewModelScope.launch {
+            val resolvedApiKey = LastFmApiConfig.apiKey
+            val resolvedSharedSecret = LastFmApiConfig.sharedSecret
+            if (resolvedApiKey.isBlank()) {
+                lastFmController.setError("Missing Last.fm API key")
+                return@launch
+            }
+            if (resolvedSharedSecret.isBlank()) {
+                lastFmController.setError("Missing Last.fm shared secret")
+                return@launch
+            }
+            lastFmController.setConnecting()
+            val result = withContext(Dispatchers.IO) {
+                lastFmClient.createWebAuthToken(
+                    apiKey = resolvedApiKey,
+                    sharedSecret = resolvedSharedSecret,
+                )
+            }
+            result
+                .onSuccess { auth ->
+                    pendingLastFmAuthToken = auth.token
+                    lastFmController.setWebAuthPending()
+                    onOpenAuthUrl(auth.url)
+                }
+                .onFailure { error ->
+                    lastFmController.setError(error.message ?: "Unable to start Last.fm web auth")
+                }
+        }
+    }
+
+    fun completeLastFmWebAuth() {
+        viewModelScope.launch {
+            val token = pendingLastFmAuthToken
+            if (token.isNullOrBlank()) {
+                lastFmController.setError("Open the Last.fm authorization page first")
+                return@launch
+            }
+            val resolvedApiKey = LastFmApiConfig.apiKey
+            val resolvedSharedSecret = LastFmApiConfig.sharedSecret
+            if (resolvedApiKey.isBlank() || resolvedSharedSecret.isBlank()) {
+                lastFmController.setError("Missing Last.fm app credentials")
+                return@launch
+            }
+            lastFmController.setConnecting()
+            val result = withContext(Dispatchers.IO) {
+                lastFmClient.completeWebAuth(
+                    apiKey = resolvedApiKey,
+                    sharedSecret = resolvedSharedSecret,
+                    token = token,
+                )
+            }
+            result
+                .onSuccess { session ->
+                    pendingLastFmAuthToken = null
+                    withContext(Dispatchers.IO) {
+                        settingsStore.setLastFmCredentials(
+                            apiKey = resolvedApiKey,
+                            sharedSecret = resolvedSharedSecret,
+                            username = session.username,
+                            sessionKey = session.sessionKey,
+                        )
+                    }
+                    lastFmController.setConnected(session.username)
+                }
+                .onFailure { error ->
+                    lastFmController.setWebAuthError(error.message ?: "Last.fm authorization has not been approved yet")
+                }
+        }
+    }
+
     fun disconnectLastFm() {
+        pendingLastFmAuthToken = null
         lastFmController.setDisconnected()
         updateSettings {
             clearLastFmCredentials()
@@ -487,6 +617,44 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
                 )
             }
     }
+
+    private fun EchoPlaybackStatus.toMobileDiscordPresence(
+        position: PlaybackPositionState,
+    ): EchoMobileDiscordPresenceSnapshot {
+        val currentTrack = track
+        return EchoMobileDiscordPresenceSnapshot(
+            enabled = true,
+            state = state.toRemotePlaybackState(),
+            track = currentTrack?.let {
+                EchoRemoteTrack(
+                    id = it.id,
+                    title = it.title,
+                    artist = it.artist,
+                    album = it.album,
+                    artworkUrl = it.artworkUri,
+                    durationMs = maxOf(it.durationMs, durationMs, position.durationMs),
+                )
+            },
+            positionMs = position.positionMs,
+            durationMs = maxOf(durationMs, position.durationMs, currentTrack?.durationMs ?: 0L),
+            deviceName = "ECHOAndroid",
+            updatedAtEpochMs = System.currentTimeMillis(),
+        )
+    }
+
+    private fun EchoPlaybackState.toRemotePlaybackState(): EchoRemotePlaybackState =
+        when (this) {
+            EchoPlaybackState.Playing -> EchoRemotePlaybackState.Playing
+            EchoPlaybackState.Paused -> EchoRemotePlaybackState.Paused
+            EchoPlaybackState.Stopped -> EchoRemotePlaybackState.Stopped
+            EchoPlaybackState.Ended -> EchoRemotePlaybackState.Stopped
+            EchoPlaybackState.Idle -> EchoRemotePlaybackState.Idle
+            EchoPlaybackState.Buffering,
+            EchoPlaybackState.Loading,
+            EchoPlaybackState.Seeking,
+            -> EchoRemotePlaybackState.Loading
+            EchoPlaybackState.Error -> EchoRemotePlaybackState.Error
+        }
 
     private companion object {
         const val HomeHeatmapVisibleDays = 84L

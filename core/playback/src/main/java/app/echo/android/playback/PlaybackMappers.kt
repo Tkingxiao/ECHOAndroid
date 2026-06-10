@@ -115,12 +115,14 @@ fun Player.toPlaybackControlsState(): PlaybackControlsState =
 
 fun Player.toPlaybackDiagnosticsState(
     usbAudioStatus: EchoUsbAudioStatus = EchoUsbAudioStatus(),
+    sourceSampleRateHz: Int? = null,
 ): PlaybackDiagnosticsState {
     val item = currentMediaItem
     val format = currentAudioFormat()
     val bitDepth = format?.takeIf { it.pcmEncoding != Format.NO_VALUE }
         ?.let { pcmBitDepth(it.pcmEncoding) }
-    val sampleRate = format?.sampleRate?.takeIf { it != Format.NO_VALUE }
+    val decodedSampleRate = format?.sampleRate?.takeIf { it != Format.NO_VALUE }
+    val sampleRate = sourceSampleRateHz?.takeIf { it > 0 } ?: decodedSampleRate
     val channels = format?.channelCount?.takeIf { it != Format.NO_VALUE }
     val codec = codecLabel(format?.sampleMimeType)
     val rawBitrate = listOf(format?.bitrate, format?.averageBitrate)
@@ -135,6 +137,7 @@ fun Player.toPlaybackDiagnosticsState(
     val diagnostics = EchoPlaybackDiagnostics(
         codec = codec,
         sampleRateHz = sampleRate,
+        decodedSampleRateHz = decodedSampleRate?.takeIf { it != sampleRate },
         channelCount = channels,
         bitDepth = bitDepth,
         bitrate = bitrate,

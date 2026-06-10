@@ -1,6 +1,13 @@
 package app.echo.android.playback
 
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -8,9 +15,14 @@ import android.media.AudioMixerAttributes
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.core.content.ContextCompat
 import app.echo.android.model.playback.EchoAudioErrorKind
 import app.echo.android.model.playback.EchoPlaybackDiagnostics
 import app.echo.android.model.playback.EchoPlaybackError
+import app.echo.android.usbaudio.UsbAudioDeviceSnapshot
+import app.echo.android.usbaudio.UsbAudioProbe
+import app.echo.android.usbaudio.UsbEndpointSyncType
+import app.echo.android.usbaudio.UsbEndpointTransferType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +31,15 @@ data class EchoUsbAudioStatus(
     val exclusiveEnabled: Boolean = false,
     val deviceName: String? = null,
     val connected: Boolean = false,
+    val hostPermissionGranted: Boolean = false,
+    val hostPermissionPending: Boolean = false,
+    val audioClass: String? = null,
+    val audioInterfaceCount: Int = 0,
+    val audioStreamingInterfaceCount: Int = 0,
+    val hasIsochronousOut: Boolean = false,
+    val hasFeedbackEndpoint: Boolean = false,
+    val endpointSummary: String? = null,
+    val descriptorError: String? = null,
     val supportedSampleRates: List<Int> = emptyList(),
     val bitPerfectSupported: Boolean = false,
     val bitPerfectActive: Boolean = false,
@@ -28,6 +49,7 @@ data class EchoUsbAudioStatus(
     val outputRoute: String
         get() = when {
             bitPerfectActive && deviceName != null -> "USB DAC: $deviceName / bit-perfect"
+            connected && hostPermissionGranted && deviceName != null -> "USB DAC: $deviceName / USB host authorized"
             connected && deviceName != null -> "USB DAC: $deviceName / Android mixer"
             connected -> "USB DAC / Android mixer"
             else -> "Media3 / AudioTrack"
@@ -35,12 +57,20 @@ data class EchoUsbAudioStatus(
 }
 
 class EchoUsbAudioMonitor(context: Context) {
+    private companion object {
+        const val ACTION_USB_PERMISSION = "app.echo.android.playback.USB_PERMISSION"
+    }
+
     private val appContext = context.applicationContext
     private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val usbManager = appContext.getSystemService(Context.USB_SERVICE) as UsbManager
+    private val usbAudioProbe = UsbAudioProbe(appContext)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val _status = MutableStateFlow(scan())
     val status: StateFlow<EchoUsbAudioStatus> = _status.asStateFlow()
     private var exclusiveEnabled = false
+    private var receiverRegistered = false
+    private var permissionRequestPendingDeviceName: String? = null
 
     private val callback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
@@ -52,19 +82,50 @@ class EchoUsbAudioMonitor(context: Context) {
         }
     }
 
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                ACTION_USB_PERMISSION -> {
+                    val device = intent.getParcelableExtraCompat<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                    if (device?.deviceName == permissionRequestPendingDeviceName) {
+                        permissionRequestPendingDeviceName = null
+                    }
+                    refresh()
+                }
+
+                UsbManager.ACTION_USB_DEVICE_ATTACHED,
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+                    permissionRequestPendingDeviceName = null
+                    refresh()
+                    if (exclusiveEnabled) requestUsbHostPermissionIfNeeded()
+                }
+            }
+        }
+    }
+
     fun start() {
         audioManager.registerAudioDeviceCallback(callback, mainHandler)
+        registerUsbReceiver()
         refresh()
     }
 
     fun stop() {
         audioManager.unregisterAudioDeviceCallback(callback)
+        if (receiverRegistered) {
+            runCatching { appContext.unregisterReceiver(usbReceiver) }
+            receiverRegistered = false
+        }
     }
 
     fun setExclusiveEnabled(enabled: Boolean) {
         if (exclusiveEnabled == enabled) return
         exclusiveEnabled = enabled
-        if (!enabled) clearPreferredMixerAttributes()
+        if (!enabled) {
+            permissionRequestPendingDeviceName = null
+            clearPreferredMixerAttributes()
+        } else {
+            requestUsbHostPermissionIfNeeded()
+        }
         refresh()
     }
 
@@ -74,6 +135,7 @@ class EchoUsbAudioMonitor(context: Context) {
             refresh()
             return
         }
+        requestUsbHostPermissionIfNeeded()
         if (safeSampleRate == null) {
             _status.value = scan().copy(
                 lastRequestError = EchoPlaybackError(
@@ -138,7 +200,27 @@ class EchoUsbAudioMonitor(context: Context) {
 
     private fun scan(): EchoUsbAudioStatus {
         val device = findUsbOutputDevice()
-        if (device == null) return EchoUsbAudioStatus(exclusiveEnabled = exclusiveEnabled)
+        val usbSnapshot = usbAudioProbe.snapshot(permissionRequestPendingDeviceName)
+        val usbDevice = findUsbAudioDevice()
+        val hostPermissionGranted = usbSnapshot.permissionGranted || usbDevice?.let(usbManager::hasPermission) == true
+        val hostPermissionPending = usbSnapshot.permissionPending || usbDevice?.deviceName == permissionRequestPendingDeviceName
+        if (device == null) {
+            return EchoUsbAudioStatus(
+                exclusiveEnabled = exclusiveEnabled,
+                deviceName = usbSnapshot.displayName ?: usbDevice?.getDisplayName(),
+                connected = usbSnapshot.connected || usbDevice != null,
+                hostPermissionGranted = hostPermissionGranted,
+                hostPermissionPending = hostPermissionPending,
+                audioClass = usbSnapshot.audioClassLabel(),
+                audioInterfaceCount = usbSnapshot.descriptor.audioInterfaceCount,
+                audioStreamingInterfaceCount = usbSnapshot.descriptor.audioStreamingInterfaceCount,
+                hasIsochronousOut = usbSnapshot.descriptor.hasIsochronousOut,
+                hasFeedbackEndpoint = usbSnapshot.descriptor.hasFeedbackEndpoint,
+                endpointSummary = usbSnapshot.endpointSummary(),
+                descriptorError = usbSnapshot.descriptorError,
+                supportedSampleRates = usbSnapshot.sampleRates,
+            )
+        }
 
         val supportedAttributes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             runCatching { audioManager.getSupportedMixerAttributes(device) }.getOrDefault(emptyList())
@@ -153,9 +235,23 @@ class EchoUsbAudioMonitor(context: Context) {
 
         return EchoUsbAudioStatus(
             exclusiveEnabled = exclusiveEnabled,
-            deviceName = device.getDisplayName(),
+            deviceName = device.getDisplayName().ifBlank {
+                usbSnapshot.displayName ?: usbDevice?.getDisplayName().orEmpty()
+            },
             connected = true,
-            supportedSampleRates = device.sampleRates.filter { it > 0 }.distinct().sorted(),
+            hostPermissionGranted = hostPermissionGranted,
+            hostPermissionPending = hostPermissionPending,
+            audioClass = usbSnapshot.audioClassLabel(),
+            audioInterfaceCount = usbSnapshot.descriptor.audioInterfaceCount,
+            audioStreamingInterfaceCount = usbSnapshot.descriptor.audioStreamingInterfaceCount,
+            hasIsochronousOut = usbSnapshot.descriptor.hasIsochronousOut,
+            hasFeedbackEndpoint = usbSnapshot.descriptor.hasFeedbackEndpoint,
+            endpointSummary = usbSnapshot.endpointSummary(),
+            descriptorError = usbSnapshot.descriptorError,
+            supportedSampleRates = (device.sampleRates.asIterable() + usbSnapshot.sampleRates)
+                .filter { it > 0 }
+                .distinct()
+                .sorted(),
             bitPerfectSupported = supportedAttributes.any { it.isBitPerfect() },
             bitPerfectActive = preferredAttributes?.isBitPerfect() == true,
         )
@@ -166,6 +262,38 @@ class EchoUsbAudioMonitor(context: Context) {
         val device = findUsbOutputDevice() ?: return
         runCatching {
             audioManager.clearPreferredMixerAttributes(androidMusicAttributes(), device)
+        }
+    }
+
+    private fun registerUsbReceiver() {
+        if (receiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(ACTION_USB_PERMISSION)
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }
+        ContextCompat.registerReceiver(appContext, usbReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        receiverRegistered = true
+    }
+
+    private fun requestUsbHostPermissionIfNeeded() {
+        val device = findUsbAudioDevice() ?: return
+        if (usbManager.hasPermission(device)) {
+            if (permissionRequestPendingDeviceName == device.deviceName) {
+                permissionRequestPendingDeviceName = null
+            }
+            return
+        }
+        if (permissionRequestPendingDeviceName == device.deviceName) return
+
+        permissionRequestPendingDeviceName = device.deviceName
+        val intent = Intent(ACTION_USB_PERMISSION).setPackage(appContext.packageName)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val permissionIntent = PendingIntent.getBroadcast(appContext, 0, intent, flags)
+        runCatching {
+            usbManager.requestPermission(device, permissionIntent)
+        }.onFailure {
+            permissionRequestPendingDeviceName = null
         }
     }
 
@@ -188,6 +316,11 @@ class EchoUsbAudioMonitor(context: Context) {
                 }
             }
 
+    private fun findUsbAudioDevice(): UsbDevice? =
+        usbManager.deviceList.values
+            .filter { it.isUsbAudioDevice() }
+            .maxByOrNull { it.interfaceCount }
+
     private fun findBitPerfectAttributes(
         device: AudioDeviceInfo,
         sampleRateHz: Int,
@@ -209,6 +342,51 @@ class EchoUsbAudioMonitor(context: Context) {
             ?: address.takeIf { it.isNotBlank() }
             ?: "USB audio"
 
+    private fun UsbDevice.isUsbAudioDevice(): Boolean =
+        deviceClass == UsbConstants.USB_CLASS_AUDIO ||
+            (0 until interfaceCount).any { index ->
+                getInterface(index).interfaceClass == UsbConstants.USB_CLASS_AUDIO
+            }
+
+    private fun UsbDevice.getDisplayName(): String =
+        productName?.takeIf { it.isNotBlank() }
+            ?: manufacturerName?.takeIf { it.isNotBlank() }
+            ?: deviceName
+
+    private fun UsbAudioDeviceSnapshot.audioClassLabel(): String? =
+        descriptor.classVersions
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString("/") { it.label }
+
+    private fun UsbAudioDeviceSnapshot.endpointSummary(): String? =
+        descriptor.streamingFormats
+            .firstOrNull { it.isIsochronousOut }
+            ?.let { format ->
+                val width = format.bitResolution?.let { "${it}bit" } ?: "PCM"
+                val channels = format.channelCount?.let { "${it}ch" } ?: "stream"
+                val endpoint = format.endpointAddress?.let { "0x${it.toString(16)}" } ?: "OUT"
+                val sync = format.endpointSyncType?.toLabel().orEmpty()
+                val feedback = if (descriptor.hasFeedbackEndpoint) " + feedback" else ""
+                "$width $channels ${format.endpointTransferType.toLabel()} $endpoint$sync$feedback"
+            }
+
+    private fun UsbEndpointTransferType?.toLabel(): String =
+        when (this) {
+            UsbEndpointTransferType.Isochronous -> "iso"
+            UsbEndpointTransferType.Bulk -> "bulk"
+            UsbEndpointTransferType.Interrupt -> "interrupt"
+            UsbEndpointTransferType.Control -> "control"
+            null -> "endpoint"
+        }
+
+    private fun UsbEndpointSyncType.toLabel(): String =
+        when (this) {
+            UsbEndpointSyncType.Asynchronous -> " async"
+            UsbEndpointSyncType.Adaptive -> " adaptive"
+            UsbEndpointSyncType.Synchronous -> " sync"
+            UsbEndpointSyncType.None -> ""
+        }
+
     private fun AudioMixerAttributes.isBitPerfect(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             mixerBehavior == AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT
@@ -220,6 +398,14 @@ class EchoUsbAudioMonitor(context: Context) {
             .build()
 }
 
+private inline fun <reified T> Intent.getParcelableExtraCompat(name: String): T? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableExtra(name, T::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableExtra(name) as? T
+    }
+
 fun EchoPlaybackDiagnostics.withUsbAudioStatus(status: EchoUsbAudioStatus): EchoPlaybackDiagnostics =
     copy(
         outputRoute = status.outputRoute,
@@ -227,6 +413,15 @@ fun EchoPlaybackDiagnostics.withUsbAudioStatus(status: EchoUsbAudioStatus): Echo
         usbExclusiveEnabled = status.exclusiveEnabled,
         usbConnected = status.connected,
         usbDeviceName = status.deviceName,
+        usbHostPermissionGranted = status.hostPermissionGranted,
+        usbHostPermissionPending = status.hostPermissionPending,
+        usbAudioClass = status.audioClass,
+        usbAudioInterfaceCount = status.audioInterfaceCount,
+        usbAudioStreamingInterfaceCount = status.audioStreamingInterfaceCount,
+        usbAudioHasIsochronousOut = status.hasIsochronousOut,
+        usbAudioHasFeedbackEndpoint = status.hasFeedbackEndpoint,
+        usbAudioEndpointSummary = status.endpointSummary,
+        usbAudioDescriptorError = status.descriptorError,
         usbBitPerfectSupported = status.bitPerfectSupported,
         usbBitPerfectActive = status.bitPerfectActive,
         usbSupportedSampleRates = status.supportedSampleRates,

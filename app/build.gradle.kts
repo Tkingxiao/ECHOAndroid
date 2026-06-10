@@ -38,7 +38,7 @@ android {
         buildConfigField(
             "String",
             "LASTFM_SHARED_SECRET",
-            "\"${lastFmBuildValue("LASTFM_SHARED_SECRET")}\"",
+            "\"${lastFmBuildValue("LASTFM_SHARED_SECRET", "0f6494a849ea09829817963350eab8e7")}\"",
         )
     }
 
