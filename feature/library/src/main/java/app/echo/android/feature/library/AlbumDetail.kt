@@ -64,6 +64,7 @@ import app.echo.android.design.rememberArtworkPalette
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.EchoTrackMetadataUpdate
 
 private val AlbumDetailBottomPadding = 168.dp
 private val AlbumOnArtwork = Color.White
@@ -104,6 +105,7 @@ internal fun AlbumDetailPage(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(album.artworkUri, seedKey = album.albumKey)
@@ -178,6 +180,7 @@ internal fun AlbumDetailPage(
                                 track = track,
                                 accent = palette.vibrant,
                                 onClick = { onPlayTrack(track) },
+                                onUpdateTrackMetadata = onUpdateTrackMetadata,
                             )
                         }
                     }
@@ -195,6 +198,7 @@ internal fun AlbumDetailListPage(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(album.artworkUri, seedKey = album.albumKey)
@@ -262,6 +266,7 @@ internal fun AlbumDetailListPage(
                             track = track,
                             accent = palette.vibrant,
                             onClick = { onPlayTrack(track) },
+                            onUpdateTrackMetadata = onUpdateTrackMetadata,
                         )
                     }
                 }
@@ -278,6 +283,7 @@ internal fun ArtistDetailPage(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(artist.artworkUri, seedKey = artist.artistKey)
@@ -356,6 +362,7 @@ internal fun ArtistDetailPage(
                                 track = track,
                                 accent = palette.vibrant,
                                 onClick = { onPlayTrack(track) },
+                                onUpdateTrackMetadata = onUpdateTrackMetadata,
                             )
                         }
                     }
@@ -373,6 +380,7 @@ internal fun ArtistDetailListPage(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(artist.artworkUri, seedKey = artist.artistKey)
@@ -444,6 +452,7 @@ internal fun ArtistDetailListPage(
                             track = track,
                             accent = palette.vibrant,
                             onClick = { onPlayTrack(track) },
+                            onUpdateTrackMetadata = onUpdateTrackMetadata,
                         )
                     }
                 }
@@ -937,60 +946,68 @@ private fun AlbumTrackRow(
     track: EchoTrack,
     accent: Color,
     onClick: () -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
 ) {
     val colors = rememberDetailGlassColors()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.76f),
-                        colors.surface,
-                        accent.copy(alpha = if (LocalEchoDarkTheme.current) 0.10f else 0.05f),
+    TrackContextMenu(
+        track = track,
+        onPlay = onClick,
+        onUpdateTrackMetadata = onUpdateTrackMetadata,
+        modifier = Modifier.fillMaxWidth(),
+    ) { pressModifier ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.76f),
+                            colors.surface,
+                            accent.copy(alpha = if (LocalEchoDarkTheme.current) 0.10f else 0.05f),
+                        ),
                     ),
-                ),
-            )
-            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Text(
-            text = (track.trackNumber ?: (index + 1)).toString().padStart(2, '0'),
-            color = accent,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(26.dp),
-            textAlign = TextAlign.Center,
-        )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                )
+                .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(16.dp))
+                .then(pressModifier)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
             Text(
-                track.title,
-                color = colors.content,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                text = (track.trackNumber ?: (index + 1)).toString().padStart(2, '0'),
+                color = accent,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(26.dp),
+                textAlign = TextAlign.Center,
             )
-            track.artist.takeIf { it.isNotBlank() }?.let { artist ->
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    artist,
-                    color = colors.muted,
-                    style = MaterialTheme.typography.bodySmall,
+                    track.title,
+                    color = colors.content,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                track.artist.takeIf { it.isNotBlank() }?.let { artist ->
+                    Text(
+                        artist,
+                        color = colors.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
+            Text(
+                formatDuration(track.durationMs),
+                color = colors.muted,
+                style = MaterialTheme.typography.labelMedium,
+            )
         }
-        Text(
-            formatDuration(track.durationMs),
-            color = colors.muted,
-            style = MaterialTheme.typography.labelMedium,
-        )
     }
 }
 

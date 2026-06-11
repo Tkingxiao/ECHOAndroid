@@ -10,6 +10,7 @@ import app.echo.android.data.EchoLibraryDatabase
 import app.echo.android.data.EchoLibraryRepository
 import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoSettingsStore
+import app.echo.android.data.DocumentTreeTrackScanner
 import app.echo.android.data.MediaStoreTrackScanner
 import app.echo.android.data.NeteaseSourceId
 import app.echo.android.data.OpraHeadphoneCorrectionRepository
@@ -23,6 +24,7 @@ import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoPlaylist
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibraryStats
@@ -66,6 +68,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     private val repository = EchoLibraryRepository(
         database = database,
         scanner = MediaStoreTrackScanner(application.contentResolver),
+        documentTreeScanner = DocumentTreeTrackScanner(application.contentResolver),
     )
     private val settingsStore = EchoSettingsStore(application)
     private val opraRepository = OpraHeadphoneCorrectionRepository(application)
@@ -274,6 +277,12 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
             val queue = libraryController.queueAroundTrack(trackId)
             val startIndex = queue.indexOfFirst { it.id == trackId }.takeIf { it >= 0 } ?: 0
             if (queue.isNotEmpty()) playQueue(queue, startIndex)
+        }
+    }
+
+    fun updateTrackMetadata(update: EchoTrackMetadataUpdate) {
+        viewModelScope.launch {
+            libraryController.updateTrackMetadata(update)
         }
     }
 

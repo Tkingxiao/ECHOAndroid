@@ -14,6 +14,7 @@ import app.echo.android.model.library.LibraryTrackSortMode
 import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.EchoPlaylist
+import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.LibrarySource
 import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.library.NeteaseAudioQuality
@@ -30,6 +31,7 @@ import kotlin.coroutines.coroutineContext
 class EchoLibraryRepository(
     private val database: EchoLibraryDatabase,
     private val scanner: MediaStoreTrackScanner,
+    private val documentTreeScanner: DocumentTreeTrackScanner,
     private val neteaseClient: NeteaseCloudMusicClient = NeteaseCloudMusicClient(),
 ) {
     fun pagedTracks(
@@ -191,6 +193,17 @@ class EchoLibraryRepository(
     suspend fun trackForLyrics(trackId: String): LibraryTrackEntity? =
         database.trackDao().getTrackById(trackId)
 
+    suspend fun updateTrackMetadata(update: EchoTrackMetadataUpdate): Boolean {
+        val dao = database.trackDao()
+        val current = dao.getTrackById(update.trackId) ?: return false
+        val updated = current.withUserMetadata(
+            update = update,
+            editedAtEpochMs = System.currentTimeMillis(),
+        )
+        dao.upsertBatchWithFts(listOf(updated))
+        return true
+    }
+
     suspend fun albumTracksForPlayback(
         albumKey: String,
         limit: Int = AggregationQueueLimit,
@@ -303,6 +316,11 @@ class EchoLibraryRepository(
                 dao.getExistingMediaStoreFingerprintsInRelativePath(source, relativePathLike)
             }
                 .associateBy(TrackFingerprint::id)
+            val editedTracks = if (relativePathLike == null) {
+                dao.getMetadataEditedTracks(source)
+            } else {
+                dao.getMetadataEditedTracksInRelativePath(source, relativePathLike)
+            }.associateBy(LibraryTrackEntity::id)
 
             emitProgress(phase = LibraryScanPhase.QueryingMediaStore)
             scanner.scanAudio(
@@ -387,6 +405,144 @@ class EchoLibraryRepository(
                 phase = LibraryScanPhase.Error,
                 currentTitle = null,
                 error = error.message ?: "曲库扫描失败",
+                isCompleted = true,
+            )
+        }
+    }.flowOn(Dispatchers.IO)
+
+    fun refreshDocumentTreeSnapshot(
+        treeUri: android.net.Uri,
+        relativePathPrefix: String,
+        batchSize: Int = DocumentTreeScanBatchSize,
+        skipSampleRateRead: Boolean = false,
+    ): Flow<LibraryScanProgress> = flow {
+        val dao = database.trackDao()
+        val source = LibrarySource.MediaStore.id
+        val normalizedRelativePath = normalizeRelativePathPrefix(relativePathPrefix)
+            ?: error("Document tree scan requires a relative path")
+        val relativePathLike = "${escapeSqlLikeArgument(normalizedRelativePath)}%"
+        val scanRunId = System.currentTimeMillis()
+        var progress = LibraryScanProgress(phase = LibraryScanPhase.Preparing)
+        var insertedCount = 0
+        var updatedCount = 0
+        var scannedCount = 0
+        var deletedCount = 0
+        var lastProgressEmitCount = 0
+
+        suspend fun emitProgress(
+            phase: LibraryScanPhase = progress.phase,
+            currentTitle: String? = progress.currentTitle,
+            error: String? = null,
+            isCompleted: Boolean = false,
+        ) {
+            progress = LibraryScanProgress(
+                phase = phase,
+                scannedCount = scannedCount,
+                insertedCount = insertedCount,
+                updatedCount = updatedCount,
+                deletedCount = deletedCount,
+                totalCount = null,
+                currentTitle = currentTitle,
+                error = error,
+                isCompleted = isCompleted,
+            )
+            emit(progress)
+        }
+
+        try {
+            emitProgress()
+            coroutineContext.ensureActive()
+
+            emitProgress(phase = LibraryScanPhase.Diffing)
+            val existingFingerprints = dao.getExistingMediaStoreFingerprintsInRelativePath(
+                source = source,
+                relativePathLike = relativePathLike,
+            ).associateBy(TrackFingerprint::id)
+            val editedTracks = dao.getMetadataEditedTracksInRelativePath(
+                source = source,
+                relativePathLike = relativePathLike,
+            ).associateBy(LibraryTrackEntity::id)
+
+            emitProgress(phase = LibraryScanPhase.QueryingMediaStore)
+            documentTreeScanner.scanAudioTree(
+                treeUri = treeUri,
+                relativePathPrefix = normalizedRelativePath,
+                batchSize = batchSize,
+                readSampleRate = !skipSampleRateRead,
+                onProgress = { count, currentTrack ->
+                    scannedCount = count
+                    if (count == 0 || count - lastProgressEmitCount >= ProgressEmitStride) {
+                        lastProgressEmitCount = count
+                        emitProgress(
+                            phase = LibraryScanPhase.QueryingMediaStore,
+                            currentTitle = currentTrack?.title,
+                        )
+                    }
+                },
+                onBatch = { batch ->
+                    coroutineContext.ensureActive()
+                    val inserts = ArrayList<LibraryTrackEntity>(batch.size)
+                    val updates = ArrayList<LibraryTrackEntity>(batch.size)
+                    val unchangedIds = ArrayList<String>(batch.size)
+
+                    batch.forEach { rawTrack ->
+                        val track = rawTrack
+                            .withPreservedUserMetadata(editedTracks[rawTrack.id])
+                            .withScanMetadata(scanRunId)
+                        val existing = existingFingerprints[track.id]
+                        when {
+                            existing == null -> inserts += track
+                            existing.fingerprint != track.fingerprint -> updates += track
+                            else -> unchangedIds += track.id
+                        }
+                    }
+
+                    emitProgress(phase = LibraryScanPhase.WritingDatabase)
+                    (inserts + updates).chunked(DatabaseBatchSize).forEach { chunk ->
+                        dao.upsertBatchWithFts(chunk)
+                    }
+                    unchangedIds.chunked(DatabaseBatchSize).forEach { ids ->
+                        dao.markSeen(ids, scanRunId)
+                    }
+                    insertedCount += inserts.size
+                    updatedCount += updates.size
+                    lastProgressEmitCount = scannedCount
+                    emitProgress(phase = LibraryScanPhase.QueryingMediaStore)
+                },
+            )
+
+            coroutineContext.ensureActive()
+            emitProgress(phase = LibraryScanPhase.CleaningRemoved, currentTitle = null)
+            val missingTrackIds = dao.getMissingTrackIdsFromRelativePath(
+                source = source,
+                relativePathLike = relativePathLike,
+                scanRunId = scanRunId,
+            )
+            deletedCount = dao.deleteMissingFromRelativePath(
+                source = source,
+                relativePathLike = relativePathLike,
+                scanRunId = scanRunId,
+            )
+            missingTrackIds.chunked(DatabaseBatchSize).forEach { trackIds ->
+                dao.deleteFtsByTrackIds(trackIds)
+            }
+            emitProgress(
+                phase = LibraryScanPhase.Completed,
+                currentTitle = null,
+                isCompleted = true,
+            )
+        } catch (error: CancellationException) {
+            emitProgress(
+                phase = LibraryScanPhase.Cancelled,
+                currentTitle = null,
+                isCompleted = true,
+            )
+            throw error
+        } catch (error: Throwable) {
+            emitProgress(
+                phase = LibraryScanPhase.Error,
+                currentTitle = null,
+                error = error.message ?: "Document tree scan failed",
                 isCompleted = true,
             )
         }
@@ -777,6 +933,7 @@ class EchoLibraryRepository(
     private companion object {
         const val TAG = "EchoLibraryRepository"
         const val ScanBatchSize = 500
+        const val DocumentTreeScanBatchSize = 200
         const val DatabaseBatchSize = 500
         const val ProgressEmitStride = 100
         const val RecommendedTrackLimit = 8

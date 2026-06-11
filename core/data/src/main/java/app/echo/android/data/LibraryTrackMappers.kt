@@ -1,6 +1,7 @@
 package app.echo.android.data
 
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.LibrarySource
 
 fun LibraryTrackEntity.toEchoTrack(): EchoTrack =
@@ -42,6 +43,7 @@ fun EchoTrack.toLibraryTrackEntity(): LibraryTrackEntity =
         dateModifiedSeconds = dateModifiedSeconds,
         source = source.id,
         relativePath = null,
+        metadataEditedAtEpochMs = null,
         lastSeenScanRunId = 0L,
         fingerprint = buildTrackFingerprint(this),
         normalizedTitle = title.normalizedForSearch(),
@@ -59,6 +61,37 @@ internal fun LibraryTrackEntity.withScanMetadata(scanRunId: Long = lastSeenScanR
         normalizedAlbum = album?.normalizedForSearch(),
         normalizedAlbumArtist = albumArtist?.normalizedForSearch(),
     )
+
+internal fun LibraryTrackEntity.withUserMetadata(
+    update: EchoTrackMetadataUpdate,
+    editedAtEpochMs: Long,
+): LibraryTrackEntity =
+    copy(
+        title = update.title.trim().ifBlank { title },
+        artist = update.artist.trim().ifBlank { artist },
+        album = update.album.normalizedNullableMetadata(),
+        albumArtist = update.albumArtist.normalizedNullableMetadata(),
+        trackNumber = update.trackNumber?.takeIf { it > 0 },
+        discNumber = update.discNumber?.takeIf { it > 0 },
+        year = update.year?.takeIf { it > 0 },
+        metadataEditedAtEpochMs = editedAtEpochMs,
+    ).withScanMetadata()
+
+internal fun LibraryTrackEntity.withPreservedUserMetadata(
+    editedTrack: LibraryTrackEntity?,
+): LibraryTrackEntity {
+    if (editedTrack?.metadataEditedAtEpochMs == null) return this
+    return copy(
+        title = editedTrack.title,
+        artist = editedTrack.artist,
+        album = editedTrack.album,
+        albumArtist = editedTrack.albumArtist,
+        trackNumber = editedTrack.trackNumber,
+        discNumber = editedTrack.discNumber,
+        year = editedTrack.year,
+        metadataEditedAtEpochMs = editedTrack.metadataEditedAtEpochMs,
+    )
+}
 
 internal fun buildTrackFingerprint(track: EchoTrack): String =
     listOf(
@@ -97,3 +130,6 @@ internal fun buildTrackFingerprint(track: LibraryTrackEntity): String =
 
 internal fun String.normalizedForSearch(): String =
     trim().lowercase()
+
+private fun String?.normalizedNullableMetadata(): String? =
+    this?.trim()?.takeIf { it.isNotBlank() }

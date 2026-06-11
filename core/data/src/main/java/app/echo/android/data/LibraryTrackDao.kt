@@ -71,6 +71,22 @@ interface LibraryTrackDao {
     @Query("SELECT * FROM library_tracks WHERE id = :trackId LIMIT 1")
     suspend fun getTrackById(trackId: String): LibraryTrackEntity?
 
+    @Query("SELECT * FROM library_tracks WHERE source = :source AND metadataEditedAtEpochMs IS NOT NULL")
+    suspend fun getMetadataEditedTracks(source: String): List<LibraryTrackEntity>
+
+    @Query(
+        """
+        SELECT * FROM library_tracks
+        WHERE source = :source
+          AND relativePath LIKE :relativePathLike ESCAPE '\'
+          AND metadataEditedAtEpochMs IS NOT NULL
+        """,
+    )
+    suspend fun getMetadataEditedTracksInRelativePath(
+        source: String,
+        relativePathLike: String,
+    ): List<LibraryTrackEntity>
+
     @RawQuery(
         observedEntities = [
             LibraryTrackEntity::class,

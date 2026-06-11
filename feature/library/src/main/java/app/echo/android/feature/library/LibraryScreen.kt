@@ -98,6 +98,7 @@ import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoPlaylist
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibrarySource
@@ -206,6 +207,7 @@ fun LibraryScreen(
     onRefreshLinkedLibrary: () -> Unit,
     onPlayLinkedTrack: (EchoRemoteTrack) -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: (EchoTrackMetadataUpdate) -> Unit,
     onPlayAlbum: (AlbumSummary) -> Unit,
     onShuffleAlbum: (AlbumSummary) -> Unit,
     onPlayArtist: (ArtistSummary) -> Unit,
@@ -377,6 +379,7 @@ fun LibraryScreen(
                 onPlayAll = { onPlayAlbum(target.album) },
                 onShuffle = { onShuffleAlbum(target.album) },
                 onPlayTrack = onPlayTrack,
+                onUpdateTrackMetadata = onUpdateTrackMetadata,
                 modifier = Modifier.fillMaxSize(),
             )
             is LibraryDetailTransitionTarget.ArtistDetail -> ArtistDetailPage(
@@ -386,6 +389,7 @@ fun LibraryScreen(
                 onPlayAll = { onPlayArtist(target.artist) },
                 onShuffle = { onShuffleArtist(target.artist) },
                 onPlayTrack = onPlayTrack,
+                onUpdateTrackMetadata = onUpdateTrackMetadata,
                 modifier = Modifier.fillMaxSize(),
             )
             LibraryDetailTransitionTarget.Browser -> {
@@ -406,6 +410,7 @@ fun LibraryScreen(
                         onBack = onCloseDetail,
                         onPlayAll = { onPlayPlaylist(activePlaylistDetail) },
                         onPlayTrack = onPlayTrack,
+                        onUpdateTrackMetadata = onUpdateTrackMetadata,
                         showAudioInfoTags = showTrackAudioInfoTags,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -457,6 +462,7 @@ fun LibraryScreen(
                             onBack = onCloseDetail,
                             onPlayAll = { onPlayFolder(target.folder) },
                             onPlayTrack = onPlayTrack,
+                            onUpdateTrackMetadata = onUpdateTrackMetadata,
                             modifier = Modifier.fillMaxSize(),
                         )
                         LibraryFolderTransitionTarget.Browser -> PageChrome(
@@ -550,6 +556,7 @@ fun LibraryScreen(
                                                     TrackList(
                                                         tracks = tracks,
                                                         onPlayTrack = onPlayTrack,
+                                                        onUpdateTrackMetadata = onUpdateTrackMetadata,
                                                         showAudioInfoTags = showTrackAudioInfoTags,
                                                         modifier = Modifier.fillMaxSize(),
                                                     )

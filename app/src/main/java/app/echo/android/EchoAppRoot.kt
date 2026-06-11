@@ -166,15 +166,18 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         hasAudioPermission = granted
         if (granted) viewModel.refreshLibrary()
     }
-    val folderScanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let(viewModel::refreshLibraryFolder)
-    }
     fun persistReadPermission(uri: android.net.Uri) {
         runCatching {
             context.contentResolver.takePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
+        }
+    }
+    val folderScanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let { treeUri ->
+            persistReadPermission(treeUri)
+            viewModel.refreshLibraryFolder(treeUri)
         }
     }
     val backgroundImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -606,6 +609,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                     )
                                 },
                                 onPlayTrack = { track -> viewModel.playTrackFromLibrary(track.id) },
+                                onUpdateTrackMetadata = viewModel::updateTrackMetadata,
                                 onPlayAlbum = { album -> viewModel.playAlbum(album.albumKey) },
                                 onShuffleAlbum = { album -> viewModel.shuffleAlbum(album.albumKey) },
                                 onPlayArtist = { artist -> viewModel.playArtist(artist.artistKey) },

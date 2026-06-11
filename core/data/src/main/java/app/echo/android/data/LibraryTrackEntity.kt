@@ -38,6 +38,7 @@ data class LibraryTrackEntity(
     val dateModifiedSeconds: Long,
     val source: String = "mediastore",
     val relativePath: String? = null,
+    val metadataEditedAtEpochMs: Long? = null,
     val lastSeenScanRunId: Long = 0L,
     val fingerprint: String? = null,
     val normalizedTitle: String? = null,

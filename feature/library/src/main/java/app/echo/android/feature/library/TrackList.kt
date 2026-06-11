@@ -2,7 +2,8 @@ package app.echo.android.feature.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,29 +16,47 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.paging.compose.LazyPagingItems
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoAccent
 import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.formatDuration
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.EchoTrackMetadataUpdate
+import app.echo.android.model.library.LibrarySource
 
 @Composable
 internal fun TrackList(
     tracks: LazyPagingItems<EchoTrack>,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     showAudioInfoTags: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -54,6 +73,7 @@ internal fun TrackList(
                 TrackRow(
                     track = track,
                     onClick = { onPlayTrack(track) },
+                    onUpdateTrackMetadata = onUpdateTrackMetadata,
                     showAudioInfoTags = showAudioInfoTags,
                 )
             }
@@ -65,6 +85,7 @@ internal fun TrackList(
 internal fun TrackList(
     tracks: List<EchoTrack>,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     showAudioInfoTags: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -81,6 +102,7 @@ internal fun TrackList(
             TrackRow(
                 track = track,
                 onClick = { onPlayTrack(track) },
+                onUpdateTrackMetadata = onUpdateTrackMetadata,
                 showAudioInfoTags = showAudioInfoTags,
             )
         }
@@ -91,6 +113,7 @@ internal fun TrackList(
 internal fun TrackRow(
     track: EchoTrack,
     onClick: () -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     showAudioInfoTags: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -105,89 +128,373 @@ internal fun TrackRow(
     }
     val hasTags = format != null || sampleRate != null
 
-    Column(
+    TrackContextMenu(
+        track = track,
+        onPlay = onClick,
+        onUpdateTrackMetadata = onUpdateTrackMetadata,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .padding(horizontal = 4.dp),
-    ) {
-        Row(
+    ) { pressModifier ->
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                .then(pressModifier),
         ) {
-            ArtworkTile(
-                track.artworkUri,
-                Modifier.size(68.dp),
-                accent = EchoAccent,
-                cornerRadius = 12.dp,
-                elevation = 3.dp,
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text(
-                    track.title,
-                    color = if (dark) Color.White.copy(alpha = 0.98f) else scheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.ExtraBold,
-                    style = MaterialTheme.typography.titleMedium,
+                ArtworkTile(
+                    track.artworkUri,
+                    Modifier.size(68.dp),
+                    accent = EchoAccent,
+                    cornerRadius = 12.dp,
+                    elevation = 3.dp,
                 )
-                Text(
-                    subtitle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = if (dark) Color.White.copy(alpha = 0.80f) else scheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                if (hasTags) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        format?.let { value ->
-                            TrackInfoTag(
-                                text = value,
-                                tone = TrackInfoTagTone.Format,
-                            )
-                        }
-                        sampleRate?.let { value ->
-                            TrackInfoTag(
-                                text = value,
-                                tone = if (isHiResSampleRate(track.sampleRateHz)) {
-                                    TrackInfoTagTone.Gold
-                                } else {
-                                    TrackInfoTagTone.Neutral
-                                },
-                            )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        track.title,
+                        color = if (dark) Color.White.copy(alpha = 0.98f) else scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        subtitle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (dark) Color.White.copy(alpha = 0.80f) else scheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (hasTags) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            format?.let { value ->
+                                TrackInfoTag(
+                                    text = value,
+                                    tone = TrackInfoTagTone.Format,
+                                )
+                            }
+                            sampleRate?.let { value ->
+                                TrackInfoTag(
+                                    text = value,
+                                    tone = if (isHiResSampleRate(track.sampleRateHz)) {
+                                        TrackInfoTagTone.Gold
+                                    } else {
+                                        TrackInfoTagTone.Neutral
+                                    },
+                                )
+                            }
                         }
                     }
                 }
+                Column(
+                    modifier = Modifier.widthIn(min = 50.dp, max = 74.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    Text(
+                        duration,
+                        color = if (dark) Color.White.copy(alpha = 0.82f) else scheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                }
             }
-            Column(
-                modifier = Modifier.widthIn(min = 50.dp, max = 74.dp),
-                horizontalAlignment = Alignment.End,
-            ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .padding(start = 82.dp)
+                    .background(if (dark) Color.White.copy(alpha = 0.16f) else scheme.outlineVariant.copy(alpha = 0.36f)),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun TrackContextMenu(
+    track: EchoTrack,
+    onPlay: () -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable (Modifier) -> Unit,
+) {
+    var expanded by remember(track.id) { mutableStateOf(false) }
+    var showInfo by remember(track.id) { mutableStateOf(false) }
+    var showEditor by remember(track.id) { mutableStateOf(false) }
+    val canEditMetadata = onUpdateTrackMetadata != null && track.source == LibrarySource.MediaStore
+
+    Box(modifier = modifier) {
+        content(
+            Modifier.combinedClickable(
+                onClick = onPlay,
+                onLongClick = { expanded = true },
+            ),
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            DropdownMenuItem(
+                text = { Text("播放") },
+                leadingIcon = {
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                },
+                onClick = {
+                    expanded = false
+                    onPlay()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("编辑标签") },
+                leadingIcon = {
+                    Icon(Icons.Rounded.Edit, contentDescription = null)
+                },
+                enabled = canEditMetadata,
+                onClick = {
+                    expanded = false
+                    showEditor = true
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("歌曲信息") },
+                leadingIcon = {
+                    Icon(Icons.Rounded.Info, contentDescription = null)
+                },
+                onClick = {
+                    expanded = false
+                    showInfo = true
+                },
+            )
+        }
+    }
+
+    if (showInfo) {
+        TrackInfoDialog(
+            track = track,
+            onDismiss = { showInfo = false },
+        )
+    }
+    if (showEditor && onUpdateTrackMetadata != null) {
+        TrackMetadataEditorDialog(
+            track = track,
+            onDismiss = { showEditor = false },
+            onSave = { update ->
+                onUpdateTrackMetadata(update)
+                showEditor = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun TrackMetadataEditorDialog(
+    track: EchoTrack,
+    onDismiss: () -> Unit,
+    onSave: (EchoTrackMetadataUpdate) -> Unit,
+) {
+    var title by remember(track.id) { mutableStateOf(track.title) }
+    var artist by remember(track.id) { mutableStateOf(track.artist) }
+    var album by remember(track.id) { mutableStateOf(track.album.orEmpty()) }
+    var albumArtist by remember(track.id) { mutableStateOf(track.albumArtist.orEmpty()) }
+    var trackNumber by remember(track.id) { mutableStateOf(track.trackNumber?.toString().orEmpty()) }
+    var discNumber by remember(track.id) { mutableStateOf(track.discNumber?.toString().orEmpty()) }
+    var year by remember(track.id) { mutableStateOf(track.year?.toString().orEmpty()) }
+    val canSave = title.isNotBlank() && artist.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "编辑标签",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("标题") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextField(
+                    value = artist,
+                    onValueChange = { artist = it },
+                    label = { Text("艺术家") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextField(
+                    value = album,
+                    onValueChange = { album = it },
+                    label = { Text("专辑") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextField(
+                    value = albumArtist,
+                    onValueChange = { albumArtist = it },
+                    label = { Text("专辑艺术家") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NumericMetadataField(
+                        value = trackNumber,
+                        onValueChange = { trackNumber = it },
+                        label = "音轨",
+                        modifier = Modifier.weight(1f),
+                    )
+                    NumericMetadataField(
+                        value = discNumber,
+                        onValueChange = { discNumber = it },
+                        label = "碟号",
+                        modifier = Modifier.weight(1f),
+                    )
+                    NumericMetadataField(
+                        value = year,
+                        onValueChange = { year = it },
+                        label = "年份",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 Text(
-                    duration,
-                    color = if (dark) Color.White.copy(alpha = 0.82f) else scheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
+                    "当前只保存到 ECHOAndroid 曲库索引，不直接写入音频文件。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
-        }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .padding(start = 82.dp)
-                .background(if (dark) Color.White.copy(alpha = 0.16f) else scheme.outlineVariant.copy(alpha = 0.36f)),
+        },
+        confirmButton = {
+            TextButton(
+                enabled = canSave,
+                onClick = {
+                    onSave(
+                        EchoTrackMetadataUpdate(
+                            trackId = track.id,
+                            title = title.trim(),
+                            artist = artist.trim(),
+                            album = album.trim().takeIf { it.isNotBlank() },
+                            albumArtist = albumArtist.trim().takeIf { it.isNotBlank() },
+                            trackNumber = trackNumber.toPositiveIntOrNull(),
+                            discNumber = discNumber.toPositiveIntOrNull(),
+                            year = year.toPositiveIntOrNull(),
+                        ),
+                    )
+                },
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+    )
+}
+
+@Composable
+private fun NumericMetadataField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    TextField(
+        value = value,
+        onValueChange = { next -> onValueChange(next.filter(Char::isDigit).take(4)) },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun TrackInfoDialog(
+    track: EchoTrack,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                track.title,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TrackInfoLine("艺术家", track.artist.ifBlank { "未知艺术家" })
+                TrackInfoLine("专辑", track.album?.takeIf { it.isNotBlank() } ?: "未知专辑")
+                TrackInfoLine("专辑艺术家", track.albumArtist?.takeIf { it.isNotBlank() } ?: "未提供")
+                TrackInfoLine("音轨", track.trackNumber?.toString() ?: "未提供")
+                TrackInfoLine("碟号", track.discNumber?.toString() ?: "未提供")
+                TrackInfoLine("年份", track.year?.toString() ?: "未提供")
+                TrackInfoLine(
+                    "格式",
+                    formatTrackMimeType(track.mimeType)
+                        ?: track.mimeType?.takeIf { it.isNotBlank() }
+                        ?: "未提供",
+                )
+                TrackInfoLine("采样率", track.sampleRateHz?.let(::formatTrackSampleRate) ?: "未提供")
+                TrackInfoLine("时长", formatDuration(track.durationMs))
+                TrackInfoLine("大小", formatTrackFileSize(track.sizeBytes))
+                TrackInfoLine("来源", track.source.id)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("完成")
+            }
+        },
+    )
+}
+
+@Composable
+private fun TrackInfoLine(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.widthIn(min = 76.dp, max = 96.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        Text(
+            value,
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -227,6 +534,18 @@ private fun formatTrackSampleRate(hz: Int): String =
         "${hz / 1000}kHz"
     } else {
         String.format("%.1fkHz", hz / 1000.0)
+    }
+
+private fun String.toPositiveIntOrNull(): Int? =
+    trim().toIntOrNull()?.takeIf { it > 0 }
+
+private fun formatTrackFileSize(bytes: Long): String =
+    when {
+        bytes <= 0L -> "未提供"
+        bytes >= 1024L * 1024L * 1024L -> "%.1f GB".format(bytes / (1024f * 1024f * 1024f))
+        bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / (1024f * 1024f))
+        bytes >= 1024L -> "%.1f KB".format(bytes / 1024f)
+        else -> "$bytes B"
     }
 
 private fun formatTrackMimeType(mimeType: String?): String? {

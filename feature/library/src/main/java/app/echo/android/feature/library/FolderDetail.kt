@@ -60,6 +60,7 @@ import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
 import app.echo.android.design.formatDuration
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.FolderSummary
 
 private val FolderDetailBottomPadding = 168.dp
@@ -98,6 +99,7 @@ internal fun FolderDetailPage(
     onBack: () -> Unit,
     onPlayAll: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = rememberFolderDetailColors()
@@ -181,6 +183,7 @@ internal fun FolderDetailPage(
                                 index = index,
                                 track = track,
                                 onClick = { onPlayTrack(track) },
+                                onUpdateTrackMetadata = onUpdateTrackMetadata,
                             )
                         }
                     }
@@ -383,71 +386,79 @@ private fun FolderTrackRow(
     index: Int,
     track: EchoTrack,
     onClick: () -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
 ) {
     val colors = rememberFolderDetailColors()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp)
-            .shadow(
-                elevation = 3.dp,
-                shape = RoundedCornerShape(16.dp),
-                ambientColor = Color.Black.copy(alpha = 0.03f),
-                spotColor = EchoAccent.copy(alpha = 0.05f),
-            )
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.84f),
-                        colors.elevatedSurface,
+    TrackContextMenu(
+        track = track,
+        onPlay = onClick,
+        onUpdateTrackMetadata = onUpdateTrackMetadata,
+        modifier = Modifier.fillMaxWidth(),
+    ) { pressModifier ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 5.dp)
+                .shadow(
+                    elevation = 3.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = Color.Black.copy(alpha = 0.03f),
+                    spotColor = EchoAccent.copy(alpha = 0.05f),
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.84f),
+                            colors.elevatedSurface,
+                        ),
                     ),
-                ),
-            )
-            .border(BorderStroke(1.dp, colors.border.copy(alpha = 0.78f)), RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = (index + 1).toString().padStart(2, '0'),
-            color = EchoAccentDeep,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Black,
-            modifier = Modifier.width(28.dp),
-        )
-        ArtworkTile(
-            artworkUri = track.artworkUri,
-            modifier = Modifier.size(58.dp),
-            accent = EchoAccent,
-            cornerRadius = 10.dp,
-            elevation = 4.dp,
-            placeholderIconSize = 27.dp,
-        )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                )
+                .border(BorderStroke(1.dp, colors.border.copy(alpha = 0.78f)), RoundedCornerShape(16.dp))
+                .then(pressModifier)
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             Text(
-                track.title,
-                color = colors.content,
-                style = MaterialTheme.typography.titleMedium,
+                text = (index + 1).toString().padStart(2, '0'),
+                color = EchoAccentDeep,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Black,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(28.dp),
             )
+            ArtworkTile(
+                artworkUri = track.artworkUri,
+                modifier = Modifier.size(58.dp),
+                accent = EchoAccent,
+                cornerRadius = 10.dp,
+                elevation = 4.dp,
+                placeholderIconSize = 27.dp,
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    track.title,
+                    color = colors.content,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    trackSubtitle(track),
+                    color = colors.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
-                trackSubtitle(track),
+                formatDuration(track.durationMs),
                 color = colors.muted,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
             )
         }
-        Text(
-            formatDuration(track.durationMs),
-            color = colors.muted,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
     }
 }
 

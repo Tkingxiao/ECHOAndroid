@@ -109,6 +109,7 @@ import app.echo.android.design.formatDuration
 import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
+import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
@@ -983,6 +984,7 @@ internal fun LibraryDetailPage(
     onBack: () -> Unit,
     onPlayAll: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
+    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
     showAudioInfoTags: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -1033,6 +1035,7 @@ internal fun LibraryDetailPage(
             else -> TrackList(
                 tracks = tracks,
                 onPlayTrack = onPlayTrack,
+                onUpdateTrackMetadata = onUpdateTrackMetadata,
                 showAudioInfoTags = showAudioInfoTags,
                 modifier = Modifier.weight(1f),
             )

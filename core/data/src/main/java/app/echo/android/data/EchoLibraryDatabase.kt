@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LibraryPlaylistTrackEntity::class,
         LibraryPlaybackStatsEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class EchoLibraryDatabase : RoomDatabase() {
@@ -34,6 +34,7 @@ abstract class EchoLibraryDatabase : RoomDatabase() {
                     Migration6To7,
                     Migration7To8,
                     Migration8To9,
+                    Migration9To10,
                 )
                 .build()
 
@@ -200,6 +201,12 @@ abstract class EchoLibraryDatabase : RoomDatabase() {
                     ON library_playback_stats(lastPlayedAtEpochMs)
                     """.trimIndent(),
                 )
+            }
+        }
+
+        internal val Migration9To10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE library_tracks ADD COLUMN metadataEditedAtEpochMs INTEGER")
             }
         }
     }

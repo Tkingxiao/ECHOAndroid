@@ -13,6 +13,7 @@ import app.echo.android.model.library.AlbumSummary
 import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoTrack
 import app.echo.android.model.library.EchoPlaylist
+import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
@@ -149,7 +150,11 @@ internal class LibraryController(
             )
             return
         }
-        refreshLibrary(relativePathPrefix = folder.relativePathPrefix)
+        if (folder.treeUri == null) {
+            refreshLibrary(relativePathPrefix = folder.relativePathPrefix)
+        } else {
+            refreshDocumentTree(folder)
+        }
     }
 
     private fun refreshLibrary(relativePathPrefix: String?) {
@@ -174,6 +179,36 @@ internal class LibraryController(
                     phase = LibraryScanPhase.Error,
                     currentTitle = null,
                     error = error.message ?: "Library scan failed",
+                    isCompleted = true,
+                )
+            }
+        }
+    }
+
+    private fun refreshDocumentTree(folder: MediaStoreAudioFolder) {
+        val treeUri = folder.treeUri ?: return
+        if (scanJob?.isActive == true) return
+        scanJob = scope.launch {
+            try {
+                repository.refreshDocumentTreeSnapshot(
+                    treeUri = treeUri,
+                    relativePathPrefix = folder.relativePathPrefix,
+                    skipSampleRateRead = effectivePerformanceMode.isLightweight,
+                )
+                    .collect { progress -> _scanState.value = progress }
+            } catch (error: CancellationException) {
+                _scanState.value = _scanState.value.copy(
+                    phase = LibraryScanPhase.Cancelled,
+                    currentTitle = null,
+                    error = null,
+                    isCompleted = true,
+                )
+                throw error
+            } catch (error: Throwable) {
+                _scanState.value = _scanState.value.copy(
+                    phase = LibraryScanPhase.Error,
+                    currentTitle = null,
+                    error = error.message ?: "Document tree scan failed",
                     isCompleted = true,
                 )
             }
@@ -295,6 +330,11 @@ internal class LibraryController(
     suspend fun playlistTracksForPlayback(playlistId: String): List<EchoTrack> =
         withContext(Dispatchers.IO) {
             repository.playlistTracksForPlayback(playlistId).map { it.toEchoTrack() }
+        }
+
+    suspend fun updateTrackMetadata(update: EchoTrackMetadataUpdate): Boolean =
+        withContext(Dispatchers.IO) {
+            repository.updateTrackMetadata(update)
         }
 
     fun clear() {
