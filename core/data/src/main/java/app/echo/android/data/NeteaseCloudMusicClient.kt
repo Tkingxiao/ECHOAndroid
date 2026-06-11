@@ -172,6 +172,24 @@ class NeteaseCloudMusicClient(
             ?: body.optJSONObject("tlyric")?.optString("lyric")?.takeIf { it.isNotBlank() }
     }
 
+    internal fun searchSongs(query: String, limit: Int = 8): List<NeteaseSong> {
+        val safeQuery = query.trim()
+        if (safeQuery.isBlank()) return emptyList()
+        val url = "$ApiBase/search/get".withQuery(
+            "s" to safeQuery,
+            "type" to "1",
+            "limit" to limit.coerceIn(1, 20).toString(),
+            "offset" to "0",
+        )
+        val body = getJson(url, "")
+        return body.optJSONObject("result")
+            ?.optJSONArray("songs")
+            ?.objects()
+            ?.mapNotNull { it.toNeteaseSong() }
+            ?.toList()
+            .orEmpty()
+    }
+
     private fun fetchPlaylistHeader(session: NeteaseSession, playlistId: Long): NeteaseRemotePlaylist {
         val url = "$ApiBase/playlist/detail".withQuery(
             "id" to playlistId.toString(),

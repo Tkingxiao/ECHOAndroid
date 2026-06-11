@@ -8,5 +8,7 @@ data class EchoPlaybackStatus(
     val isPlaying: Boolean = false,
     val repeatMode: EchoRepeatMode = EchoRepeatMode.Off,
     val shuffleEnabled: Boolean = false,
+    val playbackSpeed: Float = 1f,
+    val playbackPitch: Float = 1f,
     val diagnostics: EchoPlaybackDiagnostics = EchoPlaybackDiagnostics(),
 )

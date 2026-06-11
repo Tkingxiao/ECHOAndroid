@@ -985,6 +985,9 @@ internal fun LibraryDetailPage(
     onPlayAll: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     showAudioInfoTags: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -1036,6 +1039,9 @@ internal fun LibraryDetailPage(
                 tracks = tracks,
                 onPlayTrack = onPlayTrack,
                 onUpdateTrackMetadata = onUpdateTrackMetadata,
+                onImportLyrics = onImportLyrics,
+                onPickArtwork = onPickArtwork,
+                onMatchNeteaseMetadata = onMatchNeteaseMetadata,
                 showAudioInfoTags = showAudioInfoTags,
                 modifier = Modifier.weight(1f),
             )

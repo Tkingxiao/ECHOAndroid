@@ -83,6 +83,9 @@ internal class LibraryController(
     val neteasePlaylists: Flow<List<EchoPlaylist>> =
         repository.observeNeteasePlaylists()
 
+    val localPlaylists: Flow<List<EchoPlaylist>> =
+        repository.observeLocalPlaylists()
+
     val libraryStats: Flow<LibraryStats> = repository.observeLibraryStats()
 
     val recommendedTracks: Flow<List<EchoTrack>> =
@@ -335,6 +338,16 @@ internal class LibraryController(
     suspend fun updateTrackMetadata(update: EchoTrackMetadataUpdate): Boolean =
         withContext(Dispatchers.IO) {
             repository.updateTrackMetadata(update)
+        }
+
+    suspend fun updateTrackArtwork(trackId: String, artworkUri: Uri): Boolean =
+        withContext(Dispatchers.IO) {
+            repository.updateTrackArtwork(trackId, artworkUri.toString())
+        }
+
+    suspend fun applyBestNeteaseMetadata(trackId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            repository.applyBestNeteaseMetadata(trackId)
         }
 
     fun clear() {

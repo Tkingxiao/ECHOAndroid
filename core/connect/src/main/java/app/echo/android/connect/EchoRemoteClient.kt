@@ -35,6 +35,7 @@ class EchoRemoteClient private constructor(
 
     private var endpoint: EchoRemoteEndpoint? = null
     private var statusPollJob: Job? = null
+    private var libraryRefreshJob: Job? = null
 
     fun connectManual(address: String, token: String, refreshLibraryOnConnect: Boolean = true) {
         val parsed = EchoPairingParser.parseManual(address, token)
@@ -57,6 +58,8 @@ class EchoRemoteClient private constructor(
     fun connect(nextEndpoint: EchoRemoteEndpoint, refreshLibraryOnConnect: Boolean = true) {
         endpoint = nextEndpoint
         statusPollJob?.cancel()
+        libraryRefreshJob?.cancel()
+        libraryRefreshJob = null
         _status.update {
             it.copy(
                 connectionState = EchoRemoteConnectionState.Connecting,
@@ -82,6 +85,8 @@ class EchoRemoteClient private constructor(
     fun disconnect() {
         statusPollJob?.cancel()
         statusPollJob = null
+        libraryRefreshJob?.cancel()
+        libraryRefreshJob = null
         endpoint = null
         _status.value = EchoRemoteStatus(mobileDiscordPresence = _status.value.mobileDiscordPresence)
         _library.value = EchoRemoteLibraryState()
@@ -151,9 +156,19 @@ class EchoRemoteClient private constructor(
             _library.update { it.copy(isLoading = false, error = "还没有连接 PC ECHO") }
             return
         }
-        _library.update { it.copy(isLoading = true, query = query, error = null) }
-        scope.launch {
-                    runCatching { transport.fetchTracks(target, query, PcLibraryPageSize) }
+        _library.update { current ->
+            val sameQuery = current.query.trim() == query.trim()
+            current.copy(
+                isLoading = true,
+                query = query,
+                tracks = if (sameQuery) current.tracks else emptyList(),
+                totalCount = if (sameQuery) current.totalCount else 0,
+                error = null,
+            )
+        }
+        libraryRefreshJob?.cancel()
+        libraryRefreshJob = scope.launch {
+            runCatching { transport.fetchTracks(target, query, PcLibraryPageSize) }
                 .onSuccess { page ->
                     if (endpoint?.id == target.id) {
                         _library.value = EchoRemoteLibraryState(

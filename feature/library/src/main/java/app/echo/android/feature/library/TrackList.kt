@@ -3,32 +3,44 @@ package app.echo.android.feature.library
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.CloudQueue
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +69,9 @@ internal fun TrackList(
     tracks: LazyPagingItems<EchoTrack>,
     onPlayTrack: (EchoTrack) -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     showAudioInfoTags: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -74,6 +89,9 @@ internal fun TrackList(
                     track = track,
                     onClick = { onPlayTrack(track) },
                     onUpdateTrackMetadata = onUpdateTrackMetadata,
+                    onImportLyrics = onImportLyrics,
+                    onPickArtwork = onPickArtwork,
+                    onMatchNeteaseMetadata = onMatchNeteaseMetadata,
                     showAudioInfoTags = showAudioInfoTags,
                 )
             }
@@ -86,6 +104,9 @@ internal fun TrackList(
     tracks: List<EchoTrack>,
     onPlayTrack: (EchoTrack) -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     showAudioInfoTags: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -103,6 +124,9 @@ internal fun TrackList(
                 track = track,
                 onClick = { onPlayTrack(track) },
                 onUpdateTrackMetadata = onUpdateTrackMetadata,
+                onImportLyrics = onImportLyrics,
+                onPickArtwork = onPickArtwork,
+                onMatchNeteaseMetadata = onMatchNeteaseMetadata,
                 showAudioInfoTags = showAudioInfoTags,
             )
         }
@@ -114,6 +138,9 @@ internal fun TrackRow(
     track: EchoTrack,
     onClick: () -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     showAudioInfoTags: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -132,6 +159,9 @@ internal fun TrackRow(
         track = track,
         onPlay = onClick,
         onUpdateTrackMetadata = onUpdateTrackMetadata,
+        onImportLyrics = onImportLyrics,
+        onPickArtwork = onPickArtwork,
+        onMatchNeteaseMetadata = onMatchNeteaseMetadata,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp),
@@ -223,25 +253,35 @@ internal fun TrackRow(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+private enum class TrackSheetMode {
+    Actions,
+    Editor,
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun TrackContextMenu(
     track: EchoTrack,
     onPlay: () -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable (Modifier) -> Unit,
 ) {
     var expanded by remember(track.id) { mutableStateOf(false) }
+    var sheetMode by remember(track.id) { mutableStateOf<TrackSheetMode?>(null) }
     var showInfo by remember(track.id) { mutableStateOf(false) }
     var showEditor by remember(track.id) { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val canEditMetadata = onUpdateTrackMetadata != null && track.source == LibrarySource.MediaStore
 
     Box(modifier = modifier) {
         content(
             Modifier.combinedClickable(
                 onClick = onPlay,
-                onLongClick = { expanded = true },
+                onLongClick = { sheetMode = TrackSheetMode.Actions },
             ),
         )
         DropdownMenu(
@@ -270,6 +310,33 @@ internal fun TrackContextMenu(
                     showEditor = true
                 },
             )
+            if (onImportLyrics != null) {
+                DropdownMenuItem(
+                    text = { Text("导入歌词") },
+                    onClick = {
+                        expanded = false
+                        onImportLyrics(track)
+                    },
+                )
+            }
+            if (onPickArtwork != null) {
+                DropdownMenuItem(
+                    text = { Text("更换封面") },
+                    onClick = {
+                        expanded = false
+                        onPickArtwork(track)
+                    },
+                )
+            }
+            if (onMatchNeteaseMetadata != null) {
+                DropdownMenuItem(
+                    text = { Text("匹配网易云信息") },
+                    onClick = {
+                        expanded = false
+                        onMatchNeteaseMetadata(track)
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text("歌曲信息") },
                 leadingIcon = {
@@ -280,6 +347,58 @@ internal fun TrackContextMenu(
                     showInfo = true
                 },
             )
+        }
+    }
+
+    sheetMode?.let { mode ->
+        ModalBottomSheet(
+            onDismissRequest = { sheetMode = null },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp,
+            shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        ) {
+            when (mode) {
+                TrackSheetMode.Actions -> TrackActionSheet(
+                    track = track,
+                    canEditMetadata = canEditMetadata,
+                    canImportLyrics = onImportLyrics != null,
+                    canPickArtwork = onPickArtwork != null,
+                    canMatchNeteaseMetadata = onMatchNeteaseMetadata != null && track.source == LibrarySource.MediaStore,
+                    onPlay = {
+                        sheetMode = null
+                        onPlay()
+                    },
+                    onEdit = { sheetMode = TrackSheetMode.Editor },
+                    onImportLyrics = {
+                        sheetMode = null
+                        onImportLyrics?.invoke(track)
+                    },
+                    onPickArtwork = {
+                        sheetMode = null
+                        onPickArtwork?.invoke(track)
+                    },
+                    onMatchNeteaseMetadata = {
+                        sheetMode = null
+                        onMatchNeteaseMetadata?.invoke(track)
+                    },
+                    onInfo = {
+                        sheetMode = null
+                        showInfo = true
+                    },
+                )
+
+                TrackSheetMode.Editor -> if (onUpdateTrackMetadata != null) {
+                    TrackMetadataEditorSheet(
+                        track = track,
+                        onDismiss = { sheetMode = null },
+                        onSave = { update ->
+                            onUpdateTrackMetadata(update)
+                            sheetMode = null
+                        },
+                    )
+                }
+            }
         }
     }
 
@@ -298,6 +417,234 @@ internal fun TrackContextMenu(
                 showEditor = false
             },
         )
+    }
+}
+
+@Composable
+private fun TrackActionSheet(
+    track: EchoTrack,
+    canEditMetadata: Boolean,
+    canImportLyrics: Boolean,
+    canPickArtwork: Boolean,
+    canMatchNeteaseMetadata: Boolean,
+    onPlay: () -> Unit,
+    onEdit: () -> Unit,
+    onImportLyrics: () -> Unit,
+    onPickArtwork: () -> Unit,
+    onMatchNeteaseMetadata: () -> Unit,
+    onInfo: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        TrackSheetHeader(track)
+        TrackActionRow("播放", Icons.Rounded.PlayArrow, enabled = true, onClick = onPlay)
+        TrackActionRow("编辑标签", Icons.Rounded.Edit, enabled = canEditMetadata, onClick = onEdit)
+        TrackActionRow("导入 LRC 歌词", Icons.Rounded.UploadFile, enabled = canImportLyrics, onClick = onImportLyrics)
+        TrackActionRow("自定义封面", Icons.Rounded.Album, enabled = canPickArtwork, onClick = onPickArtwork)
+        TrackActionRow("网易云匹配并写入", Icons.Rounded.CloudQueue, enabled = canMatchNeteaseMetadata, onClick = onMatchNeteaseMetadata)
+        TrackActionRow("歌曲信息", Icons.Rounded.Info, enabled = true, onClick = onInfo)
+    }
+}
+
+@Composable
+private fun TrackSheetHeader(track: EchoTrack) {
+    val subtitle = remember(track.artist, track.album) { trackSubtitle(track) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        ArtworkTile(
+            track.artworkUri,
+            Modifier.size(64.dp),
+            accent = EchoAccent,
+            cornerRadius = 16.dp,
+            elevation = 4.dp,
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                track.title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                subtitle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackActionRow(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val alpha = if (enabled) 1f else 0.42f
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clickable(enabled = enabled, onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.58f else 0.28f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+                modifier = Modifier.size(22.dp),
+            )
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackMetadataEditorSheet(
+    track: EchoTrack,
+    onDismiss: () -> Unit,
+    onSave: (EchoTrackMetadataUpdate) -> Unit,
+) {
+    var title by remember(track.id) { mutableStateOf(track.title) }
+    var artist by remember(track.id) { mutableStateOf(track.artist) }
+    var album by remember(track.id) { mutableStateOf(track.album.orEmpty()) }
+    var albumArtist by remember(track.id) { mutableStateOf(track.albumArtist.orEmpty()) }
+    var trackNumber by remember(track.id) { mutableStateOf(track.trackNumber?.toString().orEmpty()) }
+    var discNumber by remember(track.id) { mutableStateOf(track.discNumber?.toString().orEmpty()) }
+    var year by remember(track.id) { mutableStateOf(track.year?.toString().orEmpty()) }
+    val canSave = title.isNotBlank() && artist.isNotBlank()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 620.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        TrackSheetHeader(track)
+        Spacer(Modifier.height(2.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "编辑标签",
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+        TextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("标题") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TextField(
+            value = artist,
+            onValueChange = { artist = it },
+            label = { Text("艺人") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TextField(
+            value = album,
+            onValueChange = { album = it },
+            label = { Text("专辑") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TextField(
+            value = albumArtist,
+            onValueChange = { albumArtist = it },
+            label = { Text("专辑艺人") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NumericMetadataField(
+                value = trackNumber,
+                onValueChange = { trackNumber = it },
+                label = "音轨",
+                modifier = Modifier.weight(1f),
+            )
+            NumericMetadataField(
+                value = discNumber,
+                onValueChange = { discNumber = it },
+                label = "碟号",
+                modifier = Modifier.weight(1f),
+            )
+            NumericMetadataField(
+                value = year,
+                onValueChange = { year = it },
+                label = "年份",
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Text(
+            "当前保存到 ECHOAndroid 曲库索引；导入歌词、封面与网易云匹配也会绑定到这首歌。",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Button(
+            enabled = canSave,
+            onClick = {
+                onSave(
+                    EchoTrackMetadataUpdate(
+                        trackId = track.id,
+                        title = title.trim(),
+                        artist = artist.trim(),
+                        album = album.trim().takeIf { it.isNotBlank() },
+                        albumArtist = albumArtist.trim().takeIf { it.isNotBlank() },
+                        trackNumber = trackNumber.toPositiveIntOrNull(),
+                        discNumber = discNumber.toPositiveIntOrNull(),
+                        year = year.toPositiveIntOrNull(),
+                        artworkUri = track.artworkUri,
+                    ),
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("保存")
+        }
     }
 }
 

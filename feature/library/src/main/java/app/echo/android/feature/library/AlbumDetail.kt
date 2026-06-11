@@ -46,6 +46,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
@@ -53,12 +54,9 @@ import app.echo.android.design.ArtworkPalette
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.BlurredArtworkBackground
 import app.echo.android.design.EchoContentMaxWidth
-import app.echo.android.design.EchoDarkGlassBorder
 import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassPanel
 import app.echo.android.design.LocalEchoDarkTheme
-import app.echo.android.design.RoonInk
-import app.echo.android.design.RoonMuted
 import app.echo.android.design.formatDuration
 import app.echo.android.design.rememberArtworkPalette
 import app.echo.android.model.library.AlbumSummary
@@ -89,11 +87,11 @@ private fun rememberDetailGlassColors(): DetailGlassColors {
     val scheme = MaterialTheme.colorScheme
     val dark = LocalEchoDarkTheme.current
     return DetailGlassColors(
-        surface = if (dark) EchoGlassPanel.copy(alpha = 0.60f) else Color.White.copy(alpha = 0.62f),
-        elevatedSurface = if (dark) EchoGlassInk.copy(alpha = 0.50f) else Color.White.copy(alpha = 0.78f),
-        border = if (dark) Color.White.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.78f),
-        content = if (dark) Color.White.copy(alpha = 0.96f) else RoonInk,
-        muted = if (dark) Color.White.copy(alpha = 0.74f) else RoonMuted,
+        surface = if (dark) scheme.surface.copy(alpha = 0.62f) else scheme.surface.copy(alpha = 0.78f),
+        elevatedSurface = if (dark) scheme.surfaceVariant.copy(alpha = 0.34f) else scheme.surface.copy(alpha = 0.82f),
+        border = if (dark) scheme.outlineVariant.copy(alpha = 0.34f) else scheme.outlineVariant.copy(alpha = 0.46f),
+        content = scheme.onSurface.copy(alpha = if (dark) 0.94f else 0.90f),
+        muted = scheme.onSurfaceVariant.copy(alpha = if (dark) 0.72f else 0.76f),
     )
 }
 
@@ -106,6 +104,9 @@ internal fun AlbumDetailPage(
     onShuffle: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(album.artworkUri, seedKey = album.albumKey)
@@ -137,7 +138,7 @@ internal fun AlbumDetailPage(
                     Spacer(Modifier.height(8.dp))
                     AlbumHero(album = album, palette = palette, onArtworkBackground = true)
                     Spacer(Modifier.height(18.dp))
-                    AlbumActionBar(palette = palette, onPlayAll = onPlayAll, onShuffle = onShuffle)
+                    AlbumActionBar(onPlayAll = onPlayAll, onShuffle = onShuffle)
                     Spacer(Modifier.height(18.dp))
                     AlbumDetailInsights(
                         source = sourceInsight(loadedTracks),
@@ -181,6 +182,9 @@ internal fun AlbumDetailPage(
                                 accent = palette.vibrant,
                                 onClick = { onPlayTrack(track) },
                                 onUpdateTrackMetadata = onUpdateTrackMetadata,
+                                onImportLyrics = onImportLyrics,
+                                onPickArtwork = onPickArtwork,
+                                onMatchNeteaseMetadata = onMatchNeteaseMetadata,
                             )
                         }
                     }
@@ -199,6 +203,9 @@ internal fun AlbumDetailListPage(
     onShuffle: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(album.artworkUri, seedKey = album.albumKey)
@@ -229,7 +236,7 @@ internal fun AlbumDetailListPage(
                     Spacer(Modifier.height(8.dp))
                     AlbumHero(album = album, palette = palette, onArtworkBackground = true)
                     Spacer(Modifier.height(18.dp))
-                    AlbumActionBar(palette = palette, onPlayAll = onPlayAll, onShuffle = onShuffle)
+                    AlbumActionBar(onPlayAll = onPlayAll, onShuffle = onShuffle)
                     Spacer(Modifier.height(18.dp))
                     AlbumDetailInsights(
                         source = sourceInsight(tracks),
@@ -267,6 +274,9 @@ internal fun AlbumDetailListPage(
                             accent = palette.vibrant,
                             onClick = { onPlayTrack(track) },
                             onUpdateTrackMetadata = onUpdateTrackMetadata,
+                            onImportLyrics = onImportLyrics,
+                            onPickArtwork = onPickArtwork,
+                            onMatchNeteaseMetadata = onMatchNeteaseMetadata,
                         )
                     }
                 }
@@ -284,6 +294,9 @@ internal fun ArtistDetailPage(
     onShuffle: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(artist.artworkUri, seedKey = artist.artistKey)
@@ -323,7 +336,7 @@ internal fun ArtistDetailPage(
                     Spacer(Modifier.height(8.dp))
                     ArtistHero(artist = artist, palette = palette)
                     Spacer(Modifier.height(18.dp))
-                    AlbumActionBar(palette = palette, onPlayAll = onPlayAll, onShuffle = onShuffle)
+                    AlbumActionBar(onPlayAll = onPlayAll, onShuffle = onShuffle)
                     Spacer(Modifier.height(18.dp))
                     AlbumDetailInsights(
                         source = sourceInsight(loadedTracks),
@@ -363,6 +376,9 @@ internal fun ArtistDetailPage(
                                 accent = palette.vibrant,
                                 onClick = { onPlayTrack(track) },
                                 onUpdateTrackMetadata = onUpdateTrackMetadata,
+                                onImportLyrics = onImportLyrics,
+                                onPickArtwork = onPickArtwork,
+                                onMatchNeteaseMetadata = onMatchNeteaseMetadata,
                             )
                         }
                     }
@@ -381,6 +397,9 @@ internal fun ArtistDetailListPage(
     onShuffle: () -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberArtworkPalette(artist.artworkUri, seedKey = artist.artistKey)
@@ -419,7 +438,7 @@ internal fun ArtistDetailListPage(
                     Spacer(Modifier.height(8.dp))
                     ArtistHero(artist = artist, palette = palette)
                     Spacer(Modifier.height(18.dp))
-                    AlbumActionBar(palette = palette, onPlayAll = onPlayAll, onShuffle = onShuffle)
+                    AlbumActionBar(onPlayAll = onPlayAll, onShuffle = onShuffle)
                     Spacer(Modifier.height(18.dp))
                     AlbumDetailInsights(
                         source = sourceInsight(tracks),
@@ -453,6 +472,9 @@ internal fun ArtistDetailListPage(
                             accent = palette.vibrant,
                             onClick = { onPlayTrack(track) },
                             onUpdateTrackMetadata = onUpdateTrackMetadata,
+                            onImportLyrics = onImportLyrics,
+                            onPickArtwork = onPickArtwork,
+                            onMatchNeteaseMetadata = onMatchNeteaseMetadata,
                         )
                     }
                 }
@@ -643,66 +665,78 @@ private fun AlbumHero(
 
 @Composable
 private fun AlbumActionBar(
-    palette: ArtworkPalette,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
 ) {
     val colors = rememberDetailGlassColors()
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    val actionContent = scheme.primary
+    val actionBorder = scheme.primary.copy(alpha = if (dark) 0.36f else 0.30f)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .height(52.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(
-                    Brush.horizontalGradient(listOf(palette.vibrant, palette.deep)),
-                )
-                .clickable(onClick = onPlayAll),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Rounded.PlayArrow,
-                contentDescription = null,
-                tint = palette.onColor,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "播放全部",
-                color = palette.onColor,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .height(52.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(colors.elevatedSurface)
-                .border(BorderStroke(1.dp, palette.vibrant.copy(alpha = if (LocalEchoDarkTheme.current) 0.52f else 0.35f)), RoundedCornerShape(26.dp))
-                .clickable(onClick = onShuffle),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Rounded.Shuffle,
-                contentDescription = null,
-                tint = palette.deep,
-                modifier = Modifier.size(22.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "随机播放",
-                color = palette.deep,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        AlbumDetailActionButton(
+            icon = Icons.Rounded.PlayArrow,
+            label = "播放全部",
+            iconSize = 24.dp,
+            contentColor = actionContent,
+            containerColor = colors.elevatedSurface,
+            borderColor = actionBorder,
+            onClick = onPlayAll,
+            modifier = Modifier.weight(1f),
+        )
+        AlbumDetailActionButton(
+            icon = Icons.Rounded.Shuffle,
+            label = "随机播放",
+            iconSize = 22.dp,
+            contentColor = actionContent,
+            containerColor = colors.elevatedSurface,
+            borderColor = actionBorder,
+            onClick = onShuffle,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun AlbumDetailActionButton(
+    icon: ImageVector,
+    label: String,
+    iconSize: Dp,
+    contentColor: Color,
+    containerColor: Color,
+    borderColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(26.dp)
+    Row(
+        modifier = modifier
+            .height(52.dp)
+            .clip(shape)
+            .background(containerColor)
+            .border(BorderStroke(1.dp, borderColor), shape)
+            .clickable(onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(iconSize),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            label,
+            color = contentColor,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -713,13 +747,36 @@ private fun AlbumDetailInsights(
     palette: ArtworkPalette,
 ) {
     val colors = rememberDetailGlassColors()
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    val shape = RoundedCornerShape(20.dp)
+    val containerBrush = Brush.linearGradient(
+        if (dark) {
+            listOf(
+                scheme.surface.copy(alpha = 0.54f),
+                scheme.surfaceVariant.copy(alpha = 0.30f),
+                palette.deep.copy(alpha = 0.12f),
+            )
+        } else {
+            listOf(
+                scheme.surface.copy(alpha = 0.84f),
+                scheme.surfaceVariant.copy(alpha = 0.50f),
+                palette.vibrant.copy(alpha = 0.08f),
+            )
+        },
+    )
+    val borderColor = if (dark) {
+        palette.vibrant.copy(alpha = 0.22f)
+    } else {
+        colors.border
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(76.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(colors.surface)
-            .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(18.dp))
+            .clip(shape)
+            .background(containerBrush)
+            .border(BorderStroke(1.dp, borderColor), shape)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -733,7 +790,7 @@ private fun AlbumDetailInsights(
             modifier = Modifier
                 .width(1.dp)
                 .height(42.dp)
-                .background(colors.border),
+                .background(borderColor),
         )
         DetailInsightCell(
             insight = info,
@@ -752,6 +809,10 @@ private fun DetailInsightCell(
     modifier: Modifier = Modifier,
 ) {
     val colors = rememberDetailGlassColors()
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    val iconTint = if (dark) accent.copy(alpha = 0.82f) else scheme.primary.copy(alpha = 0.74f)
+    val titleColor = if (dark) accent.copy(alpha = 0.86f) else scheme.primary
     Row(
         modifier = modifier
             .padding(horizontal = 10.dp),
@@ -761,13 +822,13 @@ private fun DetailInsightCell(
         Icon(
             icon,
             contentDescription = null,
-            tint = Color.White.copy(alpha = 0.88f),
+            tint = iconTint,
             modifier = Modifier.size(26.dp),
         )
         Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
             Text(
                 insight.title,
-                color = accent,
+                color = titleColor,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -945,14 +1006,21 @@ private fun AlbumTrackRow(
     index: Int,
     track: EchoTrack,
     accent: Color,
+    palette: ArtworkPalette? = null,
     onClick: () -> Unit,
     onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
+    onImportLyrics: ((EchoTrack) -> Unit)? = null,
+    onPickArtwork: ((EchoTrack) -> Unit)? = null,
+    onMatchNeteaseMetadata: ((EchoTrack) -> Unit)? = null,
 ) {
     val colors = rememberDetailGlassColors()
     TrackContextMenu(
         track = track,
         onPlay = onClick,
         onUpdateTrackMetadata = onUpdateTrackMetadata,
+        onImportLyrics = onImportLyrics,
+        onPickArtwork = onPickArtwork,
+        onMatchNeteaseMetadata = onMatchNeteaseMetadata,
         modifier = Modifier.fillMaxWidth(),
     ) { pressModifier ->
         Row(

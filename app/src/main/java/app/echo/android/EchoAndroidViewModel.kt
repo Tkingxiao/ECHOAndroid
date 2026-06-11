@@ -113,6 +113,7 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val artists: Flow<PagingData<ArtistSummary>> = libraryController.artists
     val folders: Flow<PagingData<FolderSummary>> = libraryController.folders
     val neteaseImportedPlaylists: Flow<List<EchoPlaylist>> = libraryController.neteasePlaylists
+    val localPlaylists: Flow<List<EchoPlaylist>> = libraryController.localPlaylists
     val libraryStats: Flow<LibraryStats> = libraryController.libraryStats
     val recommendedTracks: Flow<List<EchoTrack>> = libraryController.recommendedTracks
     val recentlyAddedAlbums: Flow<List<AlbumSummary>> = libraryController.recentlyAddedAlbums
@@ -286,6 +287,18 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun updateTrackArtwork(trackId: String, artworkUri: Uri) {
+        viewModelScope.launch {
+            libraryController.updateTrackArtwork(trackId, artworkUri)
+        }
+    }
+
+    fun applyBestNeteaseMetadata(trackId: String) {
+        viewModelScope.launch {
+            libraryController.applyBestNeteaseMetadata(trackId)
+        }
+    }
+
     fun openCurrentPlaybackAlbum(onFound: (AlbumSummary) -> Unit) {
         val trackId = playbackController.currentTrackId ?: return
         viewModelScope.launch {
@@ -384,12 +397,20 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         playbackController.toggleShuffle()
     }
 
+    fun setPlaybackSpeed(speed: Float, nightcore: Boolean) {
+        playbackController.setPlaybackSpeed(speed, nightcore)
+    }
+
     fun cyclePlayMode() {
         playbackController.cyclePlayMode()
     }
 
     fun importLyrics(uri: Uri) {
         lyricsController.importLyrics(uri, playbackController.currentTrackId)
+    }
+
+    fun importLyricsForTrack(trackId: String, uri: Uri) {
+        lyricsController.importLyrics(uri, trackId)
     }
 
     fun setEchoLinkLyrics(trackId: String, lyrics: EchoRemoteLyrics) {

@@ -278,9 +278,11 @@ fun PageChrome(
     subtitle: String?,
     badge: String = "移动端",
     scrollable: Boolean = false,
+    scrollBottomPadding: Dp = 12.dp,
     showBrand: Boolean = false,
     compactHeader: Boolean = false,
     badgeContent: (@Composable () -> Unit)? = null,
+    titleContent: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -347,18 +349,22 @@ fun PageChrome(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (showBrand) {
-                        Text("ECHO 移动端", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    } else {
-                        Text(
-                            title,
-                            style = titleStyle,
-                            fontWeight = FontWeight.Bold,
-                            color = if (dark) Color.White.copy(alpha = 0.96f) else scheme.onSurface,
-                        )
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (titleContent != null) {
+                            titleContent()
+                        } else if (showBrand) {
+                            Text("ECHO 移动端", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        } else {
+                            Text(
+                                title,
+                                style = titleStyle,
+                                fontWeight = FontWeight.Bold,
+                                color = if (dark) Color.White.copy(alpha = 0.96f) else scheme.onSurface,
+                            )
+                        }
                     }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -401,7 +407,7 @@ fun PageChrome(
                 Spacer(Modifier.height(contentGap))
                 content()
                 if (scrollable) {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(scrollBottomPadding))
                 }
             }
         }

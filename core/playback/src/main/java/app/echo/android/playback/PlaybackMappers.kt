@@ -72,6 +72,8 @@ fun Player.toEchoPlaybackStatus(
         isPlaying = controls.isPlaying,
         repeatMode = controls.repeatMode,
         shuffleEnabled = controls.shuffleEnabled,
+        playbackSpeed = controls.playbackSpeed,
+        playbackPitch = controls.playbackPitch,
         diagnostics = diagnostics,
     )
 }
@@ -123,6 +125,8 @@ fun Player.toPlaybackControlsState(): PlaybackControlsState =
         isPlaying = isPlaying,
         repeatMode = repeatMode.toEchoRepeatMode(),
         shuffleEnabled = shuffleModeEnabled,
+        playbackSpeed = playbackParameters.speed,
+        playbackPitch = playbackParameters.pitch,
         canSkipNext = hasNextMediaItem(),
         canSkipPrevious = hasPreviousMediaItem(),
         canSeek = isCurrentMediaItemSeekable,

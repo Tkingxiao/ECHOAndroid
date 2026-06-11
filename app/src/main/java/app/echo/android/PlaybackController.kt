@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ComponentName
 import androidx.media3.common.MediaItem
 import androidx.core.content.ContextCompat
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
@@ -228,6 +229,15 @@ internal class PlaybackController(
         }
     }
 
+    fun setPlaybackSpeed(speed: Float, nightcore: Boolean) {
+        val safeSpeed = speed.coerceIn(MinPlaybackSpeed, MaxPlaybackSpeed)
+        val pitch = if (nightcore) safeSpeed else 1f
+        controller?.run {
+            setPlaybackParameters(PlaybackParameters(safeSpeed, pitch))
+            updatePlaybackCore(this)
+        }
+    }
+
     fun cyclePlayMode() {
         controller?.run {
             shuffleModeEnabled = false
@@ -448,5 +458,7 @@ internal class PlaybackController(
         const val NowPlayingProgressIntervalMs = 500L
         const val MiniPlayerProgressIntervalMs = 1_000L
         const val LightweightProgressIntervalMs = 1_000L
+        const val MinPlaybackSpeed = 0.5f
+        const val MaxPlaybackSpeed = 2.0f
     }
 }

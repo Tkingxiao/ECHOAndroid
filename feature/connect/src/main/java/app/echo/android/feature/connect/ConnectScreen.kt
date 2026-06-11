@@ -161,7 +161,13 @@ fun ConnectScreen(
     val hasSavedPc = !savedPcAddress.isNullOrBlank() && !savedPcToken.isNullOrBlank()
     val canConnectPc = pcAddressInput.isNotBlank() &&
         (pcTokenInput.isNotBlank() || pcAddressInput.trim().lowercase().startsWith("echo://pair"))
-    PageChrome(title = "连接", subtitle = "串流服务 · PC 联动", badge = "互联", scrollable = true) {
+    PageChrome(
+        title = "连接",
+        subtitle = "串流服务 · PC 联动",
+        badge = "互联",
+        scrollable = true,
+        scrollBottomPadding = 188.dp,
+    ) {
         EchoSectionTitle("音乐服务", "连接你的曲库来源")
         Spacer(Modifier.height(12.dp))
         RemoteSourcesPanel(

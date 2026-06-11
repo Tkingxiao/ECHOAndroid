@@ -11,9 +11,11 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.CloudQueue
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -106,6 +109,7 @@ import app.echo.android.model.library.LibraryTrackSortMode
 import app.echo.android.model.library.NeteaseAccountState
 import app.echo.android.model.library.NeteaseAudioQuality
 import app.echo.android.model.library.NeteaseImportState
+import kotlinx.coroutines.delay
 
 private val LibraryFolderMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
 
@@ -184,7 +188,7 @@ fun LibraryScreen(
     selectedLibrarySourceId: String,
     artists: LazyPagingItems<ArtistSummary>,
     folders: LazyPagingItems<FolderSummary>,
-    neteaseImportedPlaylists: List<EchoPlaylist>,
+    playlists: List<EchoPlaylist>,
     neteaseAccountState: NeteaseAccountState,
     neteaseImportState: NeteaseImportState,
     neteaseQuality: NeteaseAudioQuality,
@@ -204,10 +208,13 @@ fun LibraryScreen(
     onScanFolder: () -> Unit,
     onScanAll: () -> Unit,
     onCancelScan: () -> Unit,
-    onRefreshLinkedLibrary: () -> Unit,
+    onRefreshLinkedLibrary: (String) -> Unit,
     onPlayLinkedTrack: (EchoRemoteTrack) -> Unit,
     onPlayTrack: (EchoTrack) -> Unit,
     onUpdateTrackMetadata: (EchoTrackMetadataUpdate) -> Unit,
+    onImportLyricsForTrack: (EchoTrack) -> Unit,
+    onPickTrackArtwork: (EchoTrack) -> Unit,
+    onApplyNeteaseMetadata: (EchoTrack) -> Unit,
     onPlayAlbum: (AlbumSummary) -> Unit,
     onShuffleAlbum: (AlbumSummary) -> Unit,
     onPlayArtist: (ArtistSummary) -> Unit,
@@ -258,7 +265,7 @@ fun LibraryScreen(
                 }
             }
             LibrarySourceMode.Cloud -> selectedModeIndex = LibraryViewMode.Albums.ordinal
-            LibrarySourceMode.PcEcho -> if (linkedLibraryAvailable) onRefreshLinkedLibrary()
+            LibrarySourceMode.PcEcho -> if (linkedLibraryAvailable) onRefreshLinkedLibrary(libraryQuery)
         }
     }
 
@@ -305,7 +312,7 @@ fun LibraryScreen(
                     onQueryChange = onLibraryQueryChange,
                     expandedWidth = 240.dp,
                 )
-                IconButton(onClick = onRefreshLinkedLibrary) {
+                IconButton(onClick = { onRefreshLinkedLibrary(libraryQuery) }) {
                     Icon(
                         Icons.Rounded.Refresh,
                         contentDescription = "刷新 PC ECHO 曲库",
@@ -380,6 +387,9 @@ fun LibraryScreen(
                 onShuffle = { onShuffleAlbum(target.album) },
                 onPlayTrack = onPlayTrack,
                 onUpdateTrackMetadata = onUpdateTrackMetadata,
+                onImportLyrics = onImportLyricsForTrack,
+                onPickArtwork = onPickTrackArtwork,
+                onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                 modifier = Modifier.fillMaxSize(),
             )
             is LibraryDetailTransitionTarget.ArtistDetail -> ArtistDetailPage(
@@ -390,6 +400,9 @@ fun LibraryScreen(
                 onShuffle = { onShuffleArtist(target.artist) },
                 onPlayTrack = onPlayTrack,
                 onUpdateTrackMetadata = onUpdateTrackMetadata,
+                onImportLyrics = onImportLyricsForTrack,
+                onPickArtwork = onPickTrackArtwork,
+                onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                 modifier = Modifier.fillMaxSize(),
             )
             LibraryDetailTransitionTarget.Browser -> {
@@ -405,12 +418,15 @@ fun LibraryScreen(
                 if (activePlaylistDetail != null && playlistDetailTracks != null) {
                     LibraryDetailPage(
                         title = activePlaylistDetail.name,
-                        subtitle = "${activePlaylistDetail.trackCount} 首 · 网易云歌单",
+                        subtitle = "${activePlaylistDetail.trackCount} 首 · 本地歌单",
                         tracks = playlistDetailTracks,
                         onBack = onCloseDetail,
                         onPlayAll = { onPlayPlaylist(activePlaylistDetail) },
                         onPlayTrack = onPlayTrack,
                         onUpdateTrackMetadata = onUpdateTrackMetadata,
+                        onImportLyrics = onImportLyricsForTrack,
+                        onPickArtwork = onPickTrackArtwork,
+                        onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                         showAudioInfoTags = showTrackAudioInfoTags,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -463,6 +479,9 @@ fun LibraryScreen(
                             onPlayAll = { onPlayFolder(target.folder) },
                             onPlayTrack = onPlayTrack,
                             onUpdateTrackMetadata = onUpdateTrackMetadata,
+                            onImportLyrics = onImportLyricsForTrack,
+                            onPickArtwork = onPickTrackArtwork,
+                            onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                             modifier = Modifier.fillMaxSize(),
                         )
                         LibraryFolderTransitionTarget.Browser -> PageChrome(
@@ -472,13 +491,23 @@ fun LibraryScreen(
                             showBrand = false,
                             compactHeader = true,
                             badgeContent = {},
+                            titleContent = {},
                             actions = {
                                 LibrarySearchBar(
                                     query = libraryQuery,
                                     onQueryChange = onLibraryQueryChange,
                                     expandedWidth = 240.dp,
                                 )
-                                LibraryScanAction(
+                                if (selectedSource == LibrarySourceMode.Local && selectedMode == LibraryViewMode.Songs) {
+                                    LibraryTrackSortMenu(
+                                        selectedSortMode = trackSortMode,
+                                        onSortModeChange = onTrackSortModeChange,
+                                    )
+                                }
+                                LibrarySourceScanButton(
+                                    selectedSource = selectedSource,
+                                    linkedLibraryAvailable = linkedLibraryAvailable,
+                                    onSelectSource = ::selectSource,
                                     hasPermission = hasPermission,
                                     scanState = scanState,
                                     onRequestPermission = onRequestPermission,
@@ -557,6 +586,9 @@ fun LibraryScreen(
                                                         tracks = tracks,
                                                         onPlayTrack = onPlayTrack,
                                                         onUpdateTrackMetadata = onUpdateTrackMetadata,
+                                                        onImportLyrics = onImportLyricsForTrack,
+                                                        onPickArtwork = onPickTrackArtwork,
+                                                        onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                                                         showAudioInfoTags = showTrackAudioInfoTags,
                                                         modifier = Modifier.fillMaxSize(),
                                                     )
@@ -587,20 +619,10 @@ fun LibraryScreen(
                                                 modifier = Modifier.fillMaxSize(),
                                             )
 
-                                            LibraryViewMode.Playlists -> NeteasePlaylistPanel(
-                                                accountState = neteaseAccountState,
-                                                importState = neteaseImportState,
-                                                importedPlaylists = neteaseImportedPlaylists,
-                                                selectedQuality = neteaseQuality,
-                                                onLoginByPhone = onLoginNeteaseByPhone,
-                                                onLoginWithCookie = onLoginNeteaseWithCookie,
-                                                onLogout = onLogoutNetease,
-                                                onRefreshRemotePlaylists = onRefreshNeteasePlaylists,
-                                                onOpenNeteaseApp = onOpenNeteaseApp,
-                                                onQualityChange = onNeteaseQualityChange,
-                                                onImportPlaylist = onImportNeteasePlaylist,
-                                                onOpenImportedPlaylist = onOpenPlaylist,
-                                                onPlayImportedPlaylist = onPlayPlaylist,
+                                            LibraryViewMode.Playlists -> LocalPlaylistPanel(
+                                                playlists = playlists,
+                                                onOpenPlaylist = onOpenPlaylist,
+                                                onPlayPlaylist = onPlayPlaylist,
                                                 modifier = Modifier.fillMaxSize(),
                                             )
                                         }
@@ -692,6 +714,112 @@ private fun LibrarySourceMenu(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun LibrarySourceScanButton(
+    selectedSource: LibrarySourceMode,
+    linkedLibraryAvailable: Boolean,
+    onSelectSource: (LibrarySourceMode) -> Unit,
+    hasPermission: Boolean,
+    scanState: LibraryScanProgress,
+    onRequestPermission: () -> Unit,
+    onScanFolder: () -> Unit,
+    onScanAll: () -> Unit,
+    onCancelScan: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var sourceExpanded by remember { mutableStateOf(false) }
+    var showScanOptions by remember { mutableStateOf(false) }
+    val scheme = MaterialTheme.colorScheme
+    val scanDescription = when {
+        !hasPermission -> "授权音乐权限"
+        scanState.isScanning -> "取消扫描曲库"
+        else -> "扫描曲库"
+    }
+    val scanAction = when {
+        !hasPermission -> onRequestPermission
+        scanState.isScanning -> onCancelScan
+        else -> {
+            { showScanOptions = true }
+        }
+    }
+
+    Box(modifier = modifier) {
+        Surface(
+            modifier = Modifier.combinedClickable(
+                onClick = { sourceExpanded = true },
+                onLongClick = scanAction,
+                onLongClickLabel = scanDescription,
+            ),
+            shape = RoundedCornerShape(8.dp),
+            color = scheme.surface.copy(alpha = 0.50f),
+            border = BorderStroke(1.dp, EchoGlassBorder),
+        ) {
+            Icon(
+                imageVector = if (scanState.isScanning) Icons.Rounded.Close else selectedSource.icon,
+                contentDescription = "切换曲库来源；长按扫描歌曲",
+                tint = if (scanState.error != null) Color(0xFFE0796E) else scheme.onSurface,
+                modifier = Modifier
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+                    .size(20.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = sourceExpanded,
+            onDismissRequest = { sourceExpanded = false },
+            containerColor = scheme.surface,
+        ) {
+            LibrarySourceMode.entries.forEach { source ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            source.label,
+                            fontWeight = if (source == selectedSource) FontWeight.Bold else FontWeight.SemiBold,
+                            color = if (source == selectedSource) EchoAccentText else scheme.onSurface,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            source.icon,
+                            contentDescription = null,
+                            tint = if (source == selectedSource) EchoAccentText else scheme.onSurfaceVariant,
+                        )
+                    },
+                    trailingIcon = if (source == LibrarySourceMode.PcEcho && !linkedLibraryAvailable) {
+                        {
+                            Text(
+                                "未连接",
+                                color = scheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        onSelectSource(source)
+                        sourceExpanded = false
+                    },
+                )
+            }
+        }
+    }
+
+    if (showScanOptions) {
+        LibraryScanOptionsDialog(
+            onDismiss = { showScanOptions = false },
+            onScanFolder = {
+                showScanOptions = false
+                onScanFolder()
+            },
+            onScanAll = {
+                showScanOptions = false
+                onScanAll()
+            },
+        )
+    }
+}
+
 private fun librarySourceModeFromId(
     sourceId: String,
     linkedLibraryActive: Boolean,
@@ -742,12 +870,20 @@ private fun LinkedEchoLibraryPage(
     onOpenArtist: (ArtistSummary) -> Unit,
     onCloseAlbum: () -> Unit,
     onCloseArtist: () -> Unit,
-    onRefresh: () -> Unit,
+    onRefresh: (String) -> Unit,
     onPlayLinkedTrack: (EchoRemoteTrack) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tracks = state.tracks
-    val filteredTracks = remember(tracks, query) { tracks.filterLinkedLibraryQuery(query) }
+    val normalizedQuery = remember(query) { query.trim() }
+    val remoteQuery = remember(state.query) { state.query.trim() }
+    val filteredTracks = remember(tracks, normalizedQuery, remoteQuery) {
+        if (normalizedQuery.isNotBlank() && normalizedQuery == remoteQuery) {
+            tracks
+        } else {
+            tracks.filterLinkedLibraryQuery(normalizedQuery)
+        }
+    }
     val sortedTracks = remember(filteredTracks, selectedSortMode) {
         filteredTracks.sortedForLinkedLibrary(selectedSortMode)
     }
@@ -774,6 +910,13 @@ private fun LinkedEchoLibraryPage(
         }
     }
 
+    LaunchedEffect(normalizedQuery, remoteQuery) {
+        if (normalizedQuery != remoteQuery) {
+            delay(300L)
+            onRefresh(normalizedQuery)
+        }
+    }
+
     if (selectedAlbum != null) {
         LinkedAlbumTracksPage(
             album = selectedAlbum,
@@ -796,17 +939,13 @@ private fun LinkedEchoLibraryPage(
     }
 
     LinkedLibraryChrome(
-        title = "曲库",
-        subtitle = if (state.totalCount > 0) "PC ECHO · ${state.totalCount} 首" else "PC ECHO",
-        badge = "PC ECHO",
-        badgeContent = {},
         actions = {
             LibrarySearchBar(
                 query = query,
                 onQueryChange = onQueryChange,
                 expandedWidth = 240.dp,
             )
-            IconButton(onClick = onRefresh, enabled = !state.isLoading) {
+            IconButton(onClick = { onRefresh(normalizedQuery) }, enabled = !state.isLoading) {
                 Icon(
                     Icons.Rounded.Refresh,
                     contentDescription = "刷新 PC ECHO 曲库",
@@ -817,14 +956,12 @@ private fun LinkedEchoLibraryPage(
         modifier = modifier,
     ) {
         val errorMessage = state.error
-        LibrarySourceStrip(
+        LinkedLibraryHeader(
             selectedSource = selectedSource,
             linkedLibraryAvailable = true,
-            onSelectSource = onSelectSource,
-        )
-        LinkedLibraryHeader(
             selectedMode = selectedMode,
             selectedSortMode = selectedSortMode,
+            onSelectSource = onSelectSource,
             onSelectMode = onSelectMode,
             onSortModeChange = onSortModeChange,
         )
@@ -862,8 +999,11 @@ private fun LinkedEchoLibraryPage(
 
 @Composable
 private fun LinkedLibraryHeader(
+    selectedSource: LibrarySourceMode,
+    linkedLibraryAvailable: Boolean,
     selectedMode: LinkedLibraryMode,
     selectedSortMode: LibraryTrackSortMode,
+    onSelectSource: (LibrarySourceMode) -> Unit,
     onSelectMode: (LinkedLibraryMode) -> Unit,
     onSortModeChange: (LibraryTrackSortMode) -> Unit,
 ) {
@@ -872,9 +1012,14 @@ private fun LinkedLibraryHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 2.dp),
-        horizontalArrangement = Arrangement.End,
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        LibrarySourceMenu(
+            selectedSource = selectedSource,
+            linkedLibraryAvailable = linkedLibraryAvailable,
+            onSelectSource = onSelectSource,
+        )
         if (selectedMode == LinkedLibraryMode.Songs) {
             LibraryTrackSortMenu(
                 selectedSortMode = selectedSortMode,
@@ -953,15 +1098,10 @@ private fun List<EchoRemoteTrack>.sortedForLinkedLibrary(
 
 @Composable
 private fun LinkedLibraryChrome(
-    title: String,
-    subtitle: String?,
-    badge: String,
-    badgeContent: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -985,48 +1125,13 @@ private fun LinkedLibraryChrome(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    subtitle?.takeIf { it.isNotBlank() }?.let { value ->
-                        Text(
-                            value,
-                            color = scheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (badgeContent != null) {
-                        badgeContent()
-                    } else {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = scheme.surface.copy(alpha = 0.50f),
-                            border = BorderStroke(1.dp, EchoGlassBorder),
-                        ) {
-                            Text(
-                                badge,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = scheme.onSurface,
-                            )
-                        }
-                    }
                     actions()
                 }
             }
@@ -1273,25 +1378,6 @@ private fun LibraryBrowserHeader(
     onSelectMode: (LibraryViewMode) -> Unit,
     onSortModeChange: (LibraryTrackSortMode) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 2.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (selectedSource == LibrarySourceMode.Local && selectedMode == LibraryViewMode.Songs) {
-            LibraryTrackSortMenu(
-                selectedSortMode = selectedSortMode,
-                onSortModeChange = onSortModeChange,
-            )
-        }
-        LibrarySourceMenu(
-            selectedSource = selectedSource,
-            linkedLibraryAvailable = linkedLibraryAvailable,
-            onSelectSource = onSelectSource,
-        )
-    }
     LibraryScanResultBanner(scanState)
     LibraryPagerTabs(
         selectedMode = selectedMode,

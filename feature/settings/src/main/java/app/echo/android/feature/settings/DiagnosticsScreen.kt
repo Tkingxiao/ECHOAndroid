@@ -45,7 +45,13 @@ fun DiagnosticsScreen(
     val codec = diagnostics.codec ?: "Media3"
     val lastCommand = commandLabel(diagnostics.lastCommand)
     val dspActive = diagnostics.offloadActive || equalizerState.active
-    PageChrome(title = "信号", subtitle = "从曲目规格到输出设备的实时链路", badge = playbackStateLabel(status.state), scrollable = true) {
+    PageChrome(
+        title = "信号",
+        subtitle = "从曲目规格到输出设备的实时链路",
+        badge = playbackStateLabel(status.state),
+        scrollable = true,
+        scrollBottomPadding = 188.dp,
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SignalHeroCard(
                 status = status,

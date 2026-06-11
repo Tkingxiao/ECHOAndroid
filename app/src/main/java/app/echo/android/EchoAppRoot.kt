@@ -105,6 +105,7 @@ private const val RouteMotionBaseDurationMs = 240
 private const val RouteMotionDistanceDurationMs = 28
 private const val RouteMotionMaxDurationMs = 320
 private val LyricsDocumentMimeTypes = arrayOf("text/*", "application/xml", "application/octet-stream", "*/*")
+private val ArtworkDocumentMimeTypes = arrayOf("image/*", "application/octet-stream", "*/*")
 private val FontDocumentMimeTypes = arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream", "*/*")
 
 private enum class FontImportTarget {
@@ -205,11 +206,25 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         }
         fontImportTarget = null
     }
+    var lyricsImportTrackId by remember { mutableStateOf<String?>(null) }
     val lyricsImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { lyricsUri ->
             persistReadPermission(lyricsUri)
-            viewModel.importLyrics(lyricsUri)
+            lyricsImportTrackId?.let { trackId ->
+                viewModel.importLyricsForTrack(trackId, lyricsUri)
+            } ?: viewModel.importLyrics(lyricsUri)
         }
+        lyricsImportTrackId = null
+    }
+    var artworkImportTrackId by remember { mutableStateOf<String?>(null) }
+    val artworkImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { artworkUri ->
+            persistReadPermission(artworkUri)
+            artworkImportTrackId?.let { trackId ->
+                viewModel.updateTrackArtwork(trackId, artworkUri)
+            }
+        }
+        artworkImportTrackId = null
     }
 
     val remoteScope = rememberCoroutineScope()
@@ -254,9 +269,11 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         GmsBarcodeScanning.getClient(context, options)
     }
     var echoLinkScanMessage by remember { mutableStateOf<String?>(null) }
+    var echoLinkFallbackScannerVisible by remember { mutableStateOf(false) }
 
     fun connectEchoLinkEndpoint(endpoint: EchoRemoteEndpoint) {
         echoLinkScanMessage = null
+        echoLinkFallbackScannerVisible = false
         viewModel.saveEchoLinkPcEndpoint(
             address = "${endpoint.scheme}://${endpoint.host}:${endpoint.port}",
             token = endpoint.token,
@@ -283,6 +300,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
 
     fun scanEchoLinkPairingCode() {
         echoLinkScanMessage = null
+        echoLinkFallbackScannerVisible = false
         echoLinkQrScanner.startScan()
             .addOnSuccessListener { barcode ->
                 val endpoint = barcode.rawValue
@@ -297,6 +315,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                 echoLinkScanMessage = "已取消扫码"
             }
             .addOnFailureListener { error ->
+                echoLinkFallbackScannerVisible = true
                 val detail = error.localizedMessage
                     ?.takeIf { it.isNotBlank() }
                     ?: error.message?.takeIf { it.isNotBlank() }
@@ -352,7 +371,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val recentPlaybackArtists by viewModel.recentPlaybackArtists.collectAsStateWithLifecycle()
     val recentPlaybackHeatmap by viewModel.recentPlaybackHeatmap.collectAsStateWithLifecycle()
     val recentlyAddedAlbums by viewModel.recentlyAddedAlbums.collectAsStateWithLifecycle(emptyList())
-    val neteaseImportedPlaylists by viewModel.neteaseImportedPlaylists.collectAsStateWithLifecycle(emptyList())
+    val localPlaylists by viewModel.localPlaylists.collectAsStateWithLifecycle(emptyList())
     val tracks = viewModel.tracks.collectAsLazyPagingItems()
     val albums = viewModel.albums.collectAsLazyPagingItems()
     val remoteAlbums = viewModel.remoteAlbums.collectAsLazyPagingItems()
@@ -454,12 +473,16 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     )
     val appScope = rememberCoroutineScope()
     val routeNavigationJob = remember { arrayOfNulls<Job>(1) }
+    fun needsPagerSettle(targetPage: Int): Boolean =
+        tabPagerState.settledPage != targetPage ||
+            tabPagerState.currentPage != targetPage ||
+            tabPagerState.currentPageOffsetFraction.absoluteValue > 0.001f
     fun navigateToPage(page: EchoPagerPage) {
         val targetPage = page.ordinal
         page.dockTab?.let { selectedTab = it.ordinal }
         routeNavigationJob[0]?.cancel()
         routeNavigationJob[0] = appScope.launch {
-            if (tabPagerState.currentPage != targetPage) {
+            if (needsPagerSettle(targetPage)) {
                 tabPagerState.animateScrollToPage(
                     page = targetPage,
                     animationSpec = routeMotionSpec(tabPagerState.currentPage, targetPage, effectivePerformanceMode),
@@ -491,7 +514,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         appScope.launch {
             try {
                 val targetPage = returnPage.ordinal
-                if (tabPagerState.currentPage != targetPage) {
+                if (needsPagerSettle(targetPage)) {
                     tabPagerState.animateScrollToPage(
                         page = targetPage,
                         animationSpec = routeMotionSpec(tabPagerState.currentPage, targetPage, effectivePerformanceMode),
@@ -505,6 +528,18 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     LaunchedEffect(tabPagerState.settledPage) {
         EchoPagerPage.entries[tabPagerState.settledPage].dockTab?.let { settledTab ->
             if (settledTab.ordinal != selectedTab) selectedTab = settledTab.ordinal
+        }
+    }
+    LaunchedEffect(tabPagerState.isScrollInProgress, tabPagerState.currentPage) {
+        if (!tabPagerState.isScrollInProgress && tabPagerState.currentPageOffsetFraction.absoluteValue > 0.001f) {
+            tabPagerState.animateScrollToPage(
+                page = tabPagerState.currentPage,
+                animationSpec = routeMotionSpec(
+                    tabPagerState.settledPage,
+                    tabPagerState.currentPage,
+                    effectivePerformanceMode,
+                ),
+            )
         }
     }
 
@@ -580,7 +615,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 selectedLibrarySourceId = appSettings.librarySelectedSource,
                                 artists = artists,
                                 folders = folders,
-                                neteaseImportedPlaylists = neteaseImportedPlaylists,
+                                playlists = localPlaylists,
                                 neteaseAccountState = neteaseAccountState,
                                 neteaseImportState = neteaseImportState,
                                 neteaseQuality = NeteaseAudioQuality.fromId(appSettings.neteaseAudioQuality),
@@ -600,7 +635,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onScanFolder = { folderScanLauncher.launch(null) },
                                 onScanAll = viewModel::refreshLibrary,
                                 onCancelScan = viewModel::cancelScan,
-                                onRefreshLinkedLibrary = { remoteClient.refreshLibrary() },
+                                onRefreshLinkedLibrary = { query -> remoteClient.refreshLibrary(query) },
                                 onPlayLinkedTrack = { track ->
                                     remoteClient.playTrackOnPhone(
                                         track = track,
@@ -610,6 +645,15 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 },
                                 onPlayTrack = { track -> viewModel.playTrackFromLibrary(track.id) },
                                 onUpdateTrackMetadata = viewModel::updateTrackMetadata,
+                                onImportLyricsForTrack = { track ->
+                                    lyricsImportTrackId = track.id
+                                    lyricsImportLauncher.launch(LyricsDocumentMimeTypes)
+                                },
+                                onPickTrackArtwork = { track ->
+                                    artworkImportTrackId = track.id
+                                    artworkImportLauncher.launch(ArtworkDocumentMimeTypes)
+                                },
+                                onApplyNeteaseMetadata = { track -> viewModel.applyBestNeteaseMetadata(track.id) },
                                 onPlayAlbum = { album -> viewModel.playAlbum(album.albumKey) },
                                 onShuffleAlbum = { album -> viewModel.shuffleAlbum(album.albumKey) },
                                 onPlayArtist = { artist -> viewModel.playArtist(artist.artistKey) },
@@ -990,28 +1034,12 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     onPrevious = viewModel::skipPrevious,
                     onSeek = viewModel::seekTo,
                     onOpenQueue = { queueSheetVisible = true },
+                    onCycleRepeatMode = viewModel::cycleRepeatMode,
+                    onToggleShuffle = viewModel::toggleShuffle,
+                    onSetPlaybackSpeed = viewModel::setPlaybackSpeed,
                     onImportLyrics = { lyricsImportLauncher.launch(LyricsDocumentMimeTypes) },
-                    onImportLyricsFont = {
-                        fontImportTarget = FontImportTarget.Lyrics
-                        fontImportLauncher.launch(FontDocumentMimeTypes)
-                    },
                     onAdjustLyricsOffset = viewModel::adjustLyricsOffset,
                     onResetLyricsOffset = viewModel::resetLyricsOffset,
-                    onLyricsFontFamilyChange = viewModel::setLyricsFontFamily,
-                    onLyricsFontScaleChange = viewModel::setLyricsFontScale,
-                    onLyricsColorModeChange = viewModel::setLyricsColorMode,
-                    onLyricsAlignmentChange = viewModel::setLyricsAlignment,
-                    onLyricsLineSpacingChange = viewModel::setLyricsLineSpacing,
-                    onLyricsBackgroundDimChange = viewModel::setLyricsBackgroundDim,
-                    onLyricsWordHighlightEnabledChange = viewModel::setLyricsWordHighlightEnabled,
-                    onLyricsWordHighlightIntensityChange = viewModel::setLyricsWordHighlightIntensity,
-                    onLyricsImmersiveModeChange = viewModel::setLyricsImmersiveModeEnabled,
-                    onLyricsMotionModeChange = viewModel::setLyricsMotionMode,
-                    onLyricsShowTranslationChange = viewModel::setLyricsShowTranslation,
-                    onLyricsShowRomanizationChange = viewModel::setLyricsShowRomanization,
-                    onLyricsFocusGlowChange = viewModel::setLyricsFocusGlowEnabled,
-                    onShowLyricsControlDeckChange = viewModel::setShowLyricsControlDeck,
-                    onOnlineLyricsEnabledChange = viewModel::setOnlineLyricsEnabled,
                     onOpenArtist = {
                         viewModel.openCurrentPlaybackArtist { artist ->
                             detailReturnPage = EchoTab.entries[selectedTab].pagerPage
@@ -1034,6 +1062,25 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                             nowPlayingExpanded = false
                         }
                     },
+                    onImportLyricsFont = {
+                        fontImportTarget = FontImportTarget.Lyrics
+                        fontImportLauncher.launch(FontDocumentMimeTypes)
+                    },
+                    onLyricsFontFamilyChange = viewModel::setLyricsFontFamily,
+                    onLyricsFontScaleChange = viewModel::setLyricsFontScale,
+                    onLyricsColorModeChange = viewModel::setLyricsColorMode,
+                    onLyricsAlignmentChange = viewModel::setLyricsAlignment,
+                    onLyricsLineSpacingChange = viewModel::setLyricsLineSpacing,
+                    onLyricsBackgroundDimChange = viewModel::setLyricsBackgroundDim,
+                    onLyricsWordHighlightEnabledChange = viewModel::setLyricsWordHighlightEnabled,
+                    onLyricsWordHighlightIntensityChange = viewModel::setLyricsWordHighlightIntensity,
+                    onLyricsImmersiveModeChange = viewModel::setLyricsImmersiveModeEnabled,
+                    onLyricsMotionModeChange = viewModel::setLyricsMotionMode,
+                    onLyricsShowTranslationChange = viewModel::setLyricsShowTranslation,
+                    onLyricsShowRomanizationChange = viewModel::setLyricsShowRomanization,
+                    onLyricsFocusGlowChange = viewModel::setLyricsFocusGlowEnabled,
+                    onShowLyricsControlDeckChange = viewModel::setShowLyricsControlDeck,
+                    onOnlineLyricsEnabledChange = viewModel::setOnlineLyricsEnabled,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -1053,6 +1100,25 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     selectDockTab(EchoTab.Library)
                 },
                 modifier = Modifier.fillMaxSize(),
+            )
+            EchoLinkQrScannerFallback(
+                visible = echoLinkFallbackScannerVisible,
+                onResult = { rawValue ->
+                    val endpoint = EchoPairingParser.parse(rawValue)
+                    if (endpoint != null) {
+                        connectEchoLinkEndpoint(endpoint)
+                    } else {
+                        echoLinkFallbackScannerVisible = false
+                        echoLinkScanMessage = "没有识别到 ECHO Link 配对码"
+                    }
+                },
+                onCancel = {
+                    echoLinkFallbackScannerVisible = false
+                    echoLinkScanMessage = "已取消扫码"
+                },
+                onError = { message ->
+                    echoLinkScanMessage = message
+                },
             )
         }
     }

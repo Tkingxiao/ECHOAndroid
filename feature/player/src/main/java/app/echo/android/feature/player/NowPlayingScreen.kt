@@ -67,8 +67,11 @@ import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Translate
@@ -122,6 +125,7 @@ import app.echo.android.model.lyrics.EchoLyricsFormat
 import app.echo.android.model.lyrics.EchoLyricsLoadState
 import app.echo.android.model.playback.EchoPlaybackDiagnostics
 import app.echo.android.model.playback.EchoPlaybackStatus
+import app.echo.android.model.playback.EchoRepeatMode
 import app.echo.android.model.playback.PlaybackPositionState
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -166,6 +170,8 @@ private val LyricsMotionOptions = listOf(
     LyricsTextOption("stage", "舞台"),
 )
 
+private val PlaybackSpeedOptions = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
+
 private enum class NowPlayingPage {
     Cover,
     Lyrics,
@@ -182,6 +188,9 @@ fun NowPlayingScreen(
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
     onOpenQueue: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onSetPlaybackSpeed: (Float, Boolean) -> Unit,
     onImportLyrics: () -> Unit,
     onAdjustLyricsOffset: (Long) -> Unit,
     onResetLyricsOffset: () -> Unit,
@@ -301,6 +310,9 @@ fun NowPlayingScreen(
                         onPrevious = onPrevious,
                         onSeek = onSeek,
                         onOpenQueue = onOpenQueue,
+                        onCycleRepeatMode = onCycleRepeatMode,
+                        onToggleShuffle = onToggleShuffle,
+                        onSetPlaybackSpeed = onSetPlaybackSpeed,
                         onOpenLyrics = {
                             pageScope.launch {
                                 pagerState.animateScrollToPage(NowPlayingPage.Lyrics.ordinal)
@@ -427,12 +439,16 @@ private fun NowPlayingCoverPage(
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
     onOpenQueue: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onSetPlaybackSpeed: (Float, Boolean) -> Unit,
     onOpenLyrics: () -> Unit,
     onOpenArtist: () -> Unit,
     onOpenAlbum: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val track = status.track
+    var playbackSettingsExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier,
@@ -446,7 +462,26 @@ private fun NowPlayingCoverPage(
             album = track?.album,
             onOpenArtist = onOpenArtist,
             onOpenAlbum = onOpenAlbum,
+            playbackSettingsExpanded = playbackSettingsExpanded,
+            onOpenPlaybackSettings = { playbackSettingsExpanded = !playbackSettingsExpanded },
         )
+
+        AnimatedVisibility(
+            visible = playbackSettingsExpanded,
+            enter = expandVertically(tween(durationMillis = 240, easing = LyricsSettingsMotionEasing)) +
+                fadeIn(tween(durationMillis = 180, easing = LyricsSettingsMotionEasing)),
+            exit = shrinkVertically(tween(durationMillis = 180, easing = LyricsSettingsMotionEasing)) +
+                fadeOut(tween(durationMillis = 140, easing = LyricsSettingsMotionEasing)),
+        ) {
+            PlaybackSettingsPanel(
+                status = status,
+                onCycleRepeatMode = onCycleRepeatMode,
+                onToggleShuffle = onToggleShuffle,
+                onSetPlaybackSpeed = onSetPlaybackSpeed,
+                onOpenQueue = onOpenQueue,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
 
         Spacer(Modifier.height(8.dp))
         NowPlayingFormatInfo(diagnostics = status.diagnostics)
@@ -1963,6 +1998,8 @@ private fun NowPlayingTrackInfo(
     album: String?,
     onOpenArtist: () -> Unit,
     onOpenAlbum: () -> Unit,
+    playbackSettingsExpanded: Boolean,
+    onOpenPlaybackSettings: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -2021,17 +2058,244 @@ private fun NowPlayingTrackInfo(
                 )
                 GlyphButton(
                     icon = Icons.Rounded.MoreHoriz,
-                    description = "更多",
+                    description = if (playbackSettingsExpanded) "收起播放设置" else "展开播放设置",
                     touchSize = 40.dp,
                     iconSize = 21.dp,
-                    tint = Color.White.copy(alpha = 0.88f),
-                    background = Color.White.copy(alpha = 0.11f),
-                    onClick = {},
+                    tint = if (playbackSettingsExpanded) Color.White else Color.White.copy(alpha = 0.88f),
+                    background = if (playbackSettingsExpanded) Color.White.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.11f),
+                    border = if (playbackSettingsExpanded) Color.White.copy(alpha = 0.38f) else Color.Transparent,
+                    onClick = onOpenPlaybackSettings,
                 )
             }
         }
     }
 }
+
+@Composable
+private fun PlaybackSettingsPanel(
+    status: EchoPlaybackStatus,
+    onCycleRepeatMode: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onSetPlaybackSpeed: (Float, Boolean) -> Unit,
+    onOpenQueue: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val nightcore = isNightcorePlayback(status)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.12f))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "播放设置",
+                    color = Color.White.copy(alpha = 0.94f),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                Text(
+                    playbackSettingsSummary(status),
+                    color = Color.White.copy(alpha = 0.64f),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                playbackSpeedLabel(status.playbackSpeed),
+                color = Color.White.copy(alpha = 0.74f),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PlaybackSettingButton(
+                icon = if (status.repeatMode == EchoRepeatMode.One) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                title = repeatModeLabel(status.repeatMode),
+                selected = status.repeatMode != EchoRepeatMode.Off,
+                onClick = onCycleRepeatMode,
+                modifier = Modifier.weight(1f),
+            )
+            PlaybackSettingButton(
+                icon = Icons.Rounded.Shuffle,
+                title = if (status.shuffleEnabled) "随机开启" else "顺序播放",
+                selected = status.shuffleEnabled,
+                onClick = onToggleShuffle,
+                modifier = Modifier.weight(1f),
+            )
+            PlaybackSettingButton(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                title = "队列",
+                selected = false,
+                onClick = onOpenQueue,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PlaybackSettingButton(
+                icon = Icons.Rounded.PlayArrow,
+                title = "普通变速",
+                selected = !nightcore,
+                onClick = { onSetPlaybackSpeed(status.playbackSpeed, false) },
+                modifier = Modifier.weight(1f),
+            )
+            PlaybackSettingButton(
+                icon = Icons.Rounded.StarBorder,
+                title = "Nightcore",
+                selected = nightcore,
+                onClick = { onSetPlaybackSpeed(status.playbackSpeed.coerceAtLeast(1.25f), true) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            PlaybackSpeedOptions.forEach { speed ->
+                PlaybackSpeedChip(
+                    text = playbackSpeedLabel(speed),
+                    selected = abs(status.playbackSpeed - speed) < 0.01f,
+                    onClick = { onSetPlaybackSpeed(speed, nightcore) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackSettingButton(
+    icon: ImageVector,
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) Color.White.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.10f),
+        animationSpec = tween(durationMillis = 180, easing = LyricsSettingsMotionEasing),
+        label = "playback-setting-container",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) Color.White.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.12f),
+        animationSpec = tween(durationMillis = 180, easing = LyricsSettingsMotionEasing),
+        label = "playback-setting-border",
+    )
+    Row(
+        modifier = modifier
+            .height(42.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(containerColor)
+            .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(8.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = title,
+            tint = Color.White.copy(alpha = if (selected) 0.96f else 0.76f),
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            title,
+            color = Color.White.copy(alpha = if (selected) 0.98f else 0.78f),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun PlaybackSpeedChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) Color.White.copy(alpha = 0.26f) else Color.White.copy(alpha = 0.10f),
+        animationSpec = tween(durationMillis = 180, easing = LyricsSettingsMotionEasing),
+        label = "playback-speed-chip-container",
+    )
+    Box(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(containerColor)
+            .border(
+                BorderStroke(1.dp, if (selected) Color.White.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.10f)),
+                RoundedCornerShape(8.dp),
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 11.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            color = Color.White.copy(alpha = if (selected) 0.96f else 0.72f),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+private fun playbackSettingsSummary(status: EchoPlaybackStatus): String {
+    val diagnostics = status.diagnostics
+    val format = buildList {
+        diagnostics.codec?.let { add(it) }
+        diagnostics.sampleRateHz?.takeIf { it > 0 }?.let { add(formatSampleRate(it)) }
+        diagnostics.bitDepth?.takeIf { it > 0 }?.let { add("${it}bit") }
+    }.joinToString(" · ").ifBlank { "等待音频信息" }
+    val output = if (diagnostics.usbDeviceName != null) "USB 输出" else "系统输出"
+    val mode = if (isNightcorePlayback(status)) "Nightcore 变调" else "普通变速"
+    return "$format · $output · $mode"
+}
+
+private fun isNightcorePlayback(status: EchoPlaybackStatus): Boolean =
+    status.playbackSpeed > 1.01f && abs(status.playbackPitch - status.playbackSpeed) < 0.01f
+
+private fun playbackSpeedLabel(speed: Float): String {
+    val rounded = (speed * 100f).roundToInt() / 100f
+    return if (abs(rounded - rounded.toInt()) < 0.01f) {
+        "${rounded.toInt()}x"
+    } else {
+        "${"%.2f".format(rounded).trimEnd('0').trimEnd('.')}x"
+    }
+}
+
+private fun repeatModeLabel(mode: EchoRepeatMode): String = when (mode) {
+    EchoRepeatMode.Off -> "循环关闭"
+    EchoRepeatMode.All -> "全部循环"
+    EchoRepeatMode.One -> "单曲循环"
+}
+
 @Composable
 private fun NowPlayingFormatInfo(diagnostics: EchoPlaybackDiagnostics) {
     val chips = buildList {

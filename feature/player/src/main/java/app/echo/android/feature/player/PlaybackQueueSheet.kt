@@ -60,7 +60,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -80,7 +79,6 @@ import app.echo.android.design.EchoGlassNight
 import app.echo.android.design.EchoGlassPanel
 import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.echoDarkGlassBorder
-import app.echo.android.design.echoDarkGlassBrush
 import app.echo.android.design.formatDuration
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
@@ -266,16 +264,16 @@ private fun QueueSheetSurface(
             .statusBarsPadding()
             .widthIn(max = 560.dp)
             .fillMaxHeight(0.74f)
-            .shadow(
-                elevation = 24.dp,
-                shape = shape,
-                ambientColor = EchoGlassNight.copy(alpha = 0.12f),
-                spotColor = scheme.primary.copy(alpha = 0.18f),
-            )
             .clip(shape)
             .background(
                 if (dark) {
-                    echoDarkGlassBrush(1.18f)
+                    Brush.verticalGradient(
+                        listOf(
+                            EchoGlassNight.copy(alpha = 0.94f),
+                            EchoGlassInk.copy(alpha = 0.91f),
+                            EchoGlassPanel.copy(alpha = 0.88f),
+                        ),
+                    )
                 } else {
                     Brush.verticalGradient(
                         listOf(Color.White.copy(alpha = 0.98f), Color(0xFFF4F8FF).copy(alpha = 0.98f))
@@ -431,9 +429,9 @@ private fun QueueTrackRow(
     val scheme = MaterialTheme.colorScheme
     val containerColor by animateColorAsState(
         targetValue = if (active) {
-            scheme.primary.copy(alpha = if (LocalEchoDarkTheme.current) 0.24f else 0.13f)
+            scheme.primary.copy(alpha = if (LocalEchoDarkTheme.current) 0.30f else 0.13f)
         } else {
-            if (LocalEchoDarkTheme.current) EchoGlassPanel.copy(alpha = 0.42f) else scheme.surface.copy(alpha = 0.62f)
+            if (LocalEchoDarkTheme.current) EchoGlassPanel.copy(alpha = 0.64f) else scheme.surface.copy(alpha = 0.62f)
         },
         animationSpec = tween(durationMillis = 220, easing = QueueSheetMotionEasing),
         label = "queue-row-container",
@@ -575,9 +573,9 @@ private fun QueuePillButton(
     val scheme = MaterialTheme.colorScheme
     val containerColor by animateColorAsState(
         targetValue = if (selected) {
-            scheme.primary.copy(alpha = if (LocalEchoDarkTheme.current) 0.22f else 0.16f)
+            scheme.primary.copy(alpha = if (LocalEchoDarkTheme.current) 0.28f else 0.16f)
         } else {
-            if (LocalEchoDarkTheme.current) EchoGlassPanel.copy(alpha = 0.44f) else scheme.surface.copy(alpha = 0.50f)
+            if (LocalEchoDarkTheme.current) EchoGlassPanel.copy(alpha = 0.62f) else scheme.surface.copy(alpha = 0.50f)
         },
         animationSpec = tween(durationMillis = 220, easing = QueueSheetMotionEasing),
         label = "queue-pill-container",
@@ -629,7 +627,7 @@ private fun QueueIconButton(
         modifier = Modifier
             .size(if (compact) 34.dp else 40.dp)
             .clip(CircleShape)
-            .background(if (LocalEchoDarkTheme.current) EchoGlassPanel.copy(alpha = 0.46f) else scheme.surface.copy(alpha = 0.68f))
+            .background(if (LocalEchoDarkTheme.current) EchoGlassPanel.copy(alpha = 0.64f) else scheme.surface.copy(alpha = 0.68f))
             .border(BorderStroke(1.dp, if (LocalEchoDarkTheme.current) EchoDarkGlassBorder else scheme.outlineVariant.copy(alpha = 0.22f)), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

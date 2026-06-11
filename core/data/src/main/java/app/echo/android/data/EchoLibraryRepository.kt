@@ -146,6 +146,11 @@ class EchoLibraryRepository(
             .map { playlists -> playlists.map { it.toEchoPlaylist() } }
             .flowOn(Dispatchers.IO)
 
+    fun observeLocalPlaylists(): Flow<List<EchoPlaylist>> =
+        database.playlistDao().observePlaylists(LibrarySource.MediaStore.id)
+            .map { playlists -> playlists.map { it.toEchoPlaylist() } }
+            .flowOn(Dispatchers.IO)
+
     fun pagedPlaylistTracks(playlistId: String): Flow<PagingData<LibraryTrackEntity>> =
         Pager(
             config = defaultPagingConfig(),
@@ -200,6 +205,51 @@ class EchoLibraryRepository(
             update = update,
             editedAtEpochMs = System.currentTimeMillis(),
         )
+        if (current.hasSameUserMetadata(updated)) return true
+        dao.upsertBatchWithFts(listOf(updated))
+        return true
+    }
+
+    suspend fun updateTrackArtwork(trackId: String, artworkUri: String): Boolean {
+        val dao = database.trackDao()
+        val current = dao.getTrackById(trackId) ?: return false
+        val updated = current.copy(
+            artworkUri = artworkUri.trim().takeIf { it.isNotBlank() } ?: return false,
+            metadataEditedAtEpochMs = System.currentTimeMillis(),
+        ).withScanMetadata()
+        if (current.hasSameUserMetadata(updated)) return true
+        dao.upsertBatchWithFts(listOf(updated))
+        return true
+    }
+
+    suspend fun applyBestNeteaseMetadata(trackId: String): Boolean {
+        val dao = database.trackDao()
+        val current = dao.getTrackById(trackId) ?: return false
+        val candidates = neteaseClient.searchSongs(
+            query = listOf(current.title, current.artist).filter { it.isNotBlank() }.joinToString(" "),
+            limit = 8,
+        )
+        val best = candidates
+            .map { song -> song to scoreNeteaseMetadata(current, song) }
+            .filter { (_, score) -> score >= MinimumNeteaseMetadataScore }
+            .maxByOrNull { (_, score) -> score }
+            ?.first
+            ?: return false
+        val updated = current.withUserMetadata(
+            update = EchoTrackMetadataUpdate(
+                trackId = current.id,
+                title = best.title,
+                artist = best.artist.ifBlank { current.artist },
+                album = best.album ?: current.album,
+                albumArtist = best.albumArtist ?: best.artist.takeIf { it.isNotBlank() } ?: current.albumArtist,
+                trackNumber = best.trackNumber ?: current.trackNumber,
+                discNumber = best.discNumber ?: current.discNumber,
+                year = current.year,
+                artworkUri = best.artworkUri ?: current.artworkUri,
+            ),
+            editedAtEpochMs = System.currentTimeMillis(),
+        )
+        if (current.hasSameUserMetadata(updated)) return true
         dao.upsertBatchWithFts(listOf(updated))
         return true
     }
@@ -942,6 +992,42 @@ class EchoLibraryRepository(
         const val AggregationQueueLimit = 500
     }
 }
+
+private fun LibraryTrackEntity.hasSameUserMetadata(other: LibraryTrackEntity): Boolean =
+    title == other.title &&
+        artist == other.artist &&
+        album == other.album &&
+        albumArtist == other.albumArtist &&
+        artworkUri == other.artworkUri &&
+        trackNumber == other.trackNumber &&
+        discNumber == other.discNumber &&
+        year == other.year
+
+private fun scoreNeteaseMetadata(current: LibraryTrackEntity, candidate: NeteaseSong): Int {
+    val title = current.title.normalizedForSearch()
+    val artist = current.artist.normalizedForSearch()
+    val album = current.album?.normalizedForSearch().orEmpty()
+    val candidateTitle = candidate.title.normalizedForSearch()
+    val candidateArtist = candidate.artist.normalizedForSearch()
+    val candidateAlbum = candidate.album?.normalizedForSearch().orEmpty()
+    var score = 0
+    when {
+        title == candidateTitle -> score += 70
+        title in candidateTitle || candidateTitle in title -> score += 45
+    }
+    when {
+        artist.isNotBlank() && artist == candidateArtist -> score += 35
+        artist.isNotBlank() && (artist in candidateArtist || candidateArtist in artist) -> score += 18
+    }
+    if (album.isNotBlank() && album == candidateAlbum) score += 12
+    if (current.durationMs > 0L && candidate.durationMs > 0L) {
+        val delta = kotlin.math.abs(current.durationMs - candidate.durationMs)
+        if (delta <= 3_000L) score += 15 else if (delta <= 10_000L) score += 6
+    }
+    return score
+}
+
+private const val MinimumNeteaseMetadataScore = 58
 
 private data class RemoteAlbumKey(
     val source: String,

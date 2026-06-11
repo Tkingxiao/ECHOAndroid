@@ -145,7 +145,7 @@ internal fun LibraryScanAction(
 }
 
 @Composable
-private fun LibraryScanOptionsDialog(
+internal fun LibraryScanOptionsDialog(
     onDismiss: () -> Unit,
     onScanFolder: () -> Unit,
     onScanAll: () -> Unit,
