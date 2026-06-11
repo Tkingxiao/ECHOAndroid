@@ -113,7 +113,7 @@ private const val HomeHeatmapWeeks = 12
 @Composable
 private fun homePanelColor(lightAlpha: Float = 0.90f): Color {
     return if (LocalEchoDarkTheme.current) {
-        EchoGlassInk.copy(alpha = lightAlpha.coerceIn(0.86f, 0.94f))
+        EchoGlassPanel.copy(alpha = (lightAlpha * 0.58f).coerceIn(0.42f, 0.62f))
     } else {
         Color.White.copy(alpha = lightAlpha.coerceIn(0.95f, 1.00f))
     }
@@ -123,25 +123,26 @@ private fun homePanelColor(lightAlpha: Float = 0.90f): Color {
 private fun homePanelBorder(lightAlpha: Float = 0.94f): BorderStroke {
     return BorderStroke(
         1.dp,
-        if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.14f) else EchoSoftLine.copy(alpha = lightAlpha.coerceIn(0.74f, 0.96f)),
+        if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.07f) else EchoSoftLine.copy(alpha = lightAlpha.coerceIn(0.74f, 0.96f)),
     )
 }
 
 @Composable
 private fun homeTitleColor(): Color =
-    if (LocalEchoDarkTheme.current) Color.White else RoonInk
+    if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.92f) else RoonInk
 
 @Composable
 private fun homeBodyColor(): Color =
-    if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.88f) else RoonMuted.copy(alpha = 0.94f)
+    if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.66f) else RoonMuted.copy(alpha = 0.94f)
 
 @Composable
 private fun homePanelBrush(): Brush {
     return if (LocalEchoDarkTheme.current) {
         Brush.linearGradient(
             listOf(
-                EchoGlassPanel.copy(alpha = 0.88f),
-                EchoGlassInk.copy(alpha = 0.94f),
+                Color.White.copy(alpha = 0.035f),
+                EchoGlassPanel.copy(alpha = 0.56f),
+                EchoGlassInk.copy(alpha = 0.62f),
             ),
         )
     } else {
@@ -381,21 +382,22 @@ private fun RecentActivityModeTab(
 
 @Composable
 internal fun RecentPlayedAlbumsTab() {
+    val scheme = MaterialTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = Color.White.copy(alpha = 0.94f),
-        border = BorderStroke(1.dp, EchoGlassBorder),
+        color = homePanelColor(0.82f),
+        border = homePanelBorder(0.80f),
     ) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(9.dp))
-                .background(EchoAccentDeep.copy(alpha = 0.16f))
+                .background(scheme.primary.copy(alpha = if (LocalEchoDarkTheme.current) 0.16f else 0.16f))
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 "已播放",
-                color = EchoAccentText,
+                color = scheme.primary,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -573,16 +575,8 @@ internal fun RoonRecentActivitySection(
                 spotColor = Color.Black.copy(alpha = 0.03f),
             )
             .clip(RoundedCornerShape(32.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color.White,
-                        EchoHomeMist,
-                        Color.White.copy(alpha = 0.92f),
-                    ),
-                ),
-            )
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(32.dp))
+            .background(homePanelBrush())
+            .border(homePanelBorder(0.94f), RoundedCornerShape(32.dp))
             .padding(top = 18.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -811,8 +805,8 @@ private fun ArtistRankRow(
                 if (rank == 1) {
                     Brush.horizontalGradient(
                         listOf(
-                            EchoAccent.copy(alpha = 0.12f),
-                            EchoAccentDeep.copy(alpha = 0.10f),
+                            scheme.primary.copy(alpha = if (dark) 0.12f else 0.12f),
+                            if (dark) Color.White.copy(alpha = 0.025f) else EchoAccentDeep.copy(alpha = 0.10f),
                             Color.Transparent,
                         ),
                     )
@@ -856,14 +850,22 @@ private fun ArtistRankRow(
                     .fillMaxWidth()
                     .height(4.dp)
                     .clip(RoundedCornerShape(99.dp))
-                    .background(if (dark) Color.White.copy(alpha = 0.16f) else scheme.surfaceVariant.copy(alpha = 0.52f)),
+                    .background(if (dark) Color.White.copy(alpha = 0.09f) else scheme.surfaceVariant.copy(alpha = 0.52f)),
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(progress.coerceIn(0.08f, 1f))
                         .height(4.dp)
                         .clip(RoundedCornerShape(99.dp))
-                        .background(Brush.horizontalGradient(listOf(EchoAccent, EchoAccentDeep))),
+                        .background(
+                            Brush.horizontalGradient(
+                                if (dark) {
+                                    listOf(scheme.primary.copy(alpha = 0.64f), scheme.primary.copy(alpha = 0.36f))
+                                } else {
+                                    listOf(EchoAccent, EchoAccentDeep)
+                                },
+                            ),
+                        ),
                 )
             }
         }
@@ -1154,12 +1156,23 @@ private fun heatmapLevel(count: Int, maxCount: Int): Int {
 
 @Composable
 private fun heatmapLevelColor(level: Int): Color =
-    when (level) {
-        1 -> EchoHomeBlue.copy(alpha = 0.24f)
-        2 -> EchoAccent.copy(alpha = 0.44f)
-        3 -> EchoAccentDeep.copy(alpha = 0.62f)
-        4 -> EchoGlassCyan.copy(alpha = 0.88f)
-        else -> if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.72f)
+    if (LocalEchoDarkTheme.current) {
+        val accent = MaterialTheme.colorScheme.primary
+        when (level) {
+            1 -> accent.copy(alpha = 0.18f)
+            2 -> accent.copy(alpha = 0.28f)
+            3 -> accent.copy(alpha = 0.42f)
+            4 -> accent.copy(alpha = 0.58f)
+            else -> Color.White.copy(alpha = 0.07f)
+        }
+    } else {
+        when (level) {
+            1 -> EchoHomeBlue.copy(alpha = 0.24f)
+            2 -> EchoAccent.copy(alpha = 0.44f)
+            3 -> EchoAccentDeep.copy(alpha = 0.62f)
+            4 -> EchoGlassCyan.copy(alpha = 0.88f)
+            else -> Color.White.copy(alpha = 0.72f)
+        }
     }
 
 @Composable
@@ -1194,8 +1207,8 @@ private fun artistReadableDuration(durationMs: Long): String {
 internal fun RecentActivityTabs() {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = Color.White.copy(alpha = 0.94f),
-        border = BorderStroke(1.dp, EchoGlassBorder),
+        color = homePanelColor(0.82f),
+        border = homePanelBorder(0.80f),
     ) {
         Row(
             modifier = Modifier.padding(3.dp),
@@ -1212,16 +1225,18 @@ internal fun RecentActivityTab(
     label: String,
     selected: Boolean,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(9.dp))
-            .background(if (selected) EchoAccentDeep.copy(alpha = 0.16f) else Color.Transparent)
+            .background(if (selected) scheme.primary.copy(alpha = if (dark) 0.16f else 0.16f) else Color.Transparent)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            color = if (selected) EchoAccentText else RoonMuted,
+            color = if (selected) scheme.primary else homeBodyColor(),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -1302,16 +1317,8 @@ internal fun HomeRecommendationsSection(
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(26.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color.White,
-                        EchoHomeMist,
-                        Color.White.copy(alpha = 0.92f),
-                    ),
-                ),
-            )
-            .border(BorderStroke(1.dp, EchoGlassBorder), RoundedCornerShape(26.dp))
+            .background(homePanelBrush())
+            .border(homePanelBorder(0.94f), RoundedCornerShape(26.dp))
             .padding(top = 16.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -1334,8 +1341,8 @@ internal fun HomeRecommendationsSection(
                     .clip(RoundedCornerShape(14.dp))
                     .clickable(onClick = onRefresh),
                 shape = RoundedCornerShape(14.dp),
-                color = if (dark) EchoGlassPanel.copy(alpha = 0.62f) else Color.White.copy(alpha = 0.94f),
-                border = if (dark) BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)) else BorderStroke(1.dp, EchoGlassBorder),
+                color = homePanelColor(0.82f),
+                border = homePanelBorder(0.80f),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),

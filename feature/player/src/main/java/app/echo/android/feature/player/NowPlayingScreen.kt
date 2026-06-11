@@ -86,6 +86,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -110,6 +111,7 @@ import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassNight
 import app.echo.android.design.EchoGlassPanel
 import app.echo.android.design.LocalEchoDarkTheme
+import app.echo.android.design.LocalEchoEffectivePerformanceMode
 import app.echo.android.design.echoDarkGlassBorder
 import app.echo.android.design.formatDuration
 import app.echo.android.design.progressFraction
@@ -194,7 +196,9 @@ fun NowPlayingScreen(
     lyricsAlignment: String = "center",
     lyricsLineSpacing: Float = 1f,
     lyricsBackgroundDim: Float = 0f,
+    lyricsWordHighlightEnabled: Boolean = true,
     lyricsWordHighlightIntensity: Float = 1f,
+    lyricsImmersiveModeEnabled: Boolean = false,
     lyricsMotionMode: String = "smooth",
     lyricsShowTranslation: Boolean = true,
     lyricsShowRomanization: Boolean = true,
@@ -208,7 +212,9 @@ fun NowPlayingScreen(
     onLyricsAlignmentChange: (String) -> Unit = {},
     onLyricsLineSpacingChange: (Float) -> Unit = {},
     onLyricsBackgroundDimChange: (Float) -> Unit = {},
+    onLyricsWordHighlightEnabledChange: (Boolean) -> Unit = {},
     onLyricsWordHighlightIntensityChange: (Float) -> Unit = {},
+    onLyricsImmersiveModeChange: (Boolean) -> Unit = {},
     onLyricsMotionModeChange: (String) -> Unit = {},
     onLyricsShowTranslationChange: (Boolean) -> Unit = {},
     onLyricsShowRomanizationChange: (Boolean) -> Unit = {},
@@ -217,6 +223,8 @@ fun NowPlayingScreen(
     onOnlineLyricsEnabledChange: (Boolean) -> Unit = {},
 ) {
     val track = status.track
+    val effectivePerformanceMode = LocalEchoEffectivePerformanceMode.current
+    val effectiveLyricsFocusGlowEnabled = lyricsFocusGlowEnabled && !effectivePerformanceMode.isLightweight
     val palette = rememberArtworkPalette(track?.artworkUri, seedKey = track?.id)
     val pagerState = rememberPagerState(
         initialPage = NowPlayingPage.Cover.ordinal,
@@ -313,11 +321,13 @@ fun NowPlayingScreen(
                         lyricsAlignment = lyricsAlignment,
                         lyricsLineSpacing = lyricsLineSpacing,
                         lyricsBackgroundDim = lyricsBackgroundDim,
+                        lyricsWordHighlightEnabled = lyricsWordHighlightEnabled,
                         lyricsWordHighlightIntensity = lyricsWordHighlightIntensity,
+                        lyricsImmersiveModeEnabled = lyricsImmersiveModeEnabled,
                         lyricsMotionMode = lyricsMotionMode,
                         lyricsShowTranslation = lyricsShowTranslation,
                         lyricsShowRomanization = lyricsShowRomanization,
-                        lyricsFocusGlowEnabled = lyricsFocusGlowEnabled,
+                        lyricsFocusGlowEnabled = effectiveLyricsFocusGlowEnabled,
                         importedFontUri = importedFontUri,
                         onlineLyricsEnabled = onlineLyricsEnabled,
                         onPlayPause = onPlayPause,
@@ -342,7 +352,9 @@ fun NowPlayingScreen(
                         onLyricsAlignmentChange = onLyricsAlignmentChange,
                         onLyricsLineSpacingChange = onLyricsLineSpacingChange,
                         onLyricsBackgroundDimChange = onLyricsBackgroundDimChange,
+                        onLyricsWordHighlightEnabledChange = onLyricsWordHighlightEnabledChange,
                         onLyricsWordHighlightIntensityChange = onLyricsWordHighlightIntensityChange,
+                        onLyricsImmersiveModeChange = onLyricsImmersiveModeChange,
                         onLyricsMotionModeChange = onLyricsMotionModeChange,
                         onLyricsShowTranslationChange = onLyricsShowTranslationChange,
                         onLyricsShowRomanizationChange = onLyricsShowRomanizationChange,
@@ -364,12 +376,14 @@ fun NowPlayingScreen(
             lyricsAlignment = lyricsAlignment,
             lyricsLineSpacing = lyricsLineSpacing,
             lyricsBackgroundDim = lyricsBackgroundDim,
+            lyricsWordHighlightEnabled = lyricsWordHighlightEnabled,
             lyricsWordHighlightIntensity = lyricsWordHighlightIntensity,
+            lyricsImmersiveModeEnabled = lyricsImmersiveModeEnabled,
             lyricsMotionMode = lyricsMotionMode,
             lyricAccent = lyricAccent,
             showTranslation = lyricsShowTranslation,
             showRomanization = lyricsShowRomanization,
-            focusGlowEnabled = lyricsFocusGlowEnabled,
+            focusGlowEnabled = effectiveLyricsFocusGlowEnabled,
             hasTranslation = hasTranslation,
             hasRomanization = hasRomanization,
             showLyricsControlDeck = showLyricsControlDeck,
@@ -389,7 +403,9 @@ fun NowPlayingScreen(
             onLyricsAlignmentChange = onLyricsAlignmentChange,
             onLyricsLineSpacingChange = onLyricsLineSpacingChange,
             onLyricsBackgroundDimChange = onLyricsBackgroundDimChange,
+            onLyricsWordHighlightEnabledChange = onLyricsWordHighlightEnabledChange,
             onLyricsWordHighlightIntensityChange = onLyricsWordHighlightIntensityChange,
+            onLyricsImmersiveModeChange = onLyricsImmersiveModeChange,
             onLyricsMotionModeChange = onLyricsMotionModeChange,
             onLyricsShowTranslationChange = onLyricsShowTranslationChange,
             onLyricsShowRomanizationChange = onLyricsShowRomanizationChange,
@@ -485,7 +501,9 @@ private fun NowPlayingLyricsPage(
     lyricsAlignment: String,
     lyricsLineSpacing: Float,
     lyricsBackgroundDim: Float,
+    lyricsWordHighlightEnabled: Boolean,
     lyricsWordHighlightIntensity: Float,
+    lyricsImmersiveModeEnabled: Boolean,
     lyricsMotionMode: String,
     lyricsShowTranslation: Boolean,
     lyricsShowRomanization: Boolean,
@@ -510,7 +528,9 @@ private fun NowPlayingLyricsPage(
     onLyricsAlignmentChange: (String) -> Unit,
     onLyricsLineSpacingChange: (Float) -> Unit,
     onLyricsBackgroundDimChange: (Float) -> Unit,
+    onLyricsWordHighlightEnabledChange: (Boolean) -> Unit,
     onLyricsWordHighlightIntensityChange: (Float) -> Unit,
+    onLyricsImmersiveModeChange: (Boolean) -> Unit,
     onLyricsMotionModeChange: (String) -> Unit,
     onLyricsShowTranslationChange: (Boolean) -> Unit,
     onLyricsShowRomanizationChange: (Boolean) -> Unit,
@@ -522,7 +542,17 @@ private fun NowPlayingLyricsPage(
 ) {
     val readyLyrics = (lyricsState as? EchoLyricsLoadState.Ready)?.lyrics
     val lyricAccent = lyricsColorForMode(lyricsColorMode)
+    val lyricsDimAlpha by animateFloatAsState(
+        targetValue = lyricsBackgroundDim.coerceIn(0f, 0.78f),
+        animationSpec = tween(durationMillis = 240, easing = LyricsSettingsMotionEasing),
+        label = "lyrics-page-dim",
+    )
     Box(modifier = modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = lyricsDimAlpha)),
+        )
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -548,7 +578,9 @@ private fun NowPlayingLyricsPage(
                         lyricAccent = lyricAccent,
                         lyricsAlignment = lyricsAlignment,
                         lyricsLineSpacing = lyricsLineSpacing,
+                        lyricsWordHighlightEnabled = lyricsWordHighlightEnabled,
                         lyricsWordHighlightIntensity = lyricsWordHighlightIntensity,
+                        lyricsImmersiveModeEnabled = lyricsImmersiveModeEnabled,
                         lyricsMotionMode = lyricsMotionMode,
                         showTranslation = lyricsShowTranslation,
                         showRomanization = lyricsShowRomanization,
@@ -620,7 +652,9 @@ private fun LyricsSettingsDrawer(
     lyricsAlignment: String,
     lyricsLineSpacing: Float,
     lyricsBackgroundDim: Float,
+    lyricsWordHighlightEnabled: Boolean,
     lyricsWordHighlightIntensity: Float,
+    lyricsImmersiveModeEnabled: Boolean,
     lyricsMotionMode: String,
     lyricAccent: Color,
     showTranslation: Boolean,
@@ -640,7 +674,9 @@ private fun LyricsSettingsDrawer(
     onLyricsAlignmentChange: (String) -> Unit,
     onLyricsLineSpacingChange: (Float) -> Unit,
     onLyricsBackgroundDimChange: (Float) -> Unit,
+    onLyricsWordHighlightEnabledChange: (Boolean) -> Unit,
     onLyricsWordHighlightIntensityChange: (Float) -> Unit,
+    onLyricsImmersiveModeChange: (Boolean) -> Unit,
     onLyricsMotionModeChange: (String) -> Unit,
     onLyricsShowTranslationChange: (Boolean) -> Unit,
     onLyricsShowRomanizationChange: (Boolean) -> Unit,
@@ -707,7 +743,9 @@ private fun LyricsSettingsDrawer(
                     lyricsAlignment = lyricsAlignment,
                     lyricsLineSpacing = lyricsLineSpacing,
                     lyricsBackgroundDim = lyricsBackgroundDim,
+                    lyricsWordHighlightEnabled = lyricsWordHighlightEnabled,
                     lyricsWordHighlightIntensity = lyricsWordHighlightIntensity,
+                    lyricsImmersiveModeEnabled = lyricsImmersiveModeEnabled,
                     lyricsMotionMode = lyricsMotionMode,
                     lyricAccent = lyricAccent,
                     showTranslation = showTranslation,
@@ -727,7 +765,9 @@ private fun LyricsSettingsDrawer(
                     onLyricsAlignmentChange = onLyricsAlignmentChange,
                     onLyricsLineSpacingChange = onLyricsLineSpacingChange,
                     onLyricsBackgroundDimChange = onLyricsBackgroundDimChange,
+                    onLyricsWordHighlightEnabledChange = onLyricsWordHighlightEnabledChange,
                     onLyricsWordHighlightIntensityChange = onLyricsWordHighlightIntensityChange,
+                    onLyricsImmersiveModeChange = onLyricsImmersiveModeChange,
                     onLyricsMotionModeChange = onLyricsMotionModeChange,
                     onLyricsShowTranslationChange = onLyricsShowTranslationChange,
                     onLyricsShowRomanizationChange = onLyricsShowRomanizationChange,
@@ -749,7 +789,9 @@ private fun LyricsSettingsPanel(
     lyricsAlignment: String,
     lyricsLineSpacing: Float,
     lyricsBackgroundDim: Float,
+    lyricsWordHighlightEnabled: Boolean,
     lyricsWordHighlightIntensity: Float,
+    lyricsImmersiveModeEnabled: Boolean,
     lyricsMotionMode: String,
     lyricAccent: Color,
     showTranslation: Boolean,
@@ -769,7 +811,9 @@ private fun LyricsSettingsPanel(
     onLyricsAlignmentChange: (String) -> Unit,
     onLyricsLineSpacingChange: (Float) -> Unit,
     onLyricsBackgroundDimChange: (Float) -> Unit,
+    onLyricsWordHighlightEnabledChange: (Boolean) -> Unit,
     onLyricsWordHighlightIntensityChange: (Float) -> Unit,
+    onLyricsImmersiveModeChange: (Boolean) -> Unit,
     onLyricsMotionModeChange: (String) -> Unit,
     onLyricsShowTranslationChange: (Boolean) -> Unit,
     onLyricsShowRomanizationChange: (Boolean) -> Unit,
@@ -781,6 +825,8 @@ private fun LyricsSettingsPanel(
     val fontFraction = ((scale - 0.82f) / (1.28f - 0.82f)).coerceIn(0f, 1f)
     val spacing = lyricsLineSpacing.coerceIn(0.82f, 1.38f)
     val spacingFraction = ((spacing - 0.82f) / (1.38f - 0.82f)).coerceIn(0f, 1f)
+    val dim = lyricsBackgroundDim.coerceIn(0f, 0.78f)
+    val dimFraction = (dim / 0.78f).coerceIn(0f, 1f)
     val highlight = lyricsWordHighlightIntensity.coerceIn(0.45f, 1.35f)
     val highlightFraction = ((highlight - 0.45f) / (1.35f - 0.45f)).coerceIn(0f, 1f)
     val dark = LocalEchoDarkTheme.current
@@ -944,8 +990,17 @@ private fun LyricsSettingsPanel(
                 },
             )
             LyricsMiniSliderRow(
-                label = "逐字高亮",
-                valueLabel = "${(highlight * 100f).roundToInt()}%",
+                label = "遮罩浓度",
+                valueLabel = "${(dim * 100f).roundToInt()}%",
+                fraction = dimFraction,
+                accent = lyricAccent,
+                onValueChange = { fraction ->
+                    onLyricsBackgroundDimChange(fraction.coerceIn(0f, 1f) * 0.78f)
+                },
+            )
+            LyricsMiniSliderRow(
+                label = if (lyricsWordHighlightEnabled) "逐字强度" else "逐字强度 关",
+                valueLabel = if (lyricsWordHighlightEnabled) "${(highlight * 100f).roundToInt()}%" else "关闭",
                 fraction = highlightFraction,
                 accent = lyricAccent,
                 onValueChange = { fraction ->
@@ -976,6 +1031,18 @@ private fun LyricsSettingsPanel(
             }
             LyricsToggleTile("强调", focusGlowEnabled, lyricAccent, Modifier.weight(1f)) {
                 onLyricsFocusGlowChange(!focusGlowEnabled)
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            LyricsToggleTile("逐字", lyricsWordHighlightEnabled, lyricAccent, Modifier.weight(1f)) {
+                onLyricsWordHighlightEnabledChange(!lyricsWordHighlightEnabled)
+            }
+            LyricsToggleTile("沉浸", lyricsImmersiveModeEnabled, lyricAccent, Modifier.weight(1f)) {
+                onLyricsImmersiveModeChange(!lyricsImmersiveModeEnabled)
+            }
+            LyricsToggleTile("舞台", lyricsMotionMode == "stage", lyricAccent, Modifier.weight(1f)) {
+                onLyricsMotionModeChange(if (lyricsMotionMode == "stage") "smooth" else "stage")
             }
         }
 
@@ -1279,16 +1346,16 @@ private fun LyricsColorSwatch(
     )
     Column(
         modifier = modifier
-            .height(64.dp)
+            .height(78.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
+            .padding(top = 5.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.Top,
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(44.dp)
                 .graphicsLayer {
                     scaleX = swatchScale
                     scaleY = swatchScale
@@ -1306,13 +1373,14 @@ private fun LyricsColorSwatch(
                     .border(BorderStroke(1.dp, if (dark) Color.White.copy(alpha = 0.18f) else Color.Black.copy(alpha = 0.08f)), CircleShape),
             )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             option.label,
             color = if (selected) option.color else if (dark) Color.White.copy(alpha = 0.74f) else Color(0xFF253142),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(lineHeight = 14.sp),
             fontWeight = FontWeight.Black,
             maxLines = 1,
+            overflow = TextOverflow.Visible,
         )
     }
 }
@@ -1477,7 +1545,9 @@ private fun LyricsLineList(
     lyricAccent: Color,
     lyricsAlignment: String,
     lyricsLineSpacing: Float,
+    lyricsWordHighlightEnabled: Boolean,
     lyricsWordHighlightIntensity: Float,
+    lyricsImmersiveModeEnabled: Boolean,
     lyricsMotionMode: String,
     showTranslation: Boolean,
     showRomanization: Boolean,
@@ -1505,6 +1575,7 @@ private fun LyricsLineList(
         val textAlign = lyricsTextAlign(lyricsAlignment)
         val horizontalAlignment = lyricsHorizontalAlignment(lyricsAlignment)
         val motionIntensity = lyricsMotionIntensity(lyricsMotionMode)
+        val immersive = lyricsImmersiveModeEnabled && synced
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -1523,18 +1594,31 @@ private fun LyricsLineList(
                 val seekable = synced && line.startMs >= 0L
                 val primaryAlpha = when (focusDistance) {
                     0 -> 1f
-                    1 -> 0.78f
-                    2 -> 0.58f
-                    3 -> 0.40f
-                    else -> 0.28f
+                    else -> if (immersive) 0.08f else when (focusDistance) {
+                        1 -> 0.78f
+                        2 -> 0.58f
+                        3 -> 0.40f
+                        else -> 0.28f
+                    }
                 }
                 val secondaryAlpha = when (focusDistance) {
                     0 -> 0.84f
-                    1 -> 0.64f
-                    2 -> 0.48f
-                    3 -> 0.34f
-                    else -> 0.24f
+                    else -> if (immersive) 0f else when (focusDistance) {
+                        1 -> 0.64f
+                        2 -> 0.48f
+                        3 -> 0.34f
+                        else -> 0.24f
+                    }
                 }
+                val backgroundAlpha = when (focusDistance) {
+                    0 -> if (immersive) 0.08f else 0f
+                    else -> 0f
+                }
+                val lineBlur by animateDpAsState(
+                    targetValue = if (immersive && !active) 10.dp else 0.dp,
+                    animationSpec = tween(durationMillis = 260, easing = LyricsSettingsMotionEasing),
+                    label = "lyrics-line-blur",
+                )
                 val animatedPrimaryAlpha by animateFloatAsState(
                     targetValue = primaryAlpha,
                     animationSpec = tween(durationMillis = 220, easing = LyricsSettingsMotionEasing),
@@ -1554,10 +1638,15 @@ private fun LyricsLineList(
                     modifier = Modifier
                         .fillMaxWidth()
                         .offset(y = lineOffset)
+                        .blur(lineBlur)
                         .graphicsLayer {
                             scaleX = lineScale
                             scaleY = lineScale
                         }
+                        .background(
+                            lyricAccent.copy(alpha = backgroundAlpha),
+                            RoundedCornerShape(18.dp),
+                        )
                         .then(
                             if (seekable) {
                                 Modifier.clickable { onSeek(line.startMs) }
@@ -1585,6 +1674,7 @@ private fun LyricsLineList(
                             active = active,
                             positionMs = positionMs,
                             activeColor = lyricAccent,
+                            highlightEnabled = lyricsWordHighlightEnabled,
                             highlightIntensity = lyricsWordHighlightIntensity,
                         ),
                         modifier = Modifier.fillMaxWidth(),
@@ -1658,9 +1748,10 @@ private fun EchoLyricLine.displayText(
     active: Boolean,
     positionMs: Long,
     activeColor: Color,
+    highlightEnabled: Boolean,
     highlightIntensity: Float,
 ) =
-    if (!active || words.isEmpty()) {
+    if (!active || !highlightEnabled || words.isEmpty()) {
         buildAnnotatedString { append(text) }
     } else {
         buildAnnotatedString {

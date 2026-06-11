@@ -144,8 +144,6 @@ private class EchoSchemeRoutingDataSource(
 
 @UnstableApi
 private object EchoRemotePlaybackCache {
-    private const val MaxCacheBytes = 256L * 1024L * 1024L
-
     @Volatile
     private var cache: SimpleCache? = null
 
@@ -153,7 +151,7 @@ private object EchoRemotePlaybackCache {
     fun get(context: Context): SimpleCache =
         cache ?: SimpleCache(
             File(context.cacheDir, "echo-remote-playback-cache"),
-            LeastRecentlyUsedCacheEvictor(MaxCacheBytes),
+            LeastRecentlyUsedCacheEvictor(EchoPlaybackCachePolicy.maxCacheBytes),
         ).also { cache = it }
 }
 

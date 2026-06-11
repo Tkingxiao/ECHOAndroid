@@ -28,10 +28,8 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoBackgroundMode
-import app.echo.android.design.EchoGlassCyan
 import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassNight
-import app.echo.android.design.EchoGlassViolet
 import app.echo.android.design.EchoGlassBackground
 import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.LocalEchoEffectivePerformanceMode
@@ -51,6 +49,7 @@ fun EchoCustomBackground(
     val blur = settings.customBackgroundBlur.coerceIn(0f, maxBlur).dp
     val brightness = settings.customBackgroundBrightness
     val glass = settings.customBackgroundGlass
+    val backgroundScale = settings.customBackgroundScale.coerceIn(1.00f, 1.40f)
 
     Box(modifier = modifier.fillMaxSize()) {
         if (hasCustomBackground) {
@@ -59,12 +58,14 @@ fun EchoCustomBackground(
                     uri = uri.orEmpty(),
                     blur = blur,
                     brightness = brightness,
+                    backgroundScale = backgroundScale,
                 )
 
                 EchoBackgroundMode.Image -> EchoImageWallpaper(
                     uri = uri.orEmpty(),
                     blur = blur,
                     brightness = brightness,
+                    backgroundScale = backgroundScale,
                 )
 
                 else -> EchoGlassBackground(Modifier.fillMaxSize())
@@ -81,6 +82,7 @@ private fun EchoImageWallpaper(
     uri: String,
     blur: androidx.compose.ui.unit.Dp,
     brightness: Float,
+    backgroundScale: Float,
 ) {
     Box(Modifier.fillMaxSize()) {
         AsyncImage(
@@ -89,7 +91,7 @@ private fun EchoImageWallpaper(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
-                .scale(1.05f)
+                .scale(backgroundScale)
                 .blur(blur)
                 .alpha(brightness.coerceIn(0.35f, 1.15f)),
         )
@@ -103,6 +105,7 @@ private fun EchoVideoWallpaper(
     uri: String,
     blur: androidx.compose.ui.unit.Dp,
     brightness: Float,
+    backgroundScale: Float,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -143,7 +146,7 @@ private fun EchoVideoWallpaper(
             },
             modifier = Modifier
                 .fillMaxSize()
-                .scale(1.05f)
+                .scale(backgroundScale)
                 .blur(blur)
                 .alpha(brightness.coerceIn(0.35f, 1.15f)),
         )
@@ -173,12 +176,12 @@ private fun EchoBrightnessOverlay(brightness: Float) {
 @Composable
 private fun EchoBackgroundGlassOverlay(glass: Float) {
     val dark = LocalEchoDarkTheme.current
-    val readableGlass = if (dark) glass.coerceAtLeast(0.78f) else glass
+    val readableGlass = if (dark) glass.coerceAtLeast(0.88f) else glass
     val colors = if (dark) {
         listOf(
-            EchoGlassNight.copy(alpha = (readableGlass * 0.86f).coerceIn(0.62f, 0.88f)),
-            EchoGlassInk.copy(alpha = (readableGlass * 0.76f).coerceIn(0.58f, 0.82f)),
-            EchoGlassNight.copy(alpha = (readableGlass * 0.90f).coerceIn(0.66f, 0.90f)),
+            EchoGlassNight.copy(alpha = (readableGlass * 0.90f).coerceIn(0.72f, 0.94f)),
+            EchoGlassInk.copy(alpha = (readableGlass * 0.82f).coerceIn(0.66f, 0.88f)),
+            EchoGlassNight.copy(alpha = (readableGlass * 0.94f).coerceIn(0.76f, 0.96f)),
         )
     } else {
         listOf(
@@ -194,19 +197,4 @@ private fun EchoBackgroundGlassOverlay(glass: Float) {
                 Brush.verticalGradient(colors),
             ),
     )
-    if (dark) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            EchoGlassCyan.copy(alpha = (glass * 0.04f).coerceIn(0f, 0.08f)),
-                            Color.Transparent,
-                            EchoGlassViolet.copy(alpha = (glass * 0.04f).coerceIn(0f, 0.07f)),
-                        ),
-                    ),
-                ),
-        )
-    }
 }

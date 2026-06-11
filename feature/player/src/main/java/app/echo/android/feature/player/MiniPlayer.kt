@@ -62,8 +62,8 @@ import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoAccent
 import app.echo.android.design.EchoAccentDeep
 import app.echo.android.design.EchoDarkGlassBorder
-import app.echo.android.design.EchoGlassPanel
 import app.echo.android.design.LocalEchoDarkTheme
+import app.echo.android.design.LocalEchoEffectivePerformanceMode
 import app.echo.android.design.progressFraction
 import app.echo.android.model.playback.EchoPlaybackState
 import app.echo.android.model.playback.EchoPlaybackStatus
@@ -71,7 +71,7 @@ import app.echo.android.model.playback.PlaybackPositionState
 import kotlinx.coroutines.launch
 
 private val MiniPlayerMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
-private val MiniPlayerGlassBlue = Color(0xFF7DD3FC)
+private val MiniPlayerGlassBlue = Color(0xFFD3A9B5)
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -90,6 +90,7 @@ fun MiniPlayer(
     val scope = rememberCoroutineScope()
     val scheme = MaterialTheme.colorScheme
     val dark = LocalEchoDarkTheme.current
+    val lightweight = LocalEchoEffectivePerformanceMode.current.isLightweight
     val offsetX = remember { Animatable(0f) }
     val trackEntrance = remember { Animatable(1f) }
     var widthPx by remember { mutableStateOf(1f) }
@@ -99,36 +100,44 @@ fun MiniPlayer(
     val compactDock = onShowDock != null || onOpenQueue != null
     val cornerRadius by animateDpAsState(
         targetValue = if (compactDock) 28.dp else 20.dp,
-        animationSpec = tween(durationMillis = 420, easing = MiniPlayerMotionEasing),
+        animationSpec = tween(durationMillis = miniPlayerMotionDuration(420, lightweight), easing = MiniPlayerMotionEasing),
         label = "mini-player-corner",
     )
     val surfaceElevation by animateDpAsState(
-        targetValue = if (compactDock) 18.dp else 14.dp,
-        animationSpec = tween(durationMillis = 420, easing = MiniPlayerMotionEasing),
+        targetValue = if (compactDock) 8.dp else 6.dp,
+        animationSpec = tween(durationMillis = miniPlayerMotionDuration(420, lightweight), easing = MiniPlayerMotionEasing),
         label = "mini-player-elevation",
     )
     val borderColor by animateColorAsState(
         targetValue = when {
-            dark && status.isPlaying -> MiniPlayerGlassBlue.copy(alpha = 0.34f)
-            dark -> Color.White.copy(alpha = 0.22f)
+            dark && status.isPlaying -> MiniPlayerGlassBlue.copy(alpha = 0.18f)
+            dark -> Color.White.copy(alpha = 0.08f)
             status.isPlaying -> scheme.primary.copy(alpha = 0.22f)
             else -> Color(0xFFE9E9EC)
         },
-        animationSpec = tween(durationMillis = 320, easing = MiniPlayerMotionEasing),
+        animationSpec = tween(durationMillis = miniPlayerMotionDuration(320, lightweight), easing = MiniPlayerMotionEasing),
         label = "mini-player-border",
     )
     val playButtonScale by animateFloatAsState(
         targetValue = if (status.isPlaying) 1f else 0.96f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        animationSpec = if (lightweight) {
+            tween(durationMillis = 120, easing = MiniPlayerMotionEasing)
+        } else {
+            spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+        },
         label = "mini-player-play-scale",
     )
     val progressAlpha by animateFloatAsState(
         targetValue = if (activeDurationMs > 0L) 1f else 0.42f,
-        animationSpec = tween(durationMillis = 220, easing = MiniPlayerMotionEasing),
+        animationSpec = tween(durationMillis = miniPlayerMotionDuration(220, lightweight), easing = MiniPlayerMotionEasing),
         label = "mini-player-progress-alpha",
     )
     val shape = RoundedCornerShape(cornerRadius)
     LaunchedEffect(status.track?.id) {
+        if (lightweight) {
+            trackEntrance.snapTo(1f)
+            return@LaunchedEffect
+        }
         trackEntrance.snapTo(0.985f)
         trackEntrance.animateTo(
             targetValue = 1f,
@@ -142,19 +151,18 @@ fun MiniPlayer(
             .shadow(
                 elevation = surfaceElevation,
                 shape = shape,
-                ambientColor = if (dark) Color.Black.copy(alpha = 0.30f) else Color.Black.copy(alpha = 0.08f),
-                spotColor = if (dark) MiniPlayerGlassBlue.copy(alpha = 0.12f) else scheme.primary.copy(alpha = 0.16f),
+                ambientColor = if (dark) Color.Black.copy(alpha = 0.20f) else Color.Black.copy(alpha = 0.08f),
+                spotColor = if (dark) Color.Black.copy(alpha = 0.12f) else scheme.primary.copy(alpha = 0.16f),
             )
             .clip(shape)
-            .background(if (dark) scheme.surface.copy(alpha = if (compactDock) 0.94f else 0.92f) else Color.Transparent)
+            .background(if (dark) scheme.surface.copy(alpha = if (compactDock) 0.62f else 0.56f) else Color.Transparent)
             .background(
                 if (dark) {
                     Brush.linearGradient(
                         listOf(
-                            Color.White.copy(alpha = if (compactDock) 0.08f else 0.06f),
-                            scheme.surfaceVariant.copy(alpha = if (compactDock) 0.76f else 0.68f),
-                            scheme.surface.copy(alpha = if (compactDock) 0.98f else 0.96f),
-                            EchoGlassPanel.copy(alpha = if (compactDock) 0.88f else 0.82f),
+                            Color.White.copy(alpha = if (compactDock) 0.04f else 0.03f),
+                            scheme.surfaceVariant.copy(alpha = if (compactDock) 0.42f else 0.34f),
+                            scheme.surface.copy(alpha = if (compactDock) 0.66f else 0.58f),
                         ),
                     )
                 } else {
@@ -193,7 +201,7 @@ fun MiniPlayer(
                         Brush.horizontalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color.White.copy(alpha = 0.24f),
+                                Color.White.copy(alpha = 0.08f),
                                 Color.Transparent,
                             ),
                         ),
@@ -307,8 +315,8 @@ fun MiniPlayer(
                             .height(2.dp)
                             .clip(RoundedCornerShape(99.dp))
                             .graphicsLayer { alpha = progressAlpha },
-                        color = if (dark) MiniPlayerGlassBlue.copy(alpha = 0.90f) else scheme.primary,
-                        trackColor = if (dark) Color.White.copy(alpha = 0.24f) else scheme.outlineVariant.copy(alpha = 0.90f),
+                        color = if (dark) MiniPlayerGlassBlue.copy(alpha = 0.62f) else scheme.primary,
+                        trackColor = if (dark) Color.White.copy(alpha = 0.14f) else scheme.outlineVariant.copy(alpha = 0.90f),
                     )
                 }
             }
@@ -318,8 +326,8 @@ fun MiniPlayer(
                     .shadow(
                         elevation = 6.dp,
                         shape = CircleShape,
-                        ambientColor = if (dark) MiniPlayerGlassBlue.copy(alpha = 0.24f) else EchoAccent.copy(alpha = 0.30f),
-                        spotColor = if (dark) EchoAccent.copy(alpha = 0.28f) else EchoAccentDeep.copy(alpha = 0.34f),
+                        ambientColor = if (dark) Color.Black.copy(alpha = 0.16f) else EchoAccent.copy(alpha = 0.30f),
+                        spotColor = if (dark) MiniPlayerGlassBlue.copy(alpha = 0.10f) else EchoAccentDeep.copy(alpha = 0.34f),
                     )
                     .graphicsLayer {
                         scaleX = playButtonScale
@@ -328,7 +336,7 @@ fun MiniPlayer(
                     .clip(CircleShape)
                     .background(
                         if (dark) {
-                            Brush.linearGradient(listOf(Color(0xFF67D8FF), EchoAccent, EchoAccentDeep))
+                            Brush.linearGradient(listOf(MiniPlayerGlassBlue, Color(0xFFAA838F)))
                         } else {
                             Brush.linearGradient(listOf(Color(0xFF111318), Color(0xFF111318)))
                         },
@@ -377,6 +385,9 @@ fun MiniPlayer(
         }
     }
 }
+
+private fun miniPlayerMotionDuration(defaultMs: Int, lightweight: Boolean): Int =
+    if (lightweight) (defaultMs * 0.48f).toInt().coerceIn(90, defaultMs) else defaultMs
 
 @Composable
 private fun PauseBarsIcon(

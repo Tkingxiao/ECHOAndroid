@@ -1,8 +1,12 @@
 package app.echo.android
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
+import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -33,6 +37,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +53,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import app.echo.android.connect.EchoPairingParser
@@ -66,7 +74,6 @@ import app.echo.android.feature.player.NowPlayingScreen
 import app.echo.android.feature.player.PlaybackQueueSheet
 import app.echo.android.feature.settings.DiagnosticsScreen
 import app.echo.android.feature.settings.SettingsScreen
-import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoBackgroundMode
 import app.echo.android.data.EchoFontFamilyMode
 import app.echo.android.model.connect.EchoRemoteCommand
@@ -80,11 +87,14 @@ import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.library.NeteaseAudioQuality
 import app.echo.android.model.playback.PlaybackPositionState
+import app.echo.android.model.settings.EchoEffectivePerformanceMode
+import app.echo.android.model.settings.EchoPerformanceMode
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import app.echo.android.design.echoFontFamilyForMode
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -126,12 +136,24 @@ private val EchoPagerPage.dockTab: EchoTab?
         EchoPagerPage.Settings -> null
     }
 
-private fun routeMotionSpec(fromPage: Int, toPage: Int): AnimationSpec<Float> {
+private fun routeMotionSpec(
+    fromPage: Int,
+    toPage: Int,
+    effectivePerformanceMode: EchoEffectivePerformanceMode,
+): AnimationSpec<Float> {
     val distance = (toPage - fromPage).absoluteValue.coerceAtLeast(1)
     val duration = (RouteMotionBaseDurationMs + (distance - 1) * RouteMotionDistanceDurationMs)
         .coerceAtMost(RouteMotionMaxDurationMs)
+        .let { motionDuration(it, effectivePerformanceMode) }
     return tween(durationMillis = duration, easing = RouteMotionEasing)
 }
+
+private fun motionDuration(defaultMs: Int, effectivePerformanceMode: EchoEffectivePerformanceMode): Int =
+    if (effectivePerformanceMode.isLightweight) {
+        (defaultMs * 0.48f).roundToInt().coerceIn(90, defaultMs)
+    } else {
+        defaultMs
+    }
 
 @Composable
 fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
@@ -194,6 +216,28 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val playbackStatus by viewModel.playbackStatus.collectAsStateWithLifecycle()
     val playbackQueue by viewModel.playbackQueue.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle(viewModel.initialAppSettings)
+    val systemPowerSaveMode = rememberSystemPowerSaveMode()
+    val effectivePerformanceMode = remember(appSettings.performanceMode, systemPowerSaveMode) {
+        EchoPerformanceMode.fromId(appSettings.performanceMode).resolve(systemPowerSaveMode)
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var appVisible by remember {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> appVisible = true
+                Lifecycle.Event.ON_STOP -> appVisible = false
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(effectivePerformanceMode) {
+        viewModel.setEffectivePerformanceMode(effectivePerformanceMode)
+    }
     var lastEchoLinkAutoConnectKey by remember { mutableStateOf<String?>(null) }
     val echoLinkSavedKey = remember(appSettings.echoLinkPcAddress, appSettings.echoLinkPcToken) {
         val address = appSettings.echoLinkPcAddress?.takeIf { it.isNotBlank() }
@@ -342,6 +386,14 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     var nowPlayingExpanded by remember { mutableStateOf(false) }
     var queueSheetVisible by remember { mutableStateOf(false) }
     val libraryDetailOpen = selectedAlbum != null || selectedArtist != null || selectedFolder != null || selectedPlaylist != null
+    LaunchedEffect(effectivePerformanceMode, appVisible, nowPlayingExpanded) {
+        val visibility = when {
+            !appVisible -> PlaybackProgressUiVisibility.Background
+            nowPlayingExpanded -> PlaybackProgressUiVisibility.NowPlayingExpanded
+            else -> PlaybackProgressUiVisibility.MiniPlayer
+        }
+        viewModel.setPlaybackProgressUiVisibility(visibility)
+    }
     val systemDarkTheme = isSystemInDarkTheme()
     var currentMinuteOfDay by remember { mutableIntStateOf(currentMinuteOfDayNow()) }
     LaunchedEffect(appSettings.scheduledDarkModeEnabled) {
@@ -377,6 +429,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     val activity = context as? ComponentActivity
 
     SideEffect {
+        (activity as? MainActivity)?.setHighRefreshRateRequested(!effectivePerformanceMode.isLightweight)
         activity?.enableEdgeToEdge(
             statusBarStyle = if (darkTheme) {
                 SystemBarStyle.dark(AndroidColor.TRANSPARENT)
@@ -406,7 +459,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
             if (tabPagerState.currentPage != targetPage) {
                 tabPagerState.animateScrollToPage(
                     page = targetPage,
-                    animationSpec = routeMotionSpec(tabPagerState.currentPage, targetPage),
+                    animationSpec = routeMotionSpec(tabPagerState.currentPage, targetPage, effectivePerformanceMode),
                 )
             }
         }
@@ -438,7 +491,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                 if (tabPagerState.currentPage != targetPage) {
                     tabPagerState.animateScrollToPage(
                         page = targetPage,
-                        animationSpec = routeMotionSpec(tabPagerState.currentPage, targetPage),
+                        animationSpec = routeMotionSpec(tabPagerState.currentPage, targetPage, effectivePerformanceMode),
                     )
                 }
             } finally {
@@ -494,6 +547,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         fontFamily = uiFontFamily,
         fontScale = appSettings.uiFontScale,
         densityScale = appSettings.uiDensityScale,
+        effectivePerformanceMode = effectivePerformanceMode,
     ) {
         Box(Modifier.fillMaxSize()) {
             EchoCustomBackground(settings = appSettings, modifier = Modifier.fillMaxSize())
@@ -641,6 +695,8 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 artistCount = libraryStats.artistCount,
                                 dynamicArtworkEnabled = appSettings.dynamicArtworkEnabled,
                                 compactModeEnabled = appSettings.compactModeEnabled,
+                                performanceMode = appSettings.performanceMode,
+                                effectivePerformanceMode = effectivePerformanceMode.id,
                                 trackAudioInfoTagsVisible = appSettings.trackAudioInfoTagsVisible,
                                 pcHandoffEnabled = appSettings.pcHandoffEnabled,
                                 discordPresenceViaPcEnabled = appSettings.discordPresenceViaPcEnabled,
@@ -654,6 +710,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 customBackgroundBlur = appSettings.customBackgroundBlur,
                                 customBackgroundBrightness = appSettings.customBackgroundBrightness,
                                 customBackgroundGlass = appSettings.customBackgroundGlass,
+                                customBackgroundScale = appSettings.customBackgroundScale,
                                 uiFontFamily = appSettings.uiFontFamily,
                                 uiFontScale = appSettings.uiFontScale,
                                 uiDensityScale = appSettings.uiDensityScale,
@@ -675,6 +732,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 lastFmSharedSecretLocked = LastFmApiConfig.hasSharedSecret,
                                 onDynamicArtworkEnabledChange = viewModel::setDynamicArtworkEnabled,
                                 onCompactModeEnabledChange = viewModel::setCompactModeEnabled,
+                                onPerformanceModeChange = viewModel::setPerformanceMode,
                                 onTrackAudioInfoTagsVisibleChange = viewModel::setTrackAudioInfoTagsVisible,
                                 onPcHandoffEnabledChange = viewModel::setPcHandoffEnabled,
                                 onDiscordPresenceViaPcEnabledChange = viewModel::setDiscordPresenceViaPcEnabled,
@@ -691,6 +749,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 onCustomBackgroundBlurChange = viewModel::setCustomBackgroundBlur,
                                 onCustomBackgroundBrightnessChange = viewModel::setCustomBackgroundBrightness,
                                 onCustomBackgroundGlassChange = viewModel::setCustomBackgroundGlass,
+                                onCustomBackgroundScaleChange = viewModel::setCustomBackgroundScale,
                                 onUiFontFamilyChange = viewModel::setUiFontFamily,
                                 onUiFontScaleChange = viewModel::setUiFontScale,
                                 onUiDensityScaleChange = viewModel::setUiDensityScale,
@@ -819,17 +878,23 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     AnimatedContent(
                         targetState = bottomDockExpanded,
                         transitionSpec = {
-                            val enter = fadeIn(tween(durationMillis = 220, delayMillis = 70, easing = DockMotionEasing)) +
-                                slideInVertically(tween(durationMillis = 460, easing = DockMotionEasing)) { height -> height / 3 } +
+                            val enter = fadeIn(
+                                tween(
+                                    durationMillis = motionDuration(220, effectivePerformanceMode),
+                                    delayMillis = if (effectivePerformanceMode.isLightweight) 0 else 70,
+                                    easing = DockMotionEasing,
+                                ),
+                            ) +
+                                slideInVertically(tween(durationMillis = motionDuration(460, effectivePerformanceMode), easing = DockMotionEasing)) { height -> height / 3 } +
                                 scaleIn(
                                     initialScale = 0.96f,
-                                    animationSpec = tween(durationMillis = 460, easing = DockMotionEasing),
+                                    animationSpec = tween(durationMillis = motionDuration(460, effectivePerformanceMode), easing = DockMotionEasing),
                                 )
-                            val exit = fadeOut(tween(durationMillis = 150, easing = DockMotionEasing)) +
-                                slideOutVertically(tween(durationMillis = 260, easing = DockMotionEasing)) { height -> height / 5 } +
+                            val exit = fadeOut(tween(durationMillis = motionDuration(150, effectivePerformanceMode), easing = DockMotionEasing)) +
+                                slideOutVertically(tween(durationMillis = motionDuration(260, effectivePerformanceMode), easing = DockMotionEasing)) { height -> height / 5 } +
                                 scaleOut(
                                     targetScale = 0.985f,
-                                    animationSpec = tween(durationMillis = 260, easing = DockMotionEasing),
+                                    animationSpec = tween(durationMillis = motionDuration(260, effectivePerformanceMode), easing = DockMotionEasing),
                                 )
                             enter togetherWith exit
                         },
@@ -873,17 +938,22 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
 
             AnimatedVisibility(
                 visible = nowPlayingExpanded,
-                enter = slideInVertically(tween(durationMillis = 420, easing = DockMotionEasing)) { height -> height } +
-                    fadeIn(tween(durationMillis = 240, delayMillis = 40)) +
+                enter = slideInVertically(tween(durationMillis = motionDuration(420, effectivePerformanceMode), easing = DockMotionEasing)) { height -> height } +
+                    fadeIn(
+                        tween(
+                            durationMillis = motionDuration(240, effectivePerformanceMode),
+                            delayMillis = if (effectivePerformanceMode.isLightweight) 0 else 40,
+                        ),
+                    ) +
                     scaleIn(
                         initialScale = 0.985f,
-                        animationSpec = tween(durationMillis = 420, easing = DockMotionEasing),
+                        animationSpec = tween(durationMillis = motionDuration(420, effectivePerformanceMode), easing = DockMotionEasing),
                     ),
-                exit = slideOutVertically(tween(durationMillis = 360, easing = DockMotionEasing)) { height -> height } +
-                    fadeOut(tween(durationMillis = 220, easing = DockMotionEasing)) +
+                exit = slideOutVertically(tween(durationMillis = motionDuration(360, effectivePerformanceMode), easing = DockMotionEasing)) { height -> height } +
+                    fadeOut(tween(durationMillis = motionDuration(220, effectivePerformanceMode), easing = DockMotionEasing)) +
                     scaleOut(
                         targetScale = 0.965f,
-                        animationSpec = tween(durationMillis = 360, easing = DockMotionEasing),
+                        animationSpec = tween(durationMillis = motionDuration(360, effectivePerformanceMode), easing = DockMotionEasing),
                     ),
             ) {
                 val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
@@ -899,7 +969,9 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     lyricsAlignment = appSettings.lyricsAlignment,
                     lyricsLineSpacing = appSettings.lyricsLineSpacing,
                     lyricsBackgroundDim = appSettings.lyricsBackgroundDim,
+                    lyricsWordHighlightEnabled = appSettings.lyricsWordHighlightEnabled,
                     lyricsWordHighlightIntensity = appSettings.lyricsWordHighlightIntensity,
+                    lyricsImmersiveModeEnabled = appSettings.lyricsImmersiveModeEnabled,
                     lyricsMotionMode = appSettings.lyricsMotionMode,
                     lyricsShowTranslation = appSettings.lyricsShowTranslation,
                     lyricsShowRomanization = appSettings.lyricsShowRomanization,
@@ -925,7 +997,9 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     onLyricsAlignmentChange = viewModel::setLyricsAlignment,
                     onLyricsLineSpacingChange = viewModel::setLyricsLineSpacing,
                     onLyricsBackgroundDimChange = viewModel::setLyricsBackgroundDim,
+                    onLyricsWordHighlightEnabledChange = viewModel::setLyricsWordHighlightEnabled,
                     onLyricsWordHighlightIntensityChange = viewModel::setLyricsWordHighlightIntensity,
+                    onLyricsImmersiveModeChange = viewModel::setLyricsImmersiveModeEnabled,
                     onLyricsMotionModeChange = viewModel::setLyricsMotionMode,
                     onLyricsShowTranslationChange = viewModel::setLyricsShowTranslation,
                     onLyricsShowRomanizationChange = viewModel::setLyricsShowRomanization,
@@ -976,6 +1050,32 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
             )
         }
     }
+}
+
+@Composable
+private fun rememberSystemPowerSaveMode(): Boolean {
+    val context = LocalContext.current
+    val powerManager = remember(context) {
+        context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+    }
+    var powerSaveMode by remember(powerManager) {
+        mutableStateOf(powerManager?.isPowerSaveMode == true)
+    }
+    DisposableEffect(context, powerManager) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                if (intent?.action == PowerManager.ACTION_POWER_SAVE_MODE_CHANGED) {
+                    powerSaveMode = powerManager?.isPowerSaveMode == true
+                }
+            }
+        }
+        val filter = IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        onDispose {
+            runCatching { context.unregisterReceiver(receiver) }
+        }
+    }
+    return powerSaveMode
 }
 
 @Composable

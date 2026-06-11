@@ -82,14 +82,14 @@ val EchoHomeBlueDeep = Color(0xFF176BBD)
 val EchoHomeMist = Color(0xFFEFF4FA)
 val EchoGlassBorder = Color(0xFFE1E8F2)
 val EchoSoftLine = Color(0xFFD5E0EC)
-val EchoGlassNight = Color(0xFF080B12)
-val EchoGlassInk = Color(0xFF101722)
-val EchoGlassPanel = Color(0xFF182131)
-val EchoGlassViolet = Color(0xFF1B2635)
-val EchoGlassCyan = Color(0xFF142634)
-val EchoGlassRose = Color(0xFF2B2029)
-val EchoDarkGlassBorder = Color.White.copy(alpha = 0.16f)
-val EchoDarkGlassLine = Color.White.copy(alpha = 0.10f)
+val EchoGlassNight = Color(0xFF17171B)
+val EchoGlassInk = Color(0xFF202126)
+val EchoGlassPanel = Color(0xFF2A2B30)
+val EchoGlassViolet = Color(0xFF252329)
+val EchoGlassCyan = Color(0xFF2D2E33)
+val EchoGlassRose = Color(0xFF3A3035)
+val EchoDarkGlassBorder = Color.White.copy(alpha = 0.08f)
+val EchoDarkGlassLine = Color.White.copy(alpha = 0.06f)
 
 @Composable
 fun GlassSurface(
@@ -102,7 +102,7 @@ fun GlassSurface(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(28.dp),
-        color = if (dark) EchoGlassInk.copy(alpha = (alpha + 0.64f).coerceIn(0.72f, 0.90f)) else Color.White.copy(alpha = alpha),
+        color = if (dark) EchoGlassPanel.copy(alpha = (alpha + 0.40f).coerceIn(0.48f, 0.68f)) else Color.White.copy(alpha = alpha),
         border = BorderStroke(
             1.dp,
             if (dark) EchoDarkGlassBorder else Color.White.copy(alpha = 0.32f),
@@ -118,11 +118,10 @@ fun echoDarkGlassBrush(strength: Float = 1f): Brush {
     return Brush.linearGradient(
         if (dark) {
             listOf(
-                Color.White.copy(alpha = 0.035f * clamped),
-                EchoGlassPanel.copy(alpha = 0.82f * clamped),
-                EchoGlassInk.copy(alpha = 0.90f * clamped),
-                EchoGlassViolet.copy(alpha = 0.16f * clamped),
-                EchoGlassCyan.copy(alpha = 0.10f * clamped),
+                Color.White.copy(alpha = 0.030f * clamped),
+                EchoGlassPanel.copy(alpha = 0.54f * clamped),
+                EchoGlassInk.copy(alpha = 0.62f * clamped),
+                EchoGlassRose.copy(alpha = 0.08f * clamped),
             )
         } else {
             listOf(
@@ -144,11 +143,10 @@ fun echoGlassContainerBrush(
     return Brush.linearGradient(
         if (dark) {
             listOf(
-                Color.White.copy(alpha = 0.045f * clamped),
-                EchoGlassPanel.copy(alpha = 0.78f * clamped),
-                EchoGlassInk.copy(alpha = 0.88f * clamped),
-                accent.copy(alpha = 0.12f * clamped),
-                EchoGlassViolet.copy(alpha = 0.10f * clamped),
+                Color.White.copy(alpha = 0.030f * clamped),
+                EchoGlassPanel.copy(alpha = 0.50f * clamped),
+                EchoGlassInk.copy(alpha = 0.64f * clamped),
+                accent.copy(alpha = 0.05f * clamped),
             )
         } else {
             listOf(
@@ -169,10 +167,10 @@ fun echoGlassRowBrush(
     return Brush.linearGradient(
         if (dark) {
             listOf(
-                Color.White.copy(alpha = if (selected) 0.07f else 0.035f),
-                EchoGlassPanel.copy(alpha = if (selected) 0.80f else 0.68f),
-                EchoGlassInk.copy(alpha = if (selected) 0.82f else 0.74f),
-                accent.copy(alpha = if (selected) 0.16f else 0.08f),
+                Color.White.copy(alpha = if (selected) 0.06f else 0.025f),
+                EchoGlassPanel.copy(alpha = if (selected) 0.56f else 0.44f),
+                EchoGlassInk.copy(alpha = if (selected) 0.60f else 0.50f),
+                accent.copy(alpha = if (selected) 0.08f else 0.04f),
             )
         } else {
             listOf(
@@ -191,7 +189,7 @@ fun echoDarkGlassBorder(selected: Boolean = false): BorderStroke {
     return BorderStroke(
         1.dp,
         if (dark) {
-            if (selected) scheme.primary.copy(alpha = 0.44f) else Color.White.copy(alpha = 0.24f)
+            if (selected) scheme.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.08f)
         } else {
             if (selected) scheme.primary.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.84f)
         },
@@ -220,9 +218,9 @@ fun EchoGlassBackground(modifier: Modifier = Modifier) {
         if (dark) {
             listOf(
                 EchoGlassNight,
-                Color(0xFF0C111A),
+                Color(0xFF1D1D21),
                 EchoGlassInk,
-                EchoGlassNight,
+                Color(0xFF151519),
             )
         } else {
             listOf(
@@ -246,7 +244,7 @@ fun EchoGlassBackground(modifier: Modifier = Modifier) {
         }
         drawRect(
             brush = Brush.verticalGradient(
-                colors = listOf(Color.Transparent, Color.Black.copy(alpha = if (dark) 0.20f else 0.04f)),
+                colors = listOf(Color.Transparent, Color.Black.copy(alpha = if (dark) 0.08f else 0.04f)),
                 startY = h * 0.44f,
                 endY = h,
             ),
@@ -297,10 +295,10 @@ fun PageChrome(
         val chromeGradient = if (dark) {
             Brush.verticalGradient(
                 listOf(
-                    EchoGlassNight.copy(alpha = 0.92f),
-                    EchoGlassInk.copy(alpha = 0.78f),
-                    EchoGlassPanel.copy(alpha = 0.46f),
-                    EchoGlassNight.copy(alpha = 0.20f),
+                    EchoGlassNight.copy(alpha = 0.62f),
+                    EchoGlassInk.copy(alpha = 0.44f),
+                    EchoGlassPanel.copy(alpha = 0.20f),
+                    Color.Transparent,
                 ),
             )
         } else {
@@ -381,7 +379,7 @@ fun PageChrome(
                                     badge,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (dark) Color.White.copy(alpha = 0.88f) else scheme.onSurface,
+                                    color = if (dark) Color.White.copy(alpha = 0.82f) else scheme.onSurface,
                                 )
                             }
                         }

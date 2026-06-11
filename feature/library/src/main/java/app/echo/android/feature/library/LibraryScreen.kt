@@ -138,13 +138,18 @@ private enum class LibrarySourceMode(
     Cloud("网盘", Icons.Rounded.CloudQueue),
 }
 
-private sealed interface LibraryAlbumTransitionTarget {
-    object Browser : LibraryAlbumTransitionTarget
+private sealed interface LibraryDetailTransitionTarget {
+    object Browser : LibraryDetailTransitionTarget
 
-    data class Detail(
+    data class AlbumDetail(
         val album: AlbumSummary,
         val tracks: LazyPagingItems<EchoTrack>,
-    ) : LibraryAlbumTransitionTarget
+    ) : LibraryDetailTransitionTarget
+
+    data class ArtistDetail(
+        val artist: ArtistSummary,
+        val tracks: LazyPagingItems<EchoTrack>,
+    ) : LibraryDetailTransitionTarget
 }
 
 private sealed interface LibraryFolderTransitionTarget {
@@ -301,18 +306,21 @@ fun LibraryScreen(
         return
     }
 
-    // 专辑详情走全屏沉浸式页面，不套用曲库的 PageChrome
+    // 详情页走全屏沉浸式页面，不套用曲库的 PageChrome
     val activeAlbumDetail = selectedAlbum
-    val albumTransitionTarget = if (activeAlbumDetail != null && albumDetailTracks != null) {
-        LibraryAlbumTransitionTarget.Detail(activeAlbumDetail, albumDetailTracks)
-    } else {
-        LibraryAlbumTransitionTarget.Browser
+    val activeArtistDetail = selectedArtist
+    val detailTransitionTarget = when {
+        activeAlbumDetail != null && albumDetailTracks != null ->
+            LibraryDetailTransitionTarget.AlbumDetail(activeAlbumDetail, albumDetailTracks)
+        activeArtistDetail != null && artistDetailTracks != null ->
+            LibraryDetailTransitionTarget.ArtistDetail(activeArtistDetail, artistDetailTracks)
+        else -> LibraryDetailTransitionTarget.Browser
     }
 
     AnimatedContent(
-        targetState = albumTransitionTarget,
+        targetState = detailTransitionTarget,
         transitionSpec = {
-            if (targetState is LibraryAlbumTransitionTarget.Detail) {
+            if (targetState != LibraryDetailTransitionTarget.Browser) {
                 val enter = slideInHorizontally(tween(durationMillis = 380, easing = LibraryFolderMotionEasing)) { it / 4 } +
                     fadeIn(tween(durationMillis = 220, easing = LibraryFolderMotionEasing)) +
                     scaleIn(
@@ -342,11 +350,11 @@ fun LibraryScreen(
                 enter togetherWith exit
             }
         },
-        label = "library-album-detail-transition",
+        label = "library-detail-transition",
         modifier = Modifier.fillMaxSize(),
     ) { target ->
         when (target) {
-            is LibraryAlbumTransitionTarget.Detail -> AlbumDetailPage(
+            is LibraryDetailTransitionTarget.AlbumDetail -> AlbumDetailPage(
                 album = target.album,
                 tracks = target.tracks,
                 onBack = onCloseDetail,
@@ -355,22 +363,16 @@ fun LibraryScreen(
                 onPlayTrack = onPlayTrack,
                 modifier = Modifier.fillMaxSize(),
             )
-            LibraryAlbumTransitionTarget.Browser -> {
-
-                // 艺术家详情同样走全屏沉浸式页面
-                val activeArtistDetail = selectedArtist
-                if (activeArtistDetail != null && artistDetailTracks != null) {
-                    ArtistDetailPage(
-                        artist = activeArtistDetail,
-                        tracks = artistDetailTracks,
-                        onBack = onCloseDetail,
-                        onPlayAll = { onPlayArtist(activeArtistDetail) },
-                        onShuffle = { onShuffleArtist(activeArtistDetail) },
-                        onPlayTrack = onPlayTrack,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    return@AnimatedContent
-                }
+            is LibraryDetailTransitionTarget.ArtistDetail -> ArtistDetailPage(
+                artist = target.artist,
+                tracks = target.tracks,
+                onBack = onCloseDetail,
+                onPlayAll = { onPlayArtist(target.artist) },
+                onShuffle = { onShuffleArtist(target.artist) },
+                onPlayTrack = onPlayTrack,
+                modifier = Modifier.fillMaxSize(),
+            )
+            LibraryDetailTransitionTarget.Browser -> {
 
                 val activeFolderDetail = selectedFolder
                 val activePlaylistDetail = selectedPlaylist
@@ -442,146 +444,146 @@ fun LibraryScreen(
                             modifier = Modifier.fillMaxSize(),
                         )
                         LibraryFolderTransitionTarget.Browser -> PageChrome(
-                title = "曲库",
-                subtitle = null,
-                badge = selectedSource.label,
-                showBrand = false,
-                compactHeader = true,
-                badgeContent = {},
-                actions = {
-                    LibrarySearchBar(
-                        query = libraryQuery,
-                        onQueryChange = onLibraryQueryChange,
-                        expandedWidth = 240.dp,
-                    )
-                    if (selectedSource == LibrarySourceMode.Local && selectedMode == LibraryViewMode.Songs) {
-                        LibraryTrackSortMenu(
-                            selectedSortMode = trackSortMode,
-                            onSortModeChange = onTrackSortModeChange,
-                        )
-                    }
-                    LibraryScanAction(
-                        hasPermission = hasPermission,
-                        scanState = scanState,
-                        onRequestPermission = onRequestPermission,
-                        onScanFolder = onScanFolder,
-                        onScanAll = onScanAll,
-                        onCancelScan = onCancelScan,
-                    )
-                },
-            ) {
-                when {
-                    scanState.isScanning -> LibraryScanStatus(scanState = scanState, onCancelScan = onCancelScan)
-                    tracks.loadState.refresh is LoadState.Loading -> {
-                        LibraryBrowserHeader(
-                            scanState = scanState,
-                            selectedSource = selectedSource,
-                            linkedLibraryAvailable = linkedLibraryAvailable,
-                            onSelectSource = ::selectSource,
-                            selectedMode = selectedMode,
-                            onSelectMode = { mode ->
-                                selectedModeIndex = mode.ordinal
-                                if (selectedSource == LibrarySourceMode.Cloud && mode != LibraryViewMode.Albums) {
-                                    selectedSource = LibrarySourceMode.Local
+                            title = "曲库",
+                            subtitle = null,
+                            badge = selectedSource.label,
+                            showBrand = false,
+                            compactHeader = true,
+                            badgeContent = {},
+                            actions = {
+                                LibrarySearchBar(
+                                    query = libraryQuery,
+                                    onQueryChange = onLibraryQueryChange,
+                                    expandedWidth = 240.dp,
+                                )
+                                if (selectedSource == LibrarySourceMode.Local && selectedMode == LibraryViewMode.Songs) {
+                                    LibraryTrackSortMenu(
+                                        selectedSortMode = trackSortMode,
+                                        onSortModeChange = onTrackSortModeChange,
+                                    )
                                 }
+                                LibraryScanAction(
+                                    hasPermission = hasPermission,
+                                    scanState = scanState,
+                                    onRequestPermission = onRequestPermission,
+                                    onScanFolder = onScanFolder,
+                                    onScanAll = onScanAll,
+                                    onCancelScan = onCancelScan,
+                                )
                             },
-                        )
-                        EmptyState("正在加载曲库...")
-                    }
-                    tracks.loadState.refresh is LoadState.Error -> {
-                        LibraryBrowserHeader(
-                            scanState = scanState,
-                            selectedSource = selectedSource,
-                            linkedLibraryAvailable = linkedLibraryAvailable,
-                            onSelectSource = ::selectSource,
-                            selectedMode = selectedMode,
-                            onSelectMode = { mode ->
-                                selectedModeIndex = mode.ordinal
-                                if (selectedSource == LibrarySourceMode.Cloud && mode != LibraryViewMode.Albums) {
-                                    selectedSource = LibrarySourceMode.Local
+                        ) {
+                            when {
+                                scanState.isScanning -> LibraryScanStatus(scanState = scanState, onCancelScan = onCancelScan)
+                                tracks.loadState.refresh is LoadState.Loading -> {
+                                    LibraryBrowserHeader(
+                                        scanState = scanState,
+                                        selectedSource = selectedSource,
+                                        linkedLibraryAvailable = linkedLibraryAvailable,
+                                        onSelectSource = ::selectSource,
+                                        selectedMode = selectedMode,
+                                        onSelectMode = { mode ->
+                                            selectedModeIndex = mode.ordinal
+                                            if (selectedSource == LibrarySourceMode.Cloud && mode != LibraryViewMode.Albums) {
+                                                selectedSource = LibrarySourceMode.Local
+                                            }
+                                        },
+                                    )
+                                    EmptyState("正在加载曲库...")
                                 }
-                            },
-                        )
-                        EmptyState("曲库查询失败。")
-                    }
-                    else -> {
-                        LibraryBrowserHeader(
-                            scanState = scanState,
-                            selectedSource = selectedSource,
-                            linkedLibraryAvailable = linkedLibraryAvailable,
-                            onSelectSource = ::selectSource,
-                            selectedMode = selectedMode,
-                            onSelectMode = { mode ->
-                                selectedModeIndex = mode.ordinal
-                                if (selectedSource == LibrarySourceMode.Cloud && mode != LibraryViewMode.Albums) {
-                                    selectedSource = LibrarySourceMode.Local
+                                tracks.loadState.refresh is LoadState.Error -> {
+                                    LibraryBrowserHeader(
+                                        scanState = scanState,
+                                        selectedSource = selectedSource,
+                                        linkedLibraryAvailable = linkedLibraryAvailable,
+                                        onSelectSource = ::selectSource,
+                                        selectedMode = selectedMode,
+                                        onSelectMode = { mode ->
+                                            selectedModeIndex = mode.ordinal
+                                            if (selectedSource == LibrarySourceMode.Cloud && mode != LibraryViewMode.Albums) {
+                                                selectedSource = LibrarySourceMode.Local
+                                            }
+                                        },
+                                    )
+                                    EmptyState("曲库查询失败。")
                                 }
-                            },
-                        )
-                        Box(modifier = Modifier.weight(1f)) {
-                            when (selectedMode) {
-                                LibraryViewMode.Songs -> {
-                                    if (!hasPermission) {
-                                        EmptyState("授权后即可索引本地音乐；云端曲库可直接进入“网盘”页。")
-                                    } else if (tracks.itemCount == 0) {
-                                        LibraryBootstrapState()
-                                    } else {
-                                        TrackList(
-                                            tracks = tracks,
-                                            onPlayTrack = onPlayTrack,
-                                            showAudioInfoTags = showTrackAudioInfoTags,
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
+                                else -> {
+                                    LibraryBrowserHeader(
+                                        scanState = scanState,
+                                        selectedSource = selectedSource,
+                                        linkedLibraryAvailable = linkedLibraryAvailable,
+                                        onSelectSource = ::selectSource,
+                                        selectedMode = selectedMode,
+                                        onSelectMode = { mode ->
+                                            selectedModeIndex = mode.ordinal
+                                            if (selectedSource == LibrarySourceMode.Cloud && mode != LibraryViewMode.Albums) {
+                                                selectedSource = LibrarySourceMode.Local
+                                            }
+                                        },
+                                    )
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        when (selectedMode) {
+                                            LibraryViewMode.Songs -> {
+                                                if (!hasPermission) {
+                                                    EmptyState("授权后即可索引本地音乐；云端曲库可直接进入“网盘”页。")
+                                                } else if (tracks.itemCount == 0) {
+                                                    LibraryBootstrapState()
+                                                } else {
+                                                    TrackList(
+                                                        tracks = tracks,
+                                                        onPlayTrack = onPlayTrack,
+                                                        showAudioInfoTags = showTrackAudioInfoTags,
+                                                        modifier = Modifier.fillMaxSize(),
+                                                    )
+                                                }
+                                            }
+
+                                            LibraryViewMode.Folders -> FolderList(
+                                                folders = folders,
+                                                onOpenFolder = onOpenFolder,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+
+                                            LibraryViewMode.Albums -> AlbumWall(
+                                                albums = if (selectedSource == LibrarySourceMode.Cloud) remoteAlbums else albums,
+                                                onOpenAlbum = onOpenAlbum,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+
+                                            LibraryViewMode.Artists -> ArtistWall(
+                                                artists = artists,
+                                                onOpenArtist = onOpenArtist,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+
+                                            LibraryViewMode.Cloud -> AlbumWall(
+                                                albums = remoteAlbums,
+                                                onOpenAlbum = onOpenAlbum,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+
+                                            LibraryViewMode.Playlists -> NeteasePlaylistPanel(
+                                                accountState = neteaseAccountState,
+                                                importState = neteaseImportState,
+                                                importedPlaylists = neteaseImportedPlaylists,
+                                                selectedQuality = neteaseQuality,
+                                                onLoginByPhone = onLoginNeteaseByPhone,
+                                                onLoginWithCookie = onLoginNeteaseWithCookie,
+                                                onLogout = onLogoutNetease,
+                                                onRefreshRemotePlaylists = onRefreshNeteasePlaylists,
+                                                onOpenNeteaseApp = onOpenNeteaseApp,
+                                                onQualityChange = onNeteaseQualityChange,
+                                                onImportPlaylist = onImportNeteasePlaylist,
+                                                onOpenImportedPlaylist = onOpenPlaylist,
+                                                onPlayImportedPlaylist = onPlayPlaylist,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                        }
                                     }
                                 }
-
-                                LibraryViewMode.Folders -> FolderList(
-                                    folders = folders,
-                                    onOpenFolder = onOpenFolder,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-
-                                LibraryViewMode.Albums -> AlbumWall(
-                                    albums = if (selectedSource == LibrarySourceMode.Cloud) remoteAlbums else albums,
-                                    onOpenAlbum = onOpenAlbum,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-
-                                LibraryViewMode.Artists -> ArtistWall(
-                                    artists = artists,
-                                    onOpenArtist = onOpenArtist,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-
-                                LibraryViewMode.Cloud -> AlbumWall(
-                                    albums = remoteAlbums,
-                                    onOpenAlbum = onOpenAlbum,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-
-                                LibraryViewMode.Playlists -> NeteasePlaylistPanel(
-                                    accountState = neteaseAccountState,
-                                    importState = neteaseImportState,
-                                    importedPlaylists = neteaseImportedPlaylists,
-                                    selectedQuality = neteaseQuality,
-                                    onLoginByPhone = onLoginNeteaseByPhone,
-                                    onLoginWithCookie = onLoginNeteaseWithCookie,
-                                    onLogout = onLogoutNetease,
-                                    onRefreshRemotePlaylists = onRefreshNeteasePlaylists,
-                                    onOpenNeteaseApp = onOpenNeteaseApp,
-                                    onQualityChange = onNeteaseQualityChange,
-                                    onImportPlaylist = onImportNeteasePlaylist,
-                                    onOpenImportedPlaylist = onOpenPlaylist,
-                                    onPlayImportedPlaylist = onPlayPlaylist,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
                             }
                         }
                     }
                 }
-            }
-        }
-    }
             }
         }
     }

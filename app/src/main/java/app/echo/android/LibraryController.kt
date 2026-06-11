@@ -18,6 +18,7 @@ import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.library.LibraryTrackSortMode
+import app.echo.android.model.settings.EchoEffectivePerformanceMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -97,6 +98,7 @@ internal class LibraryController(
 
     private var scanJob: Job? = null
     private var remoteScanJob: Job? = null
+    private var effectivePerformanceMode: EchoEffectivePerformanceMode = EchoEffectivePerformanceMode.Balanced
 
     val currentQuery: String
         get() = _libraryQuery.value
@@ -129,6 +131,10 @@ internal class LibraryController(
         _trackSortMode.value = sortMode
     }
 
+    fun setEffectivePerformanceMode(mode: EchoEffectivePerformanceMode) {
+        effectivePerformanceMode = mode
+    }
+
     fun refreshLibrary() {
         refreshLibrary(relativePathPrefix = null)
     }
@@ -150,7 +156,10 @@ internal class LibraryController(
         if (scanJob?.isActive == true) return
         scanJob = scope.launch {
             try {
-                repository.refreshMediaStoreSnapshot(relativePathPrefix = relativePathPrefix)
+                repository.refreshMediaStoreSnapshot(
+                    relativePathPrefix = relativePathPrefix,
+                    skipSampleRateRead = effectivePerformanceMode.isLightweight,
+                )
                     .collect { progress -> _scanState.value = progress }
             } catch (error: CancellationException) {
                 _scanState.value = _scanState.value.copy(

@@ -10,6 +10,8 @@ import androidx.activity.enableEdgeToEdge
 import app.echo.android.data.readEchoStartupThemeSnapshotForLaunch
 
 class MainActivity : ComponentActivity() {
+    private var highRefreshRateRequested = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val startupThemeSnapshot = applicationContext.readEchoStartupThemeSnapshotForLaunch()
@@ -23,7 +25,6 @@ class MainActivity : ComponentActivity() {
         )
         window.decorView.setBackgroundColor(startupWindowBackground(startupDarkTheme))
         applyEdgeToEdge(startupDarkTheme)
-        requestHighRefreshRate()
         setContent {
             EchoMobileApp()
         }
@@ -31,7 +32,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        requestHighRefreshRate()
+        if (highRefreshRateRequested) {
+            requestHighRefreshRate()
+        } else {
+            clearRefreshRatePreference()
+        }
+    }
+
+    fun setHighRefreshRateRequested(enabled: Boolean) {
+        if (highRefreshRateRequested == enabled) return
+        highRefreshRateRequested = enabled
+        if (enabled) {
+            requestHighRefreshRate()
+        } else {
+            clearRefreshRatePreference()
+        }
     }
 
     private fun applyEdgeToEdge(darkTheme: Boolean) {
@@ -58,6 +73,13 @@ class MainActivity : ComponentActivity() {
         val attributes = window.attributes
         attributes.preferredDisplayModeId = preferredMode.modeId
         attributes.preferredRefreshRate = preferredMode.refreshRate
+        window.attributes = attributes
+    }
+
+    private fun clearRefreshRatePreference() {
+        val attributes = window.attributes
+        attributes.preferredDisplayModeId = 0
+        attributes.preferredRefreshRate = 0f
         window.attributes = attributes
     }
 

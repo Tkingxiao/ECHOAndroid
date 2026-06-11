@@ -257,6 +257,7 @@ class EchoLibraryRepository(
     fun refreshMediaStoreSnapshot(
         relativePathPrefix: String? = null,
         batchSize: Int = ScanBatchSize,
+        skipSampleRateRead: Boolean = false,
     ): Flow<LibraryScanProgress> = flow {
         val dao = database.trackDao()
         val source = LibrarySource.MediaStore.id
@@ -308,6 +309,7 @@ class EchoLibraryRepository(
                 batchSize = batchSize,
                 relativePathPrefix = normalizedRelativePath,
                 existingTracks = existingFingerprints,
+                readSampleRate = !skipSampleRateRead,
                 onTotalCount = { count ->
                     totalCount = count
                     emitProgress(phase = LibraryScanPhase.QueryingMediaStore)

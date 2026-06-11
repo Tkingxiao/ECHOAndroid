@@ -45,7 +45,9 @@ import app.echo.android.model.playback.PlaybackHeatmapDay
 import app.echo.android.model.playback.PlaybackMetadataState
 import app.echo.android.model.playback.PlaybackPositionState
 import app.echo.android.model.playback.PlaybackQueueState
+import app.echo.android.model.settings.EchoEffectivePerformanceMode
 import app.echo.android.playback.EchoRemotePlaybackAuthRegistry
+import app.echo.android.playback.EchoPlaybackCachePolicy
 import app.echo.android.playback.EchoWebDavPlaybackCredential
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -97,6 +99,8 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     )
     private var pendingLastFmAuthToken: String? = null
     private var usbStartupPolicyApplied = false
+    private var effectivePerformanceMode: EchoEffectivePerformanceMode = EchoEffectivePerformanceMode.Balanced
+    private var playbackProgressUiVisibility: PlaybackProgressUiVisibility = PlaybackProgressUiVisibility.MiniPlayer
 
     val libraryQuery: StateFlow<String> = libraryController.libraryQuery
     val libraryTrackSortMode: StateFlow<LibraryTrackSortMode> = libraryController.trackSortMode
@@ -407,6 +411,26 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setPerformanceMode(value: String) {
+        updateSettings {
+            setPerformanceMode(value)
+        }
+    }
+
+    fun setEffectivePerformanceMode(mode: EchoEffectivePerformanceMode) {
+        if (effectivePerformanceMode == mode) return
+        effectivePerformanceMode = mode
+        libraryController.setEffectivePerformanceMode(mode)
+        EchoPlaybackCachePolicy.setEffectivePerformanceMode(mode)
+        playbackController.setProgressUpdatePolicy(mode, playbackProgressUiVisibility)
+    }
+
+    internal fun setPlaybackProgressUiVisibility(visibility: PlaybackProgressUiVisibility) {
+        if (playbackProgressUiVisibility == visibility) return
+        playbackProgressUiVisibility = visibility
+        playbackController.setProgressUpdatePolicy(effectivePerformanceMode, visibility)
+    }
+
     fun setTrackAudioInfoTagsVisible(visible: Boolean) {
         updateSettings {
             setTrackAudioInfoTagsVisible(visible)
@@ -564,6 +588,12 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setCustomBackgroundScale(value: Float) {
+        updateSettings {
+            setCustomBackgroundScale(value)
+        }
+    }
+
     fun setUiFontFamily(value: String) {
         updateSettings {
             setUiFontFamily(value)
@@ -618,9 +648,21 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setLyricsWordHighlightEnabled(enabled: Boolean) {
+        updateSettings {
+            setLyricsWordHighlightEnabled(enabled)
+        }
+    }
+
     fun setLyricsWordHighlightIntensity(value: Float) {
         updateSettings {
             setLyricsWordHighlightIntensity(value)
+        }
+    }
+
+    fun setLyricsImmersiveModeEnabled(enabled: Boolean) {
+        updateSettings {
+            setLyricsImmersiveModeEnabled(enabled)
         }
     }
 

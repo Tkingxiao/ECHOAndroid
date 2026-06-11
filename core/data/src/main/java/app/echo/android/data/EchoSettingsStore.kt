@@ -36,6 +36,7 @@ data class EchoAppSettings(
     val customBackgroundBlur: Float = 24f,
     val customBackgroundBrightness: Float = 0.88f,
     val customBackgroundGlass: Float = 0.42f,
+    val customBackgroundScale: Float = 1.05f,
     val uiFontFamily: String = EchoFontFamilyMode.System,
     val uiFontScale: Float = 1f,
     val uiDensityScale: Float = 1f,
@@ -45,7 +46,9 @@ data class EchoAppSettings(
     val lyricsAlignment: String = EchoLyricsAlignment.Center,
     val lyricsLineSpacing: Float = 1f,
     val lyricsBackgroundDim: Float = 0f,
+    val lyricsWordHighlightEnabled: Boolean = true,
     val lyricsWordHighlightIntensity: Float = 1f,
+    val lyricsImmersiveModeEnabled: Boolean = false,
     val lyricsMotionMode: String = EchoLyricsMotionMode.Smooth,
     val lyricsShowTranslation: Boolean = true,
     val lyricsShowRomanization: Boolean = true,
@@ -158,6 +161,7 @@ class EchoSettingsStore(
                 customBackgroundBlur = (preferences[Keys.CustomBackgroundBlur] ?: 24f).coerceIn(0f, 80f),
                 customBackgroundBrightness = (preferences[Keys.CustomBackgroundBrightness] ?: 0.88f).coerceIn(0.35f, 1.15f),
                 customBackgroundGlass = (preferences[Keys.CustomBackgroundGlass] ?: 0.42f).coerceIn(0.08f, 0.90f),
+                customBackgroundScale = (preferences[Keys.CustomBackgroundScale] ?: 1.05f).coerceIn(1.00f, 1.40f),
                 uiFontFamily = normalizeFontFamilyMode(preferences[Keys.UiFontFamily]),
                 uiFontScale = (preferences[Keys.UiFontScale] ?: 1f).coerceIn(0.88f, 1.18f),
                 uiDensityScale = (preferences[Keys.UiDensityScale] ?: 1f).coerceIn(0.90f, 1.12f),
@@ -167,7 +171,9 @@ class EchoSettingsStore(
                 lyricsAlignment = normalizeLyricsAlignment(preferences[Keys.LyricsAlignment]),
                 lyricsLineSpacing = (preferences[Keys.LyricsLineSpacing] ?: 1f).coerceIn(0.82f, 1.38f),
                 lyricsBackgroundDim = (preferences[Keys.LyricsBackgroundDim] ?: 0f).coerceIn(0f, 0.78f),
+                lyricsWordHighlightEnabled = preferences[Keys.LyricsWordHighlightEnabled] ?: true,
                 lyricsWordHighlightIntensity = (preferences[Keys.LyricsWordHighlightIntensity] ?: 1f).coerceIn(0.45f, 1.35f),
+                lyricsImmersiveModeEnabled = preferences[Keys.LyricsImmersiveModeEnabled] ?: false,
                 lyricsMotionMode = normalizeLyricsMotionMode(preferences[Keys.LyricsMotionMode]),
                 lyricsShowTranslation = preferences[Keys.LyricsShowTranslation] ?: true,
                 lyricsShowRomanization = preferences[Keys.LyricsShowRomanization] ?: true,
@@ -309,6 +315,10 @@ class EchoSettingsStore(
         context.echoSettings.edit { it[Keys.CustomBackgroundGlass] = value.coerceIn(0.08f, 0.90f) }
     }
 
+    suspend fun setCustomBackgroundScale(value: Float) {
+        context.echoSettings.edit { it[Keys.CustomBackgroundScale] = value.coerceIn(1.00f, 1.40f) }
+    }
+
     suspend fun setUiFontFamily(value: String) {
         context.echoSettings.edit { it[Keys.UiFontFamily] = normalizeFontFamilyMode(value) }
     }
@@ -345,8 +355,16 @@ class EchoSettingsStore(
         context.echoSettings.edit { it[Keys.LyricsBackgroundDim] = value.coerceIn(0f, 0.78f) }
     }
 
+    suspend fun setLyricsWordHighlightEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.LyricsWordHighlightEnabled] = enabled }
+    }
+
     suspend fun setLyricsWordHighlightIntensity(value: Float) {
         context.echoSettings.edit { it[Keys.LyricsWordHighlightIntensity] = value.coerceIn(0.45f, 1.35f) }
+    }
+
+    suspend fun setLyricsImmersiveModeEnabled(enabled: Boolean) {
+        context.echoSettings.edit { it[Keys.LyricsImmersiveModeEnabled] = enabled }
     }
 
     suspend fun setLyricsMotionMode(value: String) {
@@ -579,6 +597,7 @@ class EchoSettingsStore(
         val CustomBackgroundBlur = floatPreferencesKey("custom_background_blur")
         val CustomBackgroundBrightness = floatPreferencesKey("custom_background_brightness")
         val CustomBackgroundGlass = floatPreferencesKey("custom_background_glass")
+        val CustomBackgroundScale = floatPreferencesKey("custom_background_scale")
         val UiFontFamily = stringPreferencesKey("ui_font_family")
         val UiFontScale = floatPreferencesKey("ui_font_scale")
         val UiDensityScale = floatPreferencesKey("ui_density_scale")
@@ -588,7 +607,9 @@ class EchoSettingsStore(
         val LyricsAlignment = stringPreferencesKey("lyrics_alignment")
         val LyricsLineSpacing = floatPreferencesKey("lyrics_line_spacing")
         val LyricsBackgroundDim = floatPreferencesKey("lyrics_background_dim")
+        val LyricsWordHighlightEnabled = booleanPreferencesKey("lyrics_word_highlight_enabled")
         val LyricsWordHighlightIntensity = floatPreferencesKey("lyrics_word_highlight_intensity")
+        val LyricsImmersiveModeEnabled = booleanPreferencesKey("lyrics_immersive_mode_enabled")
         val LyricsMotionMode = stringPreferencesKey("lyrics_motion_mode")
         val LyricsShowTranslation = booleanPreferencesKey("lyrics_show_translation")
         val LyricsShowRomanization = booleanPreferencesKey("lyrics_show_romanization")

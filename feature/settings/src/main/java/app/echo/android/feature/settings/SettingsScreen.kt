@@ -4,6 +4,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,13 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -45,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.PageChrome
 import app.echo.android.model.playback.EchoPlaybackStatus
+import app.echo.android.model.settings.EchoEffectivePerformanceMode
+import app.echo.android.model.settings.EchoPerformanceMode
 import kotlin.math.roundToInt
 
 @Composable
@@ -55,6 +58,8 @@ fun SettingsScreen(
     artistCount: Int,
     dynamicArtworkEnabled: Boolean,
     compactModeEnabled: Boolean,
+    performanceMode: String,
+    effectivePerformanceMode: String,
     trackAudioInfoTagsVisible: Boolean,
     pcHandoffEnabled: Boolean,
     discordPresenceViaPcEnabled: Boolean,
@@ -68,6 +73,7 @@ fun SettingsScreen(
     customBackgroundBlur: Float,
     customBackgroundBrightness: Float,
     customBackgroundGlass: Float,
+    customBackgroundScale: Float,
     uiFontFamily: String,
     uiFontScale: Float,
     uiDensityScale: Float,
@@ -89,6 +95,7 @@ fun SettingsScreen(
     lastFmSharedSecretLocked: Boolean,
     onDynamicArtworkEnabledChange: (Boolean) -> Unit,
     onCompactModeEnabledChange: (Boolean) -> Unit,
+    onPerformanceModeChange: (String) -> Unit,
     onTrackAudioInfoTagsVisibleChange: (Boolean) -> Unit,
     onPcHandoffEnabledChange: (Boolean) -> Unit,
     onDiscordPresenceViaPcEnabledChange: (Boolean) -> Unit,
@@ -103,6 +110,7 @@ fun SettingsScreen(
     onCustomBackgroundBlurChange: (Float) -> Unit,
     onCustomBackgroundBrightnessChange: (Float) -> Unit,
     onCustomBackgroundGlassChange: (Float) -> Unit,
+    onCustomBackgroundScaleChange: (Float) -> Unit,
     onUiFontFamilyChange: (String) -> Unit,
     onUiFontScaleChange: (Float) -> Unit,
     onUiDensityScaleChange: (Float) -> Unit,
@@ -124,8 +132,14 @@ fun SettingsScreen(
     onOpenConnect: () -> Unit,
 ) {
     val sectionGap = if (compactModeEnabled) 6.dp else 10.dp
+    var themeSectionExpanded by rememberSaveable { mutableStateOf(true) }
+    var interfaceSectionExpanded by rememberSaveable { mutableStateOf(true) }
     var customBackgroundExpanded by rememberSaveable { mutableStateOf(true) }
+    var customBackgroundAdvancedExpanded by rememberSaveable { mutableStateOf(false) }
     var fontSectionExpanded by rememberSaveable { mutableStateOf(false) }
+    var playbackSectionExpanded by rememberSaveable { mutableStateOf(false) }
+    var connectSectionExpanded by rememberSaveable { mutableStateOf(false) }
+    var librarySectionExpanded by rememberSaveable { mutableStateOf(false) }
     var lastFmApiKeyInput by rememberSaveable(lastFmApiKey) { mutableStateOf(lastFmApiKey.orEmpty()) }
     var lastFmSecretInput by rememberSaveable(lastFmSharedSecret) { mutableStateOf(lastFmSharedSecret.orEmpty()) }
 
@@ -143,7 +157,12 @@ fun SettingsScreen(
                 artistCount = artistCount,
                 dynamicArtwork = dynamicArtworkEnabled,
             )
-            SettingsSectionCard(title = "主题") {
+            SettingsSectionCard(
+                title = "主题",
+                collapsible = true,
+                expanded = themeSectionExpanded,
+                onExpandedChange = { themeSectionExpanded = it },
+            ) {
                 SettingsChoiceGroupRow(
                     title = "显示模式",
                     detail = themeDetail(themeMode),
@@ -176,7 +195,19 @@ fun SettingsScreen(
                     )
                 }
             }
-            SettingsSectionCard(title = "界面") {
+            SettingsSectionCard(
+                title = "界面",
+                collapsible = true,
+                expanded = interfaceSectionExpanded,
+                onExpandedChange = { interfaceSectionExpanded = it },
+            ) {
+                SettingsChoiceGroupRow(
+                    title = "性能模式",
+                    detail = performanceModeDetail(performanceMode, effectivePerformanceMode),
+                    options = performanceModeOptions(),
+                    selectedValue = performanceMode,
+                    onOptionSelected = onPerformanceModeChange,
+                )
                 SettingsSwitchRow(
                     title = "动态封面氛围",
                     detail = "播放页和迷你播放器跟随封面微调背景",
@@ -205,30 +236,46 @@ fun SettingsScreen(
                     )
                 },
             ) {
-                SettingsSliderRow(
-                    title = "毛玻璃模糊",
-                    detail = "${customBackgroundBlur.roundToInt()} dp",
-                    value = customBackgroundBlur,
-                    valueRange = 0f..80f,
-                    steps = 15,
-                    onValueChange = onCustomBackgroundBlurChange,
+                SettingsDisclosureRow(
+                    title = "高级设置",
+                    detail = "模糊、亮度、覆盖和背景缩放",
+                    expanded = customBackgroundAdvancedExpanded,
+                    onExpandedChange = { customBackgroundAdvancedExpanded = it },
                 )
-                SettingsSliderRow(
-                    title = "背景亮度",
-                    detail = "${(customBackgroundBrightness * 100f).roundToInt()}%",
-                    value = customBackgroundBrightness,
-                    valueRange = 0.35f..1.15f,
-                    steps = 15,
-                    onValueChange = onCustomBackgroundBrightnessChange,
-                )
-                SettingsSliderRow(
-                    title = "玻璃覆盖",
-                    detail = "${(customBackgroundGlass * 100f).roundToInt()}%",
-                    value = customBackgroundGlass,
-                    valueRange = 0.08f..0.90f,
-                    steps = 13,
-                    onValueChange = onCustomBackgroundGlassChange,
-                )
+                if (customBackgroundAdvancedExpanded) {
+                    SettingsSliderRow(
+                        title = "毛玻璃模糊",
+                        detail = "${customBackgroundBlur.roundToInt()} dp",
+                        value = customBackgroundBlur,
+                        valueRange = 0f..80f,
+                        steps = 15,
+                        onValueChange = onCustomBackgroundBlurChange,
+                    )
+                    SettingsSliderRow(
+                        title = "背景亮度",
+                        detail = "${(customBackgroundBrightness * 100f).roundToInt()}%",
+                        value = customBackgroundBrightness,
+                        valueRange = 0.35f..1.15f,
+                        steps = 15,
+                        onValueChange = onCustomBackgroundBrightnessChange,
+                    )
+                    SettingsSliderRow(
+                        title = "玻璃覆盖",
+                        detail = "${(customBackgroundGlass * 100f).roundToInt()}%",
+                        value = customBackgroundGlass,
+                        valueRange = 0.08f..0.90f,
+                        steps = 13,
+                        onValueChange = onCustomBackgroundGlassChange,
+                    )
+                    SettingsSliderRow(
+                        title = "背景缩放",
+                        detail = "${(customBackgroundScale * 100f).roundToInt()}%",
+                        value = customBackgroundScale,
+                        valueRange = 1.00f..1.40f,
+                        steps = 15,
+                        onValueChange = onCustomBackgroundScaleChange,
+                    )
+                }
             }
             SettingsSectionCard(
                 title = "字体",
@@ -298,7 +345,12 @@ fun SettingsScreen(
                     onClick = onClearImportedFont,
                 )
             }
-            SettingsSectionCard(title = "播放") {
+            SettingsSectionCard(
+                title = "播放",
+                collapsible = true,
+                expanded = playbackSectionExpanded,
+                onExpandedChange = { playbackSectionExpanded = it },
+            ) {
                 SettingsSwitchRow(
                     title = "歌词同步工具",
                     detail = "在歌词页显示导入、格式和偏移微调面板",
@@ -335,7 +387,12 @@ fun SettingsScreen(
                     onClick = onTestUsbExclusiveDriver,
                 )
             }
-            SettingsSectionCard(title = "互联") {
+            SettingsSectionCard(
+                title = "互联",
+                collapsible = true,
+                expanded = connectSectionExpanded,
+                onExpandedChange = { connectSectionExpanded = it },
+            ) {
                 LastFmSettingsPanel(
                     enabled = lastFmEnabled,
                     connected = !lastFmSessionKey.isNullOrBlank(),
@@ -377,7 +434,12 @@ fun SettingsScreen(
                     onClick = onOpenConnect,
                 )
             }
-            SettingsSectionCard(title = "曲库") {
+            SettingsSectionCard(
+                title = "曲库",
+                collapsible = true,
+                expanded = librarySectionExpanded,
+                onExpandedChange = { librarySectionExpanded = it },
+            ) {
                 SettingsSwitchRow(
                     title = "音频格式标签",
                     detail = "在歌曲列表显示 FLAC、192kHz 等小标签",
@@ -493,7 +555,7 @@ private fun settingsPanelColor(): Color {
 private fun settingsRowColor(selected: Boolean = false): Color {
     val dark = LocalEchoDarkTheme.current
     return when {
-        selected -> settingsControlColor().copy(alpha = if (dark) 0.28f else 0.18f)
+        selected -> settingsControlColor().copy(alpha = if (dark) 0.22f else 0.14f)
         else -> Color.Transparent
     }
 }
@@ -501,6 +563,19 @@ private fun settingsRowColor(selected: Boolean = false): Color {
 @Composable
 private fun settingsControlColor(): Color =
     if (LocalEchoDarkTheme.current) Color(0xFFD3A9B5) else MaterialTheme.colorScheme.primary
+
+@Composable
+private fun settingsControlSurfaceColor(active: Boolean): Color {
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    return if (active) {
+        settingsControlColor().copy(alpha = if (dark) 0.34f else 0.20f)
+    } else if (dark) {
+        Color.White.copy(alpha = 0.10f)
+    } else {
+        scheme.outlineVariant.copy(alpha = 0.42f)
+    }
+}
 
 @Composable
 private fun SettingsTextInputRow(
@@ -566,6 +641,24 @@ private fun themeDetail(mode: String): String =
         "dark" -> "始终使用深色模式"
         else -> "跟随手机系统外观"
     }
+
+private fun performanceModeOptions(): List<SettingsChoiceOption> = listOf(
+    SettingsChoiceOption(EchoPerformanceMode.Auto.id, "自动"),
+    SettingsChoiceOption(EchoPerformanceMode.Balanced.id, "平衡"),
+    SettingsChoiceOption(EchoPerformanceMode.Lightweight.id, "轻量"),
+)
+
+private fun performanceModeDetail(mode: String, effectiveMode: String): String {
+    val effectiveLabel = when (EchoEffectivePerformanceMode.entries.firstOrNull { it.id == effectiveMode }) {
+        EchoEffectivePerformanceMode.Lightweight -> "当前轻量策略"
+        else -> "当前平衡策略"
+    }
+    return when (EchoPerformanceMode.fromId(mode)) {
+        EchoPerformanceMode.Auto -> "$effectiveLabel；系统省电开启时自动轻量"
+        EchoPerformanceMode.Balanced -> "保持完整视觉和默认刷新策略"
+        EchoPerformanceMode.Lightweight -> "降低背景、封面、动画和扫描开销"
+    }
+}
 
 private fun fontOptions(importedFontUri: String?): List<SettingsChoiceOption> = buildList {
     add(SettingsChoiceOption("system", "系统"))
@@ -695,6 +788,29 @@ private fun SettingsSectionCard(
 }
 
 @Composable
+private fun SettingsDisclosureRow(
+    title: String,
+    detail: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+) {
+    val dark = LocalEchoDarkTheme.current
+    val scheme = MaterialTheme.colorScheme
+    SettingsRowShell(
+        title = title,
+        detail = detail,
+        modifier = Modifier.clickable { onExpandedChange(!expanded) },
+    ) {
+        Icon(
+            imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+            contentDescription = null,
+            tint = if (dark) Color.White.copy(alpha = 0.62f) else scheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
 private fun SettingsBackgroundSourceRow(
     mode: String,
     uri: String?,
@@ -766,12 +882,12 @@ private fun BackgroundSourceAction(
     val accent = if (selected) settingsControlColor() else if (dark) Color.White.copy(alpha = 0.74f) else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .height(28.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(settingsRowColor(selected))
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .alpha(if (enabled || selected) 1f else 0.48f)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 10.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -805,24 +921,26 @@ private fun EchoSettingsSwitch(
 ) {
     val dark = LocalEchoDarkTheme.current
     val scheme = MaterialTheme.colorScheme
-    val controlColor = settingsControlColor()
-    Switch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        colors = SwitchDefaults.colors(
-            checkedThumbColor = Color.White,
-            checkedTrackColor = controlColor.copy(alpha = if (dark) 0.72f else 0.62f),
-            checkedBorderColor = Color.White.copy(alpha = if (dark) 0.28f else 0.52f),
-            uncheckedThumbColor = if (dark) Color.White.copy(alpha = 0.58f) else scheme.onSurfaceVariant.copy(alpha = 0.72f),
-            uncheckedTrackColor = if (dark) Color.White.copy(alpha = 0.14f) else scheme.outlineVariant.copy(alpha = 0.55f),
-            uncheckedBorderColor = if (dark) Color.White.copy(alpha = 0.22f) else scheme.outlineVariant.copy(alpha = 0.76f),
-            disabledCheckedThumbColor = Color.White.copy(alpha = 0.60f),
-            disabledCheckedTrackColor = controlColor.copy(alpha = 0.26f),
-            disabledUncheckedThumbColor = if (dark) Color.White.copy(alpha = 0.32f) else scheme.onSurfaceVariant.copy(alpha = 0.38f),
-            disabledUncheckedTrackColor = if (dark) Color.White.copy(alpha = 0.08f) else scheme.outlineVariant.copy(alpha = 0.34f),
-            disabledUncheckedBorderColor = if (dark) Color.White.copy(alpha = 0.12f) else scheme.outlineVariant.copy(alpha = 0.36f),
-        ),
-    )
+    Box(
+        modifier = Modifier
+            .size(width = 46.dp, height = 26.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(settingsControlSurfaceColor(checked))
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .padding(horizontal = 5.dp),
+        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(17.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (dark) Color.White.copy(alpha = 0.72f) else scheme.onSurfaceVariant.copy(alpha = 0.82f)),
+        )
+    }
 }
 
 @Composable
@@ -885,11 +1003,11 @@ private fun SettingsOptionChip(
     val dark = LocalEchoDarkTheme.current
     Box(
         modifier = Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .height(28.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(settingsRowColor(selected))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -903,6 +1021,7 @@ private fun SettingsOptionChip(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun SettingsSliderRow(
     title: String,
     detail: String,
@@ -945,15 +1064,38 @@ private fun SettingsSliderRow(
             Slider(
                 value = value,
                 onValueChange = onValueChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
                 valueRange = valueRange,
-                steps = 0,
+                steps = steps,
                 colors = SliderDefaults.colors(
-                    thumbColor = if (dark) Color.White.copy(alpha = 0.74f) else Color.White,
-                    activeTrackColor = controlColor.copy(alpha = if (dark) 0.78f else 0.66f),
-                    inactiveTrackColor = if (dark) Color.White.copy(alpha = 0.20f) else scheme.outlineVariant.copy(alpha = 0.72f),
+                    thumbColor = controlColor.copy(alpha = if (dark) 0.92f else 0.78f),
+                    activeTrackColor = controlColor.copy(alpha = if (dark) 0.46f else 0.40f),
+                    inactiveTrackColor = if (dark) Color.White.copy(alpha = 0.12f) else scheme.outlineVariant.copy(alpha = 0.46f),
                     activeTickColor = Color.Transparent,
                     inactiveTickColor = Color.Transparent,
                 ),
+                thumb = {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(controlColor.copy(alpha = if (dark) 0.92f else 0.72f)),
+                    )
+                },
+                track = { sliderState ->
+                    SliderDefaults.Track(
+                        sliderState = sliderState,
+                        modifier = Modifier.height(4.dp),
+                        colors = SliderDefaults.colors(
+                            activeTrackColor = controlColor.copy(alpha = if (dark) 0.38f else 0.34f),
+                            inactiveTrackColor = if (dark) Color.White.copy(alpha = 0.10f) else scheme.outlineVariant.copy(alpha = 0.40f),
+                            activeTickColor = Color.Transparent,
+                            inactiveTickColor = Color.Transparent,
+                        ),
+                    )
+                },
             )
         }
     }

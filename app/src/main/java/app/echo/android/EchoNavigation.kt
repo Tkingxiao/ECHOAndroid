@@ -51,8 +51,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.echo.android.design.EchoAccent
-import app.echo.android.design.EchoGlassPanel
 import app.echo.android.design.echoDarkGlassBorder
 import app.echo.android.design.LocalEchoDarkTheme
 import kotlin.math.abs
@@ -60,7 +58,7 @@ import kotlin.math.abs
 private val DockItemMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
 private val DockGlassShape = RoundedCornerShape(31.dp)
 private val DockItemShape = RoundedCornerShape(22.dp)
-private val DockSelectedBlue = Color(0xFF7DD3FC)
+private val DockSelectedBlue = Color(0xFFD3A9B5)
 
 enum class EchoTab(
     val label: String,
@@ -97,21 +95,20 @@ fun BottomDock(
                 .navigationBarsPadding()
                 .padding(horizontal = 10.dp, vertical = 5.dp)
                 .shadow(
-                    elevation = if (dark) 18.dp else 8.dp,
+                    elevation = if (dark) 8.dp else 8.dp,
                     shape = DockGlassShape,
-                    ambientColor = if (dark) Color.Black.copy(alpha = 0.28f) else Color.Black.copy(alpha = 0.05f),
-                    spotColor = if (dark) EchoAccent.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.06f),
+                    ambientColor = if (dark) Color.Black.copy(alpha = 0.18f) else Color.Black.copy(alpha = 0.05f),
+                    spotColor = if (dark) Color.Black.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f),
                 )
                 .clip(DockGlassShape)
-                .background(if (dark) scheme.surface.copy(alpha = 0.94f) else Color.White.copy(alpha = 0.72f))
+                .background(if (dark) scheme.surface.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.72f))
                 .background(
                     if (dark) {
                         Brush.verticalGradient(
                             listOf(
-                                Color.White.copy(alpha = 0.07f),
-                                scheme.surfaceVariant.copy(alpha = 0.72f),
-                                scheme.surface.copy(alpha = 0.96f),
-                                EchoGlassPanel.copy(alpha = 0.88f),
+                                Color.White.copy(alpha = 0.035f),
+                                scheme.surfaceVariant.copy(alpha = 0.42f),
+                                scheme.surface.copy(alpha = 0.62f),
                             ),
                         )
                     } else {
@@ -157,7 +154,7 @@ fun BottomDock(
                             Brush.horizontalGradient(
                                 listOf(
                                     Color.Transparent,
-                                    Color.White.copy(alpha = 0.22f),
+                                    Color.White.copy(alpha = 0.08f),
                                     Color.Transparent,
                                 ),
                             ),
@@ -186,9 +183,8 @@ fun BottomDock(
                 )
                 else -> Brush.horizontalGradient(
                     listOf(
-                        DockSelectedBlue.copy(alpha = 0.20f),
-                        scheme.surfaceVariant.copy(alpha = 0.72f),
-                        Color.White.copy(alpha = 0.06f),
+                        DockSelectedBlue.copy(alpha = 0.16f),
+                        Color.White.copy(alpha = 0.05f),
                     ),
                 )
             }

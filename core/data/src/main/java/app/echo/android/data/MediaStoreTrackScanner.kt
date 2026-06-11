@@ -20,6 +20,7 @@ class MediaStoreTrackScanner(
         batchSize: Int = DefaultBatchSize,
         relativePathPrefix: String? = null,
         existingTracks: Map<String, TrackFingerprint> = emptyMap(),
+        readSampleRate: Boolean = true,
         onTotalCount: suspend (Int?) -> Unit = {},
         onBatch: suspend (List<LibraryTrackEntity>) -> Unit,
         onProgress: suspend (scannedCount: Int, currentTrack: LibraryTrackEntity?) -> Unit,
@@ -35,6 +36,7 @@ class MediaStoreTrackScanner(
                     collection = collection,
                     batchSize = batchSize,
                     existingTracks = existingTracks,
+                    readSampleRate = readSampleRate,
                     onTotalCount = onTotalCount,
                     onBatch = onBatch,
                     onProgress = onProgress,
@@ -47,6 +49,7 @@ class MediaStoreTrackScanner(
         collection: Uri,
         batchSize: Int,
         existingTracks: Map<String, TrackFingerprint>,
+        readSampleRate: Boolean,
         onTotalCount: suspend (Int?) -> Unit,
         onBatch: suspend (List<LibraryTrackEntity>) -> Unit,
         onProgress: suspend (scannedCount: Int, currentTrack: LibraryTrackEntity?) -> Unit,
@@ -60,7 +63,7 @@ class MediaStoreTrackScanner(
         while (moveToNext()) {
             coroutineContext.ensureActive()
             runCatching {
-                toTrackEntity(collection, columns, existingTracks)
+                toTrackEntity(collection, columns, existingTracks, readSampleRate)
             }.onSuccess { track ->
                 batch += track
                 scannedCount += 1
@@ -86,6 +89,7 @@ class MediaStoreTrackScanner(
         collection: Uri,
         columns: MediaStoreColumns,
         existingTracks: Map<String, TrackFingerprint>,
+        readSampleRate: Boolean,
     ): LibraryTrackEntity {
         val mediaId = getLong(columns.idIndex)
         val trackId = "mediastore:$mediaId"
@@ -114,7 +118,7 @@ class MediaStoreTrackScanner(
             dateModifiedSeconds = getLongOrNull(columns.modifiedIndex) ?: 0L,
             relativePath = relativePath(columns),
         ).withScanMetadata()
-            .withFastPathSampleRate(existingTrack, ::sampleRateHz)
+            .withFastPathSampleRate(existingTrack, readSampleRate, ::sampleRateHz)
     }
 
     private fun sampleRateHz(contentUri: String): Int? =
@@ -263,8 +267,10 @@ class MediaStoreTrackScanner(
 
 internal fun LibraryTrackEntity.withFastPathSampleRate(
     existingTrack: TrackFingerprint?,
+    readSampleRate: Boolean = true,
     sampleRateReader: (String) -> Int?,
 ): LibraryTrackEntity {
+    if (!readSampleRate) return this
     if (existingTrack != null && existingTrack.fingerprint == fingerprint) return this
     return copy(sampleRateHz = sampleRateReader(contentUri))
         .withScanMetadata(lastSeenScanRunId)
