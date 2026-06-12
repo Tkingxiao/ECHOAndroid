@@ -1,6 +1,7 @@
 package app.echo.android.playback
 
 import android.net.Uri
+import android.os.Bundle
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -40,6 +41,7 @@ fun EchoTrackRef.toMediaItem(): MediaItem =
                 .setArtist(artist)
                 .setAlbumTitle(album)
                 .setArtworkUri(artworkUri?.let(Uri::parse))
+                .setExtras(embeddedArtworkExtras())
                 .build(),
         )
         .build()
@@ -222,4 +224,11 @@ fun Int.toEchoRepeatMode(): EchoRepeatMode = when (this) {
     Player.REPEAT_MODE_ALL -> EchoRepeatMode.All
     Player.REPEAT_MODE_ONE -> EchoRepeatMode.One
     else -> EchoRepeatMode.Off
+}
+
+private fun EchoTrackRef.embeddedArtworkExtras(): Bundle? {
+    if (!artworkUri.isNullOrBlank() || uri.isBlank()) return null
+    return Bundle().apply {
+        putString(EchoEmbeddedArtworkSourceUriExtra, uri)
+    }
 }

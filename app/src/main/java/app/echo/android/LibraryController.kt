@@ -80,9 +80,6 @@ internal class LibraryController(
             .flatMapLatest { query -> repository.pagedFolders(query) }
             .cachedIn(scope)
 
-    val neteasePlaylists: Flow<List<EchoPlaylist>> =
-        repository.observeNeteasePlaylists()
-
     val localPlaylists: Flow<List<EchoPlaylist>> =
         repository.observeLocalPlaylists()
 
@@ -343,11 +340,6 @@ internal class LibraryController(
     suspend fun updateTrackArtwork(trackId: String, artworkUri: Uri): Boolean =
         withContext(Dispatchers.IO) {
             repository.updateTrackArtwork(trackId, artworkUri.toString())
-        }
-
-    suspend fun applyBestNeteaseMetadata(trackId: String): Boolean =
-        withContext(Dispatchers.IO) {
-            repository.applyBestNeteaseMetadata(trackId)
         }
 
     fun clear() {

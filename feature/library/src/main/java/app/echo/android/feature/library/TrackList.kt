@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Album
-import androidx.compose.material.icons.rounded.CloudQueue
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -334,15 +333,6 @@ internal fun TrackContextMenu(
                     },
                 )
             }
-            if (onMatchNeteaseMetadata != null) {
-                DropdownMenuItem(
-                    text = { Text("匹配网易云信息") },
-                    onClick = {
-                        expanded = false
-                        onMatchNeteaseMetadata(track)
-                    },
-                )
-            }
             DropdownMenuItem(
                 text = { Text("歌曲信息") },
                 leadingIcon = {
@@ -370,7 +360,6 @@ internal fun TrackContextMenu(
                     canEditMetadata = canEditMetadata,
                     canImportLyrics = onImportLyrics != null,
                     canPickArtwork = onPickArtwork != null,
-                    canMatchNeteaseMetadata = onMatchNeteaseMetadata != null && track.source == LibrarySource.MediaStore,
                     onPlay = {
                         sheetMode = null
                         onPlay()
@@ -383,10 +372,6 @@ internal fun TrackContextMenu(
                     onPickArtwork = {
                         sheetMode = null
                         onPickArtwork?.invoke(track)
-                    },
-                    onMatchNeteaseMetadata = {
-                        sheetMode = null
-                        onMatchNeteaseMetadata?.invoke(track)
                     },
                     onInfo = {
                         sheetMode = null
@@ -432,12 +417,10 @@ private fun TrackActionSheet(
     canEditMetadata: Boolean,
     canImportLyrics: Boolean,
     canPickArtwork: Boolean,
-    canMatchNeteaseMetadata: Boolean,
     onPlay: () -> Unit,
     onEdit: () -> Unit,
     onImportLyrics: () -> Unit,
     onPickArtwork: () -> Unit,
-    onMatchNeteaseMetadata: () -> Unit,
     onInfo: () -> Unit,
 ) {
     Column(
@@ -452,7 +435,6 @@ private fun TrackActionSheet(
         TrackActionRow("编辑标签", Icons.Rounded.Edit, enabled = canEditMetadata, onClick = onEdit)
         TrackActionRow("导入 LRC 歌词", Icons.Rounded.UploadFile, enabled = canImportLyrics, onClick = onImportLyrics)
         TrackActionRow("自定义封面", Icons.Rounded.Album, enabled = canPickArtwork, onClick = onPickArtwork)
-        TrackActionRow("网易云匹配并写入", Icons.Rounded.CloudQueue, enabled = canMatchNeteaseMetadata, onClick = onMatchNeteaseMetadata)
         TrackActionRow("歌曲信息", Icons.Rounded.Info, enabled = true, onClick = onInfo)
     }
 }
@@ -626,7 +608,7 @@ private fun TrackMetadataEditorSheet(
             )
         }
         Text(
-            "当前保存到 ECHOAndroid 曲库索引；导入歌词、封面与网易云匹配也会绑定到这首歌。",
+            "当前保存到 ECHOAndroid 曲库索引；导入歌词和封面也会绑定到这首歌。",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )

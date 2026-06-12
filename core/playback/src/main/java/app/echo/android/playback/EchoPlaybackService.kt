@@ -59,6 +59,7 @@ class EchoPlaybackService : MediaSessionService() {
             .setId("echo-mobile-main-session")
             .setBitmapLoader(
                 EchoNotificationBitmapLoader(
+                    context = this,
                     delegate = DataSourceBitmapLoader.Builder(this).build(),
                 ),
             )

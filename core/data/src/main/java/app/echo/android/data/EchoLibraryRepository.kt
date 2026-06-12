@@ -17,7 +17,6 @@ import app.echo.android.model.library.EchoPlaylist
 import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.LibrarySource
 import app.echo.android.model.library.LibraryStats
-import app.echo.android.model.library.NeteaseAudioQuality
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -32,7 +31,6 @@ class EchoLibraryRepository(
     private val database: EchoLibraryDatabase,
     private val scanner: MediaStoreTrackScanner,
     private val documentTreeScanner: DocumentTreeTrackScanner,
-    private val neteaseClient: NeteaseCloudMusicClient = NeteaseCloudMusicClient(),
 ) {
     fun pagedTracks(
         query: String? = null,
@@ -141,11 +139,6 @@ class EchoLibraryRepository(
             pagingSourceFactory = { database.trackDao().pageTracksByFolder(folderKey) },
         ).flow
 
-    fun observeNeteasePlaylists(): Flow<List<EchoPlaylist>> =
-        database.playlistDao().observePlaylists(NeteaseSourceId)
-            .map { playlists -> playlists.map { it.toEchoPlaylist() } }
-            .flowOn(Dispatchers.IO)
-
     fun observeLocalPlaylists(): Flow<List<EchoPlaylist>> =
         database.playlistDao().observePlaylists(LibrarySource.MediaStore.id)
             .map { playlists -> playlists.map { it.toEchoPlaylist() } }
@@ -222,38 +215,6 @@ class EchoLibraryRepository(
         return true
     }
 
-    suspend fun applyBestNeteaseMetadata(trackId: String): Boolean {
-        val dao = database.trackDao()
-        val current = dao.getTrackById(trackId) ?: return false
-        val candidates = neteaseClient.searchSongs(
-            query = listOf(current.title, current.artist).filter { it.isNotBlank() }.joinToString(" "),
-            limit = 8,
-        )
-        val best = candidates
-            .map { song -> song to scoreNeteaseMetadata(current, song) }
-            .filter { (_, score) -> score >= MinimumNeteaseMetadataScore }
-            .maxByOrNull { (_, score) -> score }
-            ?.first
-            ?: return false
-        val updated = current.withUserMetadata(
-            update = EchoTrackMetadataUpdate(
-                trackId = current.id,
-                title = best.title,
-                artist = best.artist.ifBlank { current.artist },
-                album = best.album ?: current.album,
-                albumArtist = best.albumArtist ?: best.artist.takeIf { it.isNotBlank() } ?: current.albumArtist,
-                trackNumber = best.trackNumber ?: current.trackNumber,
-                discNumber = best.discNumber ?: current.discNumber,
-                year = current.year,
-                artworkUri = best.artworkUri ?: current.artworkUri,
-            ),
-            editedAtEpochMs = System.currentTimeMillis(),
-        )
-        if (current.hasSameUserMetadata(updated)) return true
-        dao.upsertBatchWithFts(listOf(updated))
-        return true
-    }
-
     suspend fun albumTracksForPlayback(
         albumKey: String,
         limit: Int = AggregationQueueLimit,
@@ -290,32 +251,6 @@ class EchoLibraryRepository(
         limit: Int = AggregationQueueLimit,
     ): List<LibraryTrackEntity> =
         database.playlistDao().getPlaylistTracksForPlayback(playlistId, limit.coerceAtLeast(1))
-
-    suspend fun importNeteasePlaylist(
-        session: NeteaseSession,
-        playlistId: Long,
-    ): NeteasePlaylistImport {
-        val imported = neteaseClient.fetchPlaylistImport(session, playlistId)
-        database.trackDao().upsertBatchWithFts(imported.tracks)
-        database.playlistDao().replacePlaylist(imported.playlist, imported.playlistTracks)
-        return imported
-    }
-
-    suspend fun resolveNeteasePlaybackUrls(
-        sessionCookie: String?,
-        songIds: List<Long>,
-        quality: NeteaseAudioQuality,
-    ): Map<Long, String> =
-        neteaseClient.resolvePlaybackUrls(sessionCookie, songIds, quality)
-
-    suspend fun fetchNeteaseUserPlaylists(session: NeteaseSession) =
-        neteaseClient.fetchUserPlaylists(session)
-
-    suspend fun loginNeteaseByPhone(phone: String, password: String): NeteaseSession =
-        neteaseClient.loginByPhone(phone, password)
-
-    suspend fun loginNeteaseWithCookie(cookie: String): NeteaseSession =
-        neteaseClient.loginWithCookie(cookie)
 
     fun refreshMediaStoreSnapshot(
         relativePathPrefix: String? = null,
@@ -1002,32 +937,6 @@ private fun LibraryTrackEntity.hasSameUserMetadata(other: LibraryTrackEntity): B
         trackNumber == other.trackNumber &&
         discNumber == other.discNumber &&
         year == other.year
-
-private fun scoreNeteaseMetadata(current: LibraryTrackEntity, candidate: NeteaseSong): Int {
-    val title = current.title.normalizedForSearch()
-    val artist = current.artist.normalizedForSearch()
-    val album = current.album?.normalizedForSearch().orEmpty()
-    val candidateTitle = candidate.title.normalizedForSearch()
-    val candidateArtist = candidate.artist.normalizedForSearch()
-    val candidateAlbum = candidate.album?.normalizedForSearch().orEmpty()
-    var score = 0
-    when {
-        title == candidateTitle -> score += 70
-        title in candidateTitle || candidateTitle in title -> score += 45
-    }
-    when {
-        artist.isNotBlank() && artist == candidateArtist -> score += 35
-        artist.isNotBlank() && (artist in candidateArtist || candidateArtist in artist) -> score += 18
-    }
-    if (album.isNotBlank() && album == candidateAlbum) score += 12
-    if (current.durationMs > 0L && candidate.durationMs > 0L) {
-        val delta = kotlin.math.abs(current.durationMs - candidate.durationMs)
-        if (delta <= 3_000L) score += 15 else if (delta <= 10_000L) score += 6
-    }
-    return score
-}
-
-private const val MinimumNeteaseMetadataScore = 58
 
 private data class RemoteAlbumKey(
     val source: String,

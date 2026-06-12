@@ -7,7 +7,6 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import app.echo.android.model.library.NeteaseAudioQuality
 import app.echo.android.model.playback.EchoEqualizerPreset
 import app.echo.android.model.playback.EchoEqualizerPresets
 import app.echo.android.model.settings.EchoPerformanceMode
@@ -15,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.echoSettings by preferencesDataStore(name = "echo-settings")
+private const val DefaultNeteaseAudioQuality = "lossless"
 
 data class EchoAppSettings(
     val preferOffload: Boolean = true,
@@ -78,7 +78,7 @@ data class EchoAppSettings(
     val neteaseUserId: Long? = null,
     val neteaseNickname: String? = null,
     val neteaseCookie: String? = null,
-    val neteaseAudioQuality: String = NeteaseAudioQuality.Default.id,
+    val neteaseAudioQuality: String = DefaultNeteaseAudioQuality,
 )
 
 object EchoBackgroundMode {
@@ -210,7 +210,8 @@ class EchoSettingsStore(
                 neteaseUserId = preferences[Keys.NeteaseUserId]?.toLongOrNull(),
                 neteaseNickname = preferences[Keys.NeteaseNickname],
                 neteaseCookie = preferences[Keys.NeteaseCookie],
-                neteaseAudioQuality = NeteaseAudioQuality.fromId(preferences[Keys.NeteaseAudioQuality]).id,
+                neteaseAudioQuality = preferences[Keys.NeteaseAudioQuality]?.takeIf { it.isNotBlank() }
+                    ?: DefaultNeteaseAudioQuality,
             )
         }
 
@@ -562,32 +563,6 @@ class EchoSettingsStore(
             it.remove(Keys.WebDavServerUrl)
             it.remove(Keys.WebDavUsername)
             it.remove(Keys.WebDavPassword)
-        }
-    }
-
-    suspend fun setNeteaseSession(
-        userId: Long,
-        nickname: String,
-        cookie: String,
-    ) {
-        context.echoSettings.edit {
-            it[Keys.NeteaseUserId] = userId.toString()
-            it[Keys.NeteaseNickname] = nickname.trim()
-            it[Keys.NeteaseCookie] = cookie
-        }
-    }
-
-    suspend fun clearNeteaseSession() {
-        context.echoSettings.edit {
-            it.remove(Keys.NeteaseUserId)
-            it.remove(Keys.NeteaseNickname)
-            it.remove(Keys.NeteaseCookie)
-        }
-    }
-
-    suspend fun setNeteaseAudioQuality(qualityId: String) {
-        context.echoSettings.edit {
-            it[Keys.NeteaseAudioQuality] = NeteaseAudioQuality.fromId(qualityId).id
         }
     }
 

@@ -105,12 +105,10 @@ import app.echo.android.model.library.EchoPlaylist
 import app.echo.android.model.library.EchoTrack
 import app.echo.android.model.library.EchoTrackMetadataUpdate
 import app.echo.android.model.library.FolderSummary
+import app.echo.android.model.library.LibraryScanPhase
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibrarySource
 import app.echo.android.model.library.LibraryTrackSortMode
-import app.echo.android.model.library.NeteaseAccountState
-import app.echo.android.model.library.NeteaseAudioQuality
-import app.echo.android.model.library.NeteaseImportState
 import kotlinx.coroutines.delay
 
 private val LibraryFolderMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
@@ -192,9 +190,6 @@ fun LibraryScreen(
     artists: LazyPagingItems<ArtistSummary>,
     folders: LazyPagingItems<FolderSummary>,
     playlists: List<EchoPlaylist>,
-    neteaseAccountState: NeteaseAccountState,
-    neteaseImportState: NeteaseImportState,
-    neteaseQuality: NeteaseAudioQuality,
     showTrackAudioInfoTags: Boolean,
     selectedAlbum: AlbumSummary?,
     selectedArtist: ArtistSummary?,
@@ -218,7 +213,6 @@ fun LibraryScreen(
     onUpdateTrackMetadata: (EchoTrackMetadataUpdate) -> Unit,
     onImportLyricsForTrack: (EchoTrack) -> Unit,
     onPickTrackArtwork: (EchoTrack) -> Unit,
-    onApplyNeteaseMetadata: (EchoTrack) -> Unit,
     onPlayAlbum: (AlbumSummary) -> Unit,
     onShuffleAlbum: (AlbumSummary) -> Unit,
     onPlayArtist: (ArtistSummary) -> Unit,
@@ -229,13 +223,6 @@ fun LibraryScreen(
     onOpenArtist: (ArtistSummary) -> Unit,
     onOpenFolder: (FolderSummary) -> Unit,
     onOpenPlaylist: (EchoPlaylist) -> Unit,
-    onLoginNeteaseByPhone: (String, String) -> Unit,
-    onLoginNeteaseWithCookie: (String) -> Unit,
-    onLogoutNetease: () -> Unit,
-    onRefreshNeteasePlaylists: () -> Unit,
-    onOpenNeteaseApp: () -> Unit,
-    onNeteaseQualityChange: (NeteaseAudioQuality) -> Unit,
-    onImportNeteasePlaylist: (Long) -> Unit,
     onCloseDetail: () -> Unit,
 ) {
     var selectedModeIndex by remember { mutableIntStateOf(LibraryViewMode.Songs.ordinal) }
@@ -250,6 +237,32 @@ fun LibraryScreen(
     val songListState = rememberLazyListState()
     val showInitialTrackLoading = tracks.itemCount == 0 && tracks.loadState.refresh is LoadState.Loading
     val showInitialTrackError = tracks.itemCount == 0 && tracks.loadState.refresh is LoadState.Error
+    var scanWasActiveForBanner by remember { mutableStateOf(false) }
+    var showScanResultBanner by remember { mutableStateOf(false) }
+
+    LaunchedEffect(
+        scanState.phase,
+        scanState.scannedCount,
+        scanState.insertedCount,
+        scanState.updatedCount,
+        scanState.deletedCount,
+        scanState.error,
+    ) {
+        if (scanState.isScanning) {
+            scanWasActiveForBanner = true
+            showScanResultBanner = false
+        } else if (scanWasActiveForBanner && scanState.hasResultBannerMessage()) {
+            showScanResultBanner = true
+            scanWasActiveForBanner = false
+        }
+    }
+
+    LaunchedEffect(showScanResultBanner, scanState.phase) {
+        if (showScanResultBanner && scanState.phase != LibraryScanPhase.Error) {
+            delay(3_200L)
+            showScanResultBanner = false
+        }
+    }
 
     LaunchedEffect(selectedLibrarySourceId, linkedLibraryActive) {
         val persistedSource = librarySourceModeFromId(selectedLibrarySourceId, linkedLibraryActive)
@@ -406,7 +419,6 @@ fun LibraryScreen(
                 onUpdateTrackMetadata = onUpdateTrackMetadata,
                 onImportLyrics = onImportLyricsForTrack,
                 onPickArtwork = onPickTrackArtwork,
-                onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                 modifier = Modifier.fillMaxSize(),
             )
             is LibraryDetailTransitionTarget.ArtistDetail -> ArtistDetailPage(
@@ -419,7 +431,6 @@ fun LibraryScreen(
                 onUpdateTrackMetadata = onUpdateTrackMetadata,
                 onImportLyrics = onImportLyricsForTrack,
                 onPickArtwork = onPickTrackArtwork,
-                onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                 modifier = Modifier.fillMaxSize(),
             )
             LibraryDetailTransitionTarget.Browser -> {
@@ -443,7 +454,6 @@ fun LibraryScreen(
                         onUpdateTrackMetadata = onUpdateTrackMetadata,
                         onImportLyrics = onImportLyricsForTrack,
                         onPickArtwork = onPickTrackArtwork,
-                        onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                         showAudioInfoTags = showTrackAudioInfoTags,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -498,7 +508,6 @@ fun LibraryScreen(
                             onUpdateTrackMetadata = onUpdateTrackMetadata,
                             onImportLyrics = onImportLyricsForTrack,
                             onPickArtwork = onPickTrackArtwork,
-                            onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                             modifier = Modifier.fillMaxSize(),
                         )
                         LibraryFolderTransitionTarget.Browser -> PageChrome(
@@ -539,6 +548,7 @@ fun LibraryScreen(
                                 showInitialTrackLoading -> {
                                     LibraryBrowserHeader(
                                         scanState = scanState,
+                                        showScanResultBanner = showScanResultBanner,
                                         selectedSource = selectedSource,
                                         linkedLibraryAvailable = linkedLibraryAvailable,
                                         onSelectSource = ::selectSource,
@@ -558,6 +568,7 @@ fun LibraryScreen(
                                 showInitialTrackError -> {
                                     LibraryBrowserHeader(
                                         scanState = scanState,
+                                        showScanResultBanner = showScanResultBanner,
                                         selectedSource = selectedSource,
                                         linkedLibraryAvailable = linkedLibraryAvailable,
                                         onSelectSource = ::selectSource,
@@ -577,6 +588,7 @@ fun LibraryScreen(
                                 else -> {
                                     LibraryBrowserHeader(
                                         scanState = scanState,
+                                        showScanResultBanner = showScanResultBanner,
                                         selectedSource = selectedSource,
                                         linkedLibraryAvailable = linkedLibraryAvailable,
                                         onSelectSource = ::selectSource,
@@ -605,7 +617,6 @@ fun LibraryScreen(
                                                         onUpdateTrackMetadata = onUpdateTrackMetadata,
                                                         onImportLyrics = onImportLyricsForTrack,
                                                         onPickArtwork = onPickTrackArtwork,
-                                                        onMatchNeteaseMetadata = onApplyNeteaseMetadata,
                                                         showAudioInfoTags = showTrackAudioInfoTags,
                                                         listState = songListState,
                                                         modifier = Modifier.fillMaxSize(),
@@ -1615,6 +1626,7 @@ private fun LibraryTrackSortMenu(
 @Composable
 private fun LibraryBrowserHeader(
     scanState: LibraryScanProgress,
+    showScanResultBanner: Boolean,
     selectedSource: LibrarySourceMode,
     linkedLibraryAvailable: Boolean,
     onSelectSource: (LibrarySourceMode) -> Unit,
@@ -1623,9 +1635,24 @@ private fun LibraryBrowserHeader(
     onSelectMode: (LibraryViewMode) -> Unit,
     onSortModeChange: (LibraryTrackSortMode) -> Unit,
 ) {
-    LibraryScanResultBanner(scanState)
+    if (showScanResultBanner) {
+        LibraryScanResultBanner(scanState)
+    }
     LibraryPagerTabs(
         selectedMode = selectedMode,
         onSelectMode = onSelectMode,
     )
 }
+
+private fun LibraryScanProgress.hasResultBannerMessage(): Boolean =
+    when (phase) {
+        LibraryScanPhase.Completed,
+        LibraryScanPhase.Cancelled,
+        LibraryScanPhase.Error -> true
+        LibraryScanPhase.Idle,
+        LibraryScanPhase.Preparing,
+        LibraryScanPhase.QueryingMediaStore,
+        LibraryScanPhase.Diffing,
+        LibraryScanPhase.WritingDatabase,
+        LibraryScanPhase.CleaningRemoved -> false
+    }

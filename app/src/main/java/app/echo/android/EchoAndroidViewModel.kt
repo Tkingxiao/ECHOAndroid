@@ -12,9 +12,7 @@ import app.echo.android.data.EchoAppSettings
 import app.echo.android.data.EchoSettingsStore
 import app.echo.android.data.DocumentTreeTrackScanner
 import app.echo.android.data.MediaStoreTrackScanner
-import app.echo.android.data.NeteaseSourceId
 import app.echo.android.data.OpraHeadphoneCorrectionRepository
-import app.echo.android.data.parseNeteaseSongId
 import app.echo.android.data.SubsonicEndpoint
 import app.echo.android.data.WebDavEndpoint
 import app.echo.android.lyrics.ImportedLyricsStore
@@ -29,9 +27,6 @@ import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryScanProgress
 import app.echo.android.model.library.LibraryStats
 import app.echo.android.model.library.LibraryTrackSortMode
-import app.echo.android.model.library.NeteaseAccountState
-import app.echo.android.model.library.NeteaseAudioQuality
-import app.echo.android.model.library.NeteaseImportState
 import app.echo.android.model.lyrics.EchoLyricsLoadState
 import app.echo.android.model.connect.EchoMobileDiscordPresenceSnapshot
 import app.echo.android.model.connect.EchoRemoteLyrics
@@ -90,11 +85,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         onTrackChanged = lyricsController::updateLyricsForTrack,
         onTrackActivated = ::recordRecentPlayback,
     )
-    private val neteaseController = NeteaseController(
-        repository = repository,
-        settingsStore = settingsStore,
-        scope = viewModelScope,
-    )
     private val lastFmClient = LastFmClient()
     private val lastFmController = LastFmScrobbleController(
         scope = viewModelScope,
@@ -112,7 +102,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val remoteAlbums: Flow<PagingData<AlbumSummary>> = libraryController.remoteAlbums
     val artists: Flow<PagingData<ArtistSummary>> = libraryController.artists
     val folders: Flow<PagingData<FolderSummary>> = libraryController.folders
-    val neteaseImportedPlaylists: Flow<List<EchoPlaylist>> = libraryController.neteasePlaylists
     val localPlaylists: Flow<List<EchoPlaylist>> = libraryController.localPlaylists
     val libraryStats: Flow<LibraryStats> = libraryController.libraryStats
     val recommendedTracks: Flow<List<EchoTrack>> = libraryController.recommendedTracks
@@ -131,8 +120,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     val initialAppSettings: EchoAppSettings = settingsStore.startupAppSettingsSnapshot()
     val appSettings: Flow<EchoAppSettings> = settingsStore.appSettings
     val lastFmState: StateFlow<LastFmUiState> = lastFmController.uiState
-    val neteaseAccountState: StateFlow<NeteaseAccountState> = neteaseController.accountState
-    val neteaseImportState: StateFlow<NeteaseImportState> = neteaseController.importState
     val discordPresenceSnapshot: Flow<EchoMobileDiscordPresenceSnapshot?> =
         combine(
             settingsStore.appSettings,
@@ -160,8 +147,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     private val albumPlaybackCounts = mutableMapOf<String, Int>()
     private val artistPlaybackCounts = mutableMapOf<String, Int>()
     private val playbackHeatmapCounts = mutableMapOf<Long, Int>()
-    private var latestNeteaseQuality: NeteaseAudioQuality = NeteaseAudioQuality.Default
-
     init {
         lastFmController.start(
             settingsFlow = settingsStore.appSettings,
@@ -173,8 +158,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
                 withContext(Dispatchers.IO) {
                     settingsStore.cacheStartupThemeSnapshot(settings)
                 }
-                latestNeteaseQuality = NeteaseAudioQuality.fromId(settings.neteaseAudioQuality)
-                neteaseController.restore(settings)
                 lyricsController.setOnlineLyricsEnabled(settings.onlineLyricsEnabled, playbackController.currentTrackId)
                 val firstSettingsEmission = !usbStartupPolicyApplied
                 usbStartupPolicyApplied = true
@@ -244,33 +227,11 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun play(track: EchoTrack) {
-        if (!track.isNeteaseTrack()) {
-            playbackController.play(track)
-            return
-        }
-        viewModelScope.launch {
-            resolveNeteasePlayback(listOf(track))
-                .firstOrNull()
-                ?.let(playbackController::play)
-        }
+        playbackController.play(track)
     }
 
     fun playQueue(queue: List<EchoTrack>, startIndex: Int) {
-        if (queue.none { it.isNeteaseTrack() }) {
-            playbackController.playQueue(queue, startIndex)
-            return
-        }
-        viewModelScope.launch {
-            val startTrackId = queue.getOrNull(startIndex)?.id
-            val resolvedQueue = resolveNeteasePlayback(queue)
-            val resolvedStartIndex = startTrackId
-                ?.let { id -> resolvedQueue.indexOfFirst { it.id == id } }
-                ?.takeIf { it >= 0 }
-                ?: startIndex.coerceIn(0, (resolvedQueue.size - 1).coerceAtLeast(0))
-            if (resolvedQueue.isNotEmpty()) {
-                playbackController.playQueue(resolvedQueue, resolvedStartIndex)
-            }
-        }
+        playbackController.playQueue(queue, startIndex)
     }
 
     fun playTrackFromLibrary(trackId: String) {
@@ -290,12 +251,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     fun updateTrackArtwork(trackId: String, artworkUri: Uri) {
         viewModelScope.launch {
             libraryController.updateTrackArtwork(trackId, artworkUri)
-        }
-    }
-
-    fun applyBestNeteaseMetadata(trackId: String) {
-        viewModelScope.launch {
-            libraryController.applyBestNeteaseMetadata(trackId)
         }
     }
 
@@ -872,33 +827,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         saveWebDavCredentials(serverUrl, username, password)
     }
 
-    fun loginNeteaseByPhone(phone: String, password: String) {
-        neteaseController.loginByPhone(phone, password)
-    }
-
-    fun loginNeteaseWithCookie(cookie: String) {
-        neteaseController.loginWithCookie(cookie)
-    }
-
-    fun refreshNeteasePlaylists() {
-        neteaseController.refreshRemotePlaylists()
-    }
-
-    fun importNeteasePlaylist(playlistId: Long) {
-        neteaseController.importPlaylist(playlistId)
-    }
-
-    fun logoutNetease() {
-        neteaseController.logout()
-    }
-
-    fun setNeteaseAudioQuality(qualityId: String) {
-        latestNeteaseQuality = NeteaseAudioQuality.fromId(qualityId)
-        updateSettings {
-            setNeteaseAudioQuality(qualityId)
-        }
-    }
-
     fun connectLastFm(
         apiKey: String,
         sharedSecret: String,
@@ -1030,39 +958,10 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private suspend fun resolveNeteasePlayback(queue: List<EchoTrack>): List<EchoTrack> =
-        withContext(Dispatchers.IO) {
-            val ids = queue.mapNotNull { track -> parseNeteaseSongId(track.id) }.distinct()
-            if (ids.isEmpty()) return@withContext queue
-            val urls = repository.resolveNeteasePlaybackUrls(
-                sessionCookie = neteaseController.currentCookie(),
-                songIds = ids,
-                quality = latestNeteaseQuality,
-            )
-            queue.mapNotNull { track ->
-                val songId = parseNeteaseSongId(track.id)
-                if (songId == null) {
-                    track
-                } else {
-                    urls[songId]?.let { url ->
-                        track.copy(
-                            uri = url,
-                            mimeType = if (latestNeteaseQuality == NeteaseAudioQuality.Standard) {
-                                "audio/mpeg"
-                            } else {
-                                "audio/flac"
-                            },
-                        )
-                    }
-                }
-            }
-        }
-
     override fun onCleared() {
         libraryController.clear()
         lyricsController.clear()
         playbackController.clear()
-        neteaseController.clear()
         lastFmController.clear()
         database.close()
         super.onCleared()
@@ -1149,9 +1048,6 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         const val HomeHeatmapVisibleDays = 84L
     }
 }
-
-private fun EchoTrack.isNeteaseTrack(): Boolean =
-    source.id == NeteaseSourceId || parseNeteaseSongId(id) != null
 
 private fun webDavPlaybackCredential(settings: EchoAppSettings): EchoWebDavPlaybackCredential? {
     val serverUrl = settings.webDavServerUrl?.takeIf { it.isNotBlank() } ?: return null

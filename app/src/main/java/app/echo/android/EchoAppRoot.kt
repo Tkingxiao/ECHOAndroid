@@ -85,7 +85,6 @@ import app.echo.android.model.library.ArtistSummary
 import app.echo.android.model.library.EchoPlaylist
 import app.echo.android.model.library.FolderSummary
 import app.echo.android.model.library.LibraryStats
-import app.echo.android.model.library.NeteaseAudioQuality
 import app.echo.android.model.playback.PlaybackPositionState
 import app.echo.android.model.settings.EchoEffectivePerformanceMode
 import app.echo.android.model.settings.EchoPerformanceMode
@@ -323,14 +322,6 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
             }
     }
 
-    fun openNeteaseApp() {
-        val packageName = "com.netease.cloudmusic"
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-        val fallbackUri = android.net.Uri.parse("https://music.163.com/")
-        val intent = launchIntent ?: Intent(Intent.ACTION_VIEW, fallbackUri)
-        runCatching { context.startActivity(intent) }
-    }
-
     LaunchedEffect(echoLinkSavedKey, appSettings.echoLinkAutoReconnectEnabled) {
         val address = appSettings.echoLinkPcAddress?.takeIf { it.isNotBlank() }
         val token = appSettings.echoLinkPcToken?.takeIf { it.isNotBlank() }
@@ -353,8 +344,6 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         }
     }
     val lastFmState by viewModel.lastFmState.collectAsStateWithLifecycle()
-    val neteaseAccountState by viewModel.neteaseAccountState.collectAsStateWithLifecycle()
-    val neteaseImportState by viewModel.neteaseImportState.collectAsStateWithLifecycle()
     val usbExclusiveTestResult by viewModel.usbExclusiveTestResult.collectAsStateWithLifecycle()
     val discordPresenceSnapshot by viewModel.discordPresenceSnapshot.collectAsStateWithLifecycle(null)
     val lastFmApiKey = appSettings.lastFmApiKey?.takeIf { it.isNotBlank() }
@@ -616,9 +605,6 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 artists = artists,
                                 folders = folders,
                                 playlists = localPlaylists,
-                                neteaseAccountState = neteaseAccountState,
-                                neteaseImportState = neteaseImportState,
-                                neteaseQuality = NeteaseAudioQuality.fromId(appSettings.neteaseAudioQuality),
                                 showTrackAudioInfoTags = appSettings.trackAudioInfoTagsVisible,
                                 selectedAlbum = selectedAlbum,
                                 selectedArtist = selectedArtist,
@@ -654,7 +640,6 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                     artworkImportTrackId = track.id
                                     artworkImportLauncher.launch(ArtworkDocumentMimeTypes)
                                 },
-                                onApplyNeteaseMetadata = { track -> viewModel.applyBestNeteaseMetadata(track.id) },
                                 onPlayAlbum = { album -> viewModel.playAlbum(album.albumKey) },
                                 onShuffleAlbum = { album -> viewModel.shuffleAlbum(album.albumKey) },
                                 onPlayArtist = { artist -> viewModel.playArtist(artist.artistKey) },
@@ -689,13 +674,6 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                     selectedFolder = null
                                     selectedPlaylist = playlist
                                 },
-                                onLoginNeteaseByPhone = viewModel::loginNeteaseByPhone,
-                                onLoginNeteaseWithCookie = viewModel::loginNeteaseWithCookie,
-                                onLogoutNetease = viewModel::logoutNetease,
-                                onRefreshNeteasePlaylists = viewModel::refreshNeteasePlaylists,
-                                onOpenNeteaseApp = ::openNeteaseApp,
-                                onNeteaseQualityChange = { quality -> viewModel.setNeteaseAudioQuality(quality.id) },
-                                onImportNeteasePlaylist = viewModel::importNeteasePlaylist,
                                 onCloseDetail = { closeLibraryDetail() },
                             )
 
