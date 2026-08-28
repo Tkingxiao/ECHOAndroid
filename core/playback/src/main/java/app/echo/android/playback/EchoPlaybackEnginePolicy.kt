@@ -234,6 +234,25 @@ class EchoPlaybackEnginePolicy(
             return
         }
         val player = attachedPlayer ?: return
+        val sinkStatus = EchoPlaybackProcessRuntime.usbExclusiveSinkStatus
+        if (
+            !PlaybackSessionPolicy.shouldMuteUsbTransition(
+                exclusiveStreaming = sinkStatus?.streaming == true,
+                streamingSampleRateHz = sinkStatus?.sampleRateHz,
+                nextTrackSampleRateHz = sampleRateHz,
+            )
+        ) {
+            // 同采样率的 USB 会话可直接复用，静音反而会打断 gapless。
+            usbTransitionJob?.cancel()
+            if (usbMuteInProgress) {
+                usbMuteInProgress = false
+                applyReplayGain()
+            }
+            usbTransitionJob = EchoPlaybackProcessRuntime.scope.launch {
+                usbAudioMonitor.prepareForTrack(sampleRateHz)
+            }
+            return
+        }
         usbTransitionJob?.cancel()
         usbMuteInProgress = true
         player.volume = 0f

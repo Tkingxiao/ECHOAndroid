@@ -704,11 +704,14 @@ internal class PlaybackController(
         var elapsedSincePersistMs = 0L
         progressJob = scope.launch {
             while (isActive && !cleared && controller === mediaController) {
-                updatePlaybackPosition(mediaController)
-                elapsedSincePersistMs += intervalMs
-                if (elapsedSincePersistMs >= PERSIST_POSITION_BUCKET_MS) {
-                    elapsedSincePersistMs = 0L
-                    persistPlaybackSession()
+                // 暂停时位置不变(seek 由 POSITION_DISCONTINUITY 事件更新),跳过空转 tick
+                if (mediaController.isPlaying) {
+                    updatePlaybackPosition(mediaController)
+                    elapsedSincePersistMs += intervalMs
+                    if (elapsedSincePersistMs >= PERSIST_POSITION_BUCKET_MS) {
+                        elapsedSincePersistMs = 0L
+                        persistPlaybackSession()
+                    }
                 }
                 delay(intervalMs.milliseconds)
             }
@@ -851,16 +854,10 @@ internal class PlaybackController(
         }
     }
 
+    // 进度 tick 只写 _playbackPosition,避免高频重发 _playbackStatus 触发整树重组;
+    // status 的 positionMs 仅在播放器事件(updatePlaybackCore)时刷新。
     private fun updatePlaybackPosition(player: Player) {
-        val position = player.toPlaybackPositionState()
-        updateState(_playbackPosition, position)
-        updateState(
-            _playbackStatus,
-            PlaybackSessionPolicy.playbackStatusWithLivePosition(
-                _playbackStatus.value,
-                position,
-            ).withPlaybackOptions(),
-        )
+        updateState(_playbackPosition, player.toPlaybackPositionState())
     }
 
     private fun startSleepTimerUiUpdates() {

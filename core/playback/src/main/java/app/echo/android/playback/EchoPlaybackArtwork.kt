@@ -31,10 +31,35 @@ object EchoPlaybackArtwork {
         }
         return runCatching {
             context.contentResolver.openInputStream(uri)?.use { input ->
-                val data = input.readBytes()
+                // 限长读取:超过 maxBytes 直接放弃,避免超大封面整文件进堆
+                val data = input.readBytesCapped(maxBytes) ?: return@use null
                 decodeBytes(data, maxEdgePx, maxBytes)
             }
         }.getOrNull()
+    }
+
+    /** 限长读取并按 maxEdgePx 降采样解码;超限返回 null。供 HTTP 等外部流复用。 */
+    fun decodeCapped(
+        input: java.io.InputStream,
+        maxEdgePx: Int,
+        maxBytes: Int = DefaultMaxBytes,
+    ): Bitmap? {
+        val data = input.readBytesCapped(maxBytes) ?: return null
+        return decodeBytes(data, maxEdgePx, maxBytes)
+    }
+
+    private fun java.io.InputStream.readBytesCapped(maxBytes: Int): ByteArray? {
+        val output = java.io.ByteArrayOutputStream(DefaultReadBufferBytes)
+        val buffer = ByteArray(DefaultReadBufferBytes)
+        var total = 0
+        while (true) {
+            val read = read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > maxBytes) return null
+            output.write(buffer, 0, read)
+        }
+        return output.toByteArray()
     }
 
     private fun decodeEmbedded(
@@ -81,6 +106,7 @@ object EchoPlaybackArtwork {
     }
 
     const val DefaultMaxBytes = 8 * 1024 * 1024
+    private const val DefaultReadBufferBytes = 64 * 1024
     const val NotificationMaxEdgePx = 512
     const val WidgetMaxEdgePx = 256
 }

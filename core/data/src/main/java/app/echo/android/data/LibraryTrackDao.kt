@@ -22,6 +22,18 @@ data class TrackFingerprint(
     val fingerprint: String?,
     val sizeBytes: Long = 0L,
     val dateModifiedSeconds: Long = 0L,
+    val relativePath: String? = null,
+)
+
+data class TrackAlbumKeyRow(
+    val id: String,
+    val albumKey: String,
+)
+
+/** 删除候选的轻量投影:只取归属卷判定需要的列,避免大曲库时拉全指纹 */
+data class TrackIdPathRow(
+    val id: String,
+    val relativePath: String?,
 )
 
 @Dao
@@ -517,7 +529,8 @@ interface LibraryTrackDao {
 
     @Query(
         """
-        SELECT id, contentUri, sampleRateHz, fingerprint, sizeBytes, dateModifiedSeconds FROM library_tracks
+        SELECT id, contentUri, sampleRateHz, fingerprint, sizeBytes, dateModifiedSeconds, relativePath
+        FROM library_tracks
         WHERE source = :source
         """,
     )
@@ -525,7 +538,8 @@ interface LibraryTrackDao {
 
     @Query(
         """
-        SELECT id, contentUri, sampleRateHz, fingerprint, sizeBytes, dateModifiedSeconds FROM library_tracks
+        SELECT id, contentUri, sampleRateHz, fingerprint, sizeBytes, dateModifiedSeconds, relativePath
+        FROM library_tracks
         WHERE source = :source
           AND relativePath LIKE :relativePathLike ESCAPE '\'
         """,
@@ -544,6 +558,9 @@ interface LibraryTrackDao {
         """,
     )
     suspend fun getTracksMissingSampleRate(limit: Int): List<LibraryTrackEntity>
+
+    @Query("SELECT id, albumKey FROM library_tracks WHERE source = :source")
+    suspend fun getTrackAlbumKeys(source: String): List<TrackAlbumKeyRow>
 
     @Upsert
     suspend fun upsertBatch(tracks: List<LibraryTrackEntity>)
@@ -765,6 +782,18 @@ interface LibraryTrackDao {
 
     @Query("SELECT id FROM library_tracks WHERE source = :source")
     suspend fun getIdsFromSource(source: String): List<String>
+
+    @Query("SELECT id, relativePath FROM library_tracks WHERE source = :source")
+    suspend fun getIdPathsFromSource(source: String): List<TrackIdPathRow>
+
+    @Query(
+        """
+        SELECT id, relativePath FROM library_tracks
+        WHERE source = :source
+          AND relativePath LIKE :relativePathLike ESCAPE '\'
+        """,
+    )
+    suspend fun getIdPathsFromRelativePath(source: String, relativePathLike: String): List<TrackIdPathRow>
 
     @Query(
         """

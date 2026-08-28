@@ -38,13 +38,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import app.echo.android.design.EchoAccent
 import app.echo.android.design.EchoAccentDeep
+import app.echo.android.design.EchoColors
 import app.echo.android.design.EchoDarkGlassBorder
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoGlassPanel
-import app.echo.android.design.EchoHomeBlue
 import app.echo.android.design.LocalEchoDarkTheme
+import app.echo.android.design.echoAccentColor
 import app.echo.android.design.RoonInk
 import app.echo.android.design.RoonMuted
 import app.echo.android.design.echoString
@@ -95,7 +95,7 @@ internal fun LibraryScanAction(
         else -> echoString(en = "Scan", zh = "扫描", ja = "スキャン")
     }
     val accent = when {
-        scanState.error != null -> Color(0xFFE0796E)
+        scanState.error != null -> EchoColors.Coral
         else -> colors.content
     }
 
@@ -204,7 +204,7 @@ internal fun LibraryScanOptionsDialog(
                         ja = "新しくコピーした音楽向け。選択したフォルダーだけ更新します",
                     ),
                     onClick = onScanFolder,
-                    accent = EchoHomeBlue,
+                    accent = echoAccentColor(),
                 )
                 LibraryScanOption(
                     icon = Icons.Rounded.LibraryMusic,
@@ -270,6 +270,6 @@ private fun LibraryScanOption(
             )
         }
         Spacer(Modifier.width(2.dp))
-        Icon(Icons.Rounded.Scanner, contentDescription = null, tint = EchoAccent, modifier = Modifier.size(19.dp))
+        Icon(Icons.Rounded.Scanner, contentDescription = null, tint = echoAccentColor(), modifier = Modifier.size(19.dp))
     }
 }

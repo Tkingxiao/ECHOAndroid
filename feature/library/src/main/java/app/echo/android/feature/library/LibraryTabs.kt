@@ -80,6 +80,7 @@ import androidx.paging.compose.LazyPagingItems
 import app.echo.android.design.ArtworkPalette
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoColors
+import app.echo.android.design.EchoMotion
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassPanel
@@ -128,20 +129,14 @@ private fun rememberLibraryGlassColors(): LibraryGlassColors {
 
 @Composable
 internal fun rememberLibraryControlColor(): Color {
-    val dark = LocalEchoDarkTheme.current
     val scheme = MaterialTheme.colorScheme
-    return remember(dark, scheme) {
-        if (dark) EchoColors.Sky else scheme.onSurface
-    }
+    return remember(scheme) { scheme.primary }
 }
 
 @Composable
 internal fun rememberLibraryArtworkAccent(): Color {
-    val dark = LocalEchoDarkTheme.current
     val scheme = MaterialTheme.colorScheme
-    return remember(dark, scheme) {
-        if (dark) EchoColors.Sky else scheme.surfaceVariant
-    }
+    return remember(scheme) { scheme.primary }
 }
 
 @Composable
@@ -231,7 +226,7 @@ internal fun LibrarySearchBar(
     var expanded by remember { mutableStateOf(query.isNotBlank()) }
     val width by animateDpAsState(
         targetValue = if (expanded) expandedWidth else 46.dp,
-        animationSpec = tween(durationMillis = 240),
+        animationSpec = EchoMotion.silkDp(320),
         label = "library-search-width",
     )
 
@@ -253,8 +248,8 @@ internal fun LibrarySearchBar(
     ) {
         AnimatedVisibility(
             visible = !expanded,
-            enter = fadeIn(animationSpec = tween(durationMillis = 150)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 120)),
+            enter = fadeIn(animationSpec = tween(durationMillis = 180, easing = EchoMotion.Silk)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 120, easing = EchoMotion.SilkExit)),
         ) {
             Box(
                 modifier = Modifier
@@ -275,12 +270,12 @@ internal fun LibrarySearchBar(
             visible = expanded,
             enter = expandHorizontally(
                 expandFrom = Alignment.End,
-                animationSpec = tween(durationMillis = 260),
-            ) + fadeIn(animationSpec = tween(durationMillis = 180)),
+                animationSpec = EchoMotion.silkSize(320),
+            ) + fadeIn(animationSpec = tween(durationMillis = 220, easing = EchoMotion.Silk)),
             exit = shrinkHorizontally(
                 shrinkTowards = Alignment.End,
-                animationSpec = tween(durationMillis = 200),
-            ) + fadeOut(animationSpec = tween(durationMillis = 130)),
+                animationSpec = EchoMotion.silkSize(240),
+            ) + fadeOut(animationSpec = tween(durationMillis = 140, easing = EchoMotion.SilkExit)),
         ) {
             TextField(
                 value = query,
@@ -954,7 +949,7 @@ internal fun LibraryScanStatus(
                 LibraryMetric(echoString(en = "Removed", zh = "删除", ja = "削除"), scanState.deletedCount.toString(), Modifier.weight(1f))
             }
             scanState.error?.takeIf { it.isNotBlank() }?.let { error ->
-                Text(error, color = Color(0xFFE0796E), style = MaterialTheme.typography.bodySmall)
+                Text(error, color = EchoColors.Coral, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -1025,7 +1020,7 @@ internal fun LibraryScanResultBanner(scanState: LibraryScanProgress) {
             Text(
                 text = message,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                color = if (scanState.phase == LibraryScanPhase.Error) Color(0xFFE0796E) else colors.muted,
+                color = if (scanState.phase == LibraryScanPhase.Error) EchoColors.Coral else colors.muted,
                 style = MaterialTheme.typography.bodySmall,
             )
         }

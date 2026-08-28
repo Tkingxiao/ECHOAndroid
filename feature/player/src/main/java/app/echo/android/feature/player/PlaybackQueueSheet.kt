@@ -6,7 +6,6 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
@@ -73,8 +72,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.ArtworkTile
-import app.echo.android.design.EchoAccent
 import app.echo.android.design.EchoAccentDeep
+import app.echo.android.design.EchoMotion
+import app.echo.android.design.echoAccentColor
 import app.echo.android.design.EchoDarkGlassBorder
 import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassNight
@@ -88,8 +88,8 @@ import app.echo.android.model.playback.EchoTrackRef
 import app.echo.android.model.playback.PlaybackQueueState
 import kotlinx.coroutines.launch
 
-private val QueueSheetMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
-private val QueueSheetExitEasing = CubicBezierEasing(0.32f, 0f, 0.67f, 0f)
+private val QueueSheetMotionEasing = EchoMotion.Silk
+private val QueueSheetExitEasing = EchoMotion.SilkExit
 private val QueueSheetDragSpring = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow,
@@ -125,21 +125,22 @@ fun PlaybackQueueSheet(
         val scrimAlpha by transition.animateFloat(
             transitionSpec = {
                 if (targetState == EnterExitState.Visible) {
-                    tween(durationMillis = 220, easing = QueueSheetMotionEasing)
+                    tween(durationMillis = 280, easing = QueueSheetMotionEasing)
                 } else {
-                    tween(durationMillis = 150, easing = QueueSheetExitEasing)
+                    tween(durationMillis = 180, easing = QueueSheetExitEasing)
                 }
             },
             label = "queue-sheet-scrim",
         ) { state ->
             if (state == EnterExitState.Visible) scrimTargetAlpha else 0f
         }
+        // 弹簧驱动:半路打断(快速开关)时速度连续,不会出现 tween 重启的顿挫
         val sheetProgress by transition.animateFloat(
             transitionSpec = {
                 if (targetState == EnterExitState.Visible) {
-                    tween(durationMillis = 430, easing = QueueSheetMotionEasing)
+                    EchoMotion.silkFloat(500)
                 } else {
-                    tween(durationMillis = 230, easing = QueueSheetExitEasing)
+                    EchoMotion.silkFloat(320)
                 }
             },
             label = "queue-sheet-progress",
@@ -149,9 +150,9 @@ fun PlaybackQueueSheet(
         val contentProgress by transition.animateFloat(
             transitionSpec = {
                 if (targetState == EnterExitState.Visible) {
-                    tween(durationMillis = 330, delayMillis = 70, easing = QueueSheetMotionEasing)
+                    EchoMotion.silkFloat(430)
                 } else {
-                    tween(durationMillis = 120, easing = QueueSheetExitEasing)
+                    EchoMotion.silkFloat(200)
                 }
             },
             label = "queue-sheet-content",
@@ -281,7 +282,7 @@ private fun QueueSheetSurface(
                     )
                 } else {
                     Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.98f), Color(0xFFF4F8FF).copy(alpha = 0.98f))
+                        listOf(Color.White.copy(alpha = 0.98f), Color(0xFFF6F3F4).copy(alpha = 0.98f))
                     )
                 },
             )
@@ -480,7 +481,7 @@ private fun QueueTrackRow(
         ArtworkTile(
             artworkUri = track.artworkUri,
             modifier = Modifier.size(46.dp),
-            accent = EchoAccent,
+            accent = echoAccentColor(),
             showSignal = active,
             cornerRadius = 13.dp,
             elevation = if (active) 4.dp else 1.dp,
@@ -570,7 +571,7 @@ private fun QueueEmptyState(onOpenLibrary: () -> Unit) {
             modifier = Modifier
                 .size(72.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(EchoAccent.copy(alpha = 0.20f), EchoAccentDeep.copy(alpha = 0.18f)))),
+                .background(Brush.linearGradient(listOf(echoAccentColor().copy(alpha = 0.20f), EchoAccentDeep.copy(alpha = 0.18f)))),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

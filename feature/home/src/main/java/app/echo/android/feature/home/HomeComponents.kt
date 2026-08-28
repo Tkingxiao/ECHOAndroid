@@ -64,18 +64,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.ArtworkTile
-import app.echo.android.design.EchoAccent
 import app.echo.android.design.EchoAccentDeep
-import app.echo.android.design.EchoAccentText
 import app.echo.android.design.EchoColors
 import app.echo.android.design.EchoDarkGlassBorder
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoGlassInk
-import app.echo.android.design.EchoGlassCyan
 import app.echo.android.design.EchoGlassPanel
-import app.echo.android.design.EchoHomeBlue
-import app.echo.android.design.EchoHomeBlueDeep
 import app.echo.android.design.EchoHomeMist
+import app.echo.android.design.echoAccentColor
+import app.echo.android.design.echoOnAccentColor
 import app.echo.android.design.EchoIconBadge
 import app.echo.android.design.EchoPanel
 import app.echo.android.design.EchoPlaceholderLine
@@ -131,7 +128,7 @@ internal fun homePanelColor(lightAlpha: Float = 0.90f): Color {
 private fun homePanelBorder(lightAlpha: Float = 0.94f): BorderStroke {
     return BorderStroke(
         1.dp,
-        if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.07f) else EchoSoftLine.copy(alpha = lightAlpha.coerceIn(0.74f, 0.96f)),
+        if (LocalEchoDarkTheme.current) EchoDarkGlassBorder else EchoSoftLine.copy(alpha = lightAlpha.coerceIn(0.74f, 0.96f)),
     )
 }
 
@@ -157,7 +154,7 @@ private fun homePanelBrush(): Brush {
         Brush.linearGradient(
             listOf(
                 Color.White.copy(alpha = 1.00f),
-                Color(0xFFF7FAFE),
+                Color(0xFFF7F5F6),
                 EchoHomeMist.copy(alpha = 0.76f),
             ),
         )
@@ -213,7 +210,7 @@ private fun HomeLibraryScanHint(
         Icon(
             imageVector = Icons.Rounded.LibraryMusic,
             contentDescription = null,
-            tint = EchoAccent,
+            tint = echoAccentColor(),
             modifier = Modifier.size(18.dp),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -312,7 +309,7 @@ private fun SearchResultItem(result: SearchResult, onClick: (SearchResult) -> Un
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .clip(if (result.type == SearchResultType.Artist) CircleShape else RoundedCornerShape(6.dp))
+                    .clip(if (result.type == SearchResultType.Artist) CircleShape else RoundedCornerShape(10.dp))
                     .background(homeBodyColor().copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center,
             ) {
@@ -332,10 +329,10 @@ private fun SearchResultItem(result: SearchResult, onClick: (SearchResult) -> Un
                 artworkUri = result.artworkUri,
                 modifier = Modifier
                     .size(36.dp)
-                    .clip(if (result.type == SearchResultType.Artist) CircleShape else RoundedCornerShape(6.dp)),
-                accent = EchoAccent,
+                    .clip(if (result.type == SearchResultType.Artist) CircleShape else RoundedCornerShape(10.dp)),
+                accent = echoAccentColor(),
                 showSignal = false,
-                cornerRadius = if (result.type == SearchResultType.Artist) 18.dp else 6.dp,
+                cornerRadius = if (result.type == SearchResultType.Artist) 18.dp else 10.dp,
                 elevation = 0.dp,
             )
         }
@@ -388,7 +385,7 @@ internal fun RoonRecentActivitySection(
             .padding(horizontal = 24.dp)
             .shadow(
                 elevation = if (LocalEchoDarkTheme.current) 0.dp else 14.dp,
-                shape = RoundedCornerShape(30.dp),
+                shape = RoundedCornerShape(28.dp),
                 ambientColor = Color.Black.copy(alpha = 0.045f),
                 spotColor = Color.Black.copy(alpha = 0.035f),
             )
@@ -558,7 +555,7 @@ internal fun RecentAlbumCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f),
-            accent = EchoAccent,
+            accent = echoAccentColor(),
             showSignal = album.artworkUri == null,
             cornerRadius = 14.dp,
             elevation = if (LocalEchoDarkTheme.current) 0.dp else 7.dp,
@@ -633,7 +630,7 @@ private fun RecentActivityEmptyAlbumCard(
             Icon(
                 Icons.Rounded.LibraryMusic,
                 contentDescription = null,
-                tint = EchoHomeBlue,
+                tint = echoAccentColor(),
                 modifier = Modifier.size(34.dp),
             )
         }
@@ -682,7 +679,7 @@ internal fun EmptyRecentAlbumsCard(
             Icon(
                 Icons.Rounded.LibraryMusic,
                 contentDescription = null,
-                tint = EchoHomeBlue,
+                tint = echoAccentColor(),
                 modifier = Modifier.size(34.dp),
             )
         }
@@ -715,7 +712,7 @@ internal fun RoonRecentActivitySection(
             .padding(horizontal = 24.dp)
             .shadow(
                 elevation = 16.dp,
-                shape = RoundedCornerShape(30.dp),
+                shape = RoundedCornerShape(32.dp),
                 ambientColor = Color.Black.copy(alpha = 0.04f),
                 spotColor = Color.Black.copy(alpha = 0.03f),
             )
@@ -753,7 +750,7 @@ internal fun RoonRecentActivitySection(
                 title = status.track?.title ?: echoString(en = "Local music", zh = "本地音乐", ja = "ローカルミュージック"),
                 subtitle = status.track?.artist ?: echoString(en = "Pick from your library", zh = "从曲库选择", ja = "ライブラリから選ぶ"),
                 artworkUri = status.track?.artworkUri,
-                accent = EchoAccent,
+                accent = echoAccentColor(),
                 onClick = if (status.track != null) onPlayPause else onOpenLibrary,
             )
             RoonRecentActivityCard(
@@ -1027,11 +1024,7 @@ private fun ArtistRankRow(
                         .clip(RoundedCornerShape(99.dp))
                         .background(
                             Brush.horizontalGradient(
-                                if (dark) {
-                                    listOf(scheme.primary.copy(alpha = 0.64f), scheme.primary.copy(alpha = 0.36f))
-                                } else {
-                                    listOf(EchoAccent, EchoAccentDeep)
-                                },
+                                listOf(scheme.primary.copy(alpha = 0.86f), scheme.primary.copy(alpha = 0.42f)),
                             ),
                         ),
                 )
@@ -1340,25 +1333,17 @@ private fun heatmapLevel(count: Int, maxCount: Int): Int {
 }
 
 @Composable
-private fun heatmapLevelColor(level: Int): Color =
-    if (LocalEchoDarkTheme.current) {
-        val accent = MaterialTheme.colorScheme.primary
-        when (level) {
-            1 -> accent.copy(alpha = 0.18f)
-            2 -> accent.copy(alpha = 0.28f)
-            3 -> accent.copy(alpha = 0.42f)
-            4 -> accent.copy(alpha = 0.58f)
-            else -> Color.White.copy(alpha = 0.07f)
-        }
-    } else {
-        when (level) {
-            1 -> EchoHomeBlue.copy(alpha = 0.24f)
-            2 -> EchoAccent.copy(alpha = 0.44f)
-            3 -> EchoAccentDeep.copy(alpha = 0.62f)
-            4 -> EchoGlassCyan.copy(alpha = 0.88f)
-            else -> Color.White.copy(alpha = 0.72f)
-        }
+private fun heatmapLevelColor(level: Int): Color {
+    val accent = MaterialTheme.colorScheme.primary
+    val dark = LocalEchoDarkTheme.current
+    return when (level) {
+        1 -> accent.copy(alpha = if (dark) 0.18f else 0.20f)
+        2 -> accent.copy(alpha = if (dark) 0.28f else 0.36f)
+        3 -> accent.copy(alpha = if (dark) 0.42f else 0.56f)
+        4 -> accent.copy(alpha = if (dark) 0.58f else 0.82f)
+        else -> if (dark) Color.White.copy(alpha = 0.07f) else EchoHomeMist
     }
+}
 
 @Composable
 private fun EmptyRankingNotice(
@@ -1470,7 +1455,7 @@ internal fun RoonRecentActivityCard(
                 Icon(
                     Icons.Rounded.GraphicEq,
                     contentDescription = null,
-                    tint = EchoHomeBlue,
+                    tint = echoAccentColor(),
                     modifier = Modifier
                         .padding(6.dp)
                         .size(22.dp),
@@ -1683,8 +1668,8 @@ internal fun RoonListenLaterPanel(onOpenConnect: () -> Unit) {
                 .widthIn(min = 230.dp)
                 .clickable(onClick = onOpenConnect),
             shape = RoundedCornerShape(28.dp),
-            color = EchoHomeBlue,
-            contentColor = Color.White,
+            color = echoAccentColor(),
+            contentColor = echoOnAccentColor(),
         ) {
             Text(
                 echoString(en = "Connect PC ECHO", zh = "连接 PC ECHO", ja = "PC ECHO に接続"),
@@ -1719,10 +1704,10 @@ internal fun HomeTopChrome(onOpenLibrary: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Rounded.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.76f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.Search, contentDescription = null, tint = homeBodyColor(), modifier = Modifier.size(20.dp))
                 Text(
                     echoString(en = "Search local music...", zh = "搜索本机音乐...", ja = "端末の音楽を検索..."),
-                    color = Color.White.copy(alpha = 0.72f),
+                    color = homeBodyColor(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1778,9 +1763,9 @@ internal fun DailyRecommendationCard(
             .background(
                 Brush.linearGradient(
                     listOf(
-                        Color(0xFF2C3A47),
-                        Color(0xFF24303B),
-                        Color(0xFF1C2730),
+                        Color(0xFF2C2B31),
+                        Color(0xFF242328),
+                        Color(0xFF1C1B20),
                         EchoAccentDeep.copy(alpha = 0.55f),
                     ),
                 ),
@@ -1885,7 +1870,7 @@ internal fun HomeModeChip(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Icon(icon, contentDescription = label, tint = if (selected) EchoAccent else Color.White.copy(alpha = 0.82f), modifier = Modifier.size(21.dp))
+            Icon(icon, contentDescription = label, tint = if (selected) echoAccentColor() else Color.White.copy(alpha = 0.82f), modifier = Modifier.size(21.dp))
             Text(label, color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -2240,12 +2225,23 @@ internal fun NowPlayingHero(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
 ) {
+    val dark = LocalEchoDarkTheme.current
+    val scheme = MaterialTheme.colorScheme
     val heroBrush = Brush.linearGradient(
-        listOf(
-            Color.White.copy(alpha = 0.72f),
-            EchoHomeMist.copy(alpha = 0.58f),
-            EchoHomeBlue.copy(alpha = 0.12f),
-        ),
+        if (dark) {
+            listOf(
+                Color.White.copy(alpha = 0.04f),
+                EchoGlassPanel.copy(alpha = 0.56f),
+                EchoGlassInk.copy(alpha = 0.62f),
+                scheme.primary.copy(alpha = 0.10f),
+            )
+        } else {
+            listOf(
+                Color.White.copy(alpha = 0.72f),
+                EchoHomeMist.copy(alpha = 0.58f),
+                scheme.primary.copy(alpha = 0.10f),
+            )
+        },
     )
     if (compact) {
         CompactNowPlayingHero(
@@ -2275,7 +2271,7 @@ internal fun NowPlayingHero(
                 Text(
                     echoString(en = "This device", zh = "本机会话", ja = "この端末"),
                     style = MaterialTheme.typography.labelSmall,
-                    color = EchoAccentText,
+                    color = echoAccentColor(),
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
@@ -2289,7 +2285,7 @@ internal fun NowPlayingHero(
                 modifier = Modifier
                     .fillMaxWidth(0.44f)
                     .aspectRatio(1f),
-                accent = EchoAccent,
+                accent = echoAccentColor(),
                 showSignal = true,
                 cornerRadius = 24.dp,
                 elevation = 18.dp,
@@ -2344,7 +2340,7 @@ internal fun CompactNowPlayingHero(
             ArtworkTile(
                 artworkUri = status.track?.artworkUri,
                 modifier = Modifier.size(artworkSize),
-                accent = EchoAccent,
+                accent = echoAccentColor(),
                 showSignal = true,
                 cornerRadius = 18.dp,
                 elevation = 12.dp,
@@ -2362,7 +2358,7 @@ internal fun CompactNowPlayingHero(
                         Text(
                             echoString(en = "This device", zh = "本机会话", ja = "この端末"),
                             style = MaterialTheme.typography.labelSmall,
-                            color = EchoAccentText,
+                            color = echoAccentColor(),
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
@@ -2452,7 +2448,7 @@ internal fun TransportControls(
             Icon(
                 Icons.Rounded.SkipPrevious,
                 contentDescription = echoString(en = "Previous", zh = "上一首", ja = "前の曲"),
-                tint = EchoHomeBlue,
+                tint = echoAccentColor(),
                 modifier = Modifier.size(28.dp),
             )
         }
@@ -2461,11 +2457,7 @@ internal fun TransportControls(
                 .size(56.dp)
                 .shadow(elevation = 10.dp, shape = CircleShape, clip = false)
                 .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(EchoHomeBlue, EchoHomeBlueDeep),
-                    ),
-                )
+                .background(echoAccentColor())
                 .clickable(
                     onClick = {
                         haptics.confirm()
@@ -2477,7 +2469,7 @@ internal fun TransportControls(
             Icon(
                 if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = echoString(en = "Play or pause", zh = "播放或暂停", ja = "再生または一時停止"),
-                tint = Color.White,
+                tint = echoOnAccentColor(),
                 modifier = Modifier.size(30.dp),
             )
         }
@@ -2491,7 +2483,7 @@ internal fun TransportControls(
             Icon(
                 Icons.Rounded.SkipNext,
                 contentDescription = echoString(en = "Next", zh = "下一首", ja = "次の曲"),
-                tint = EchoHomeBlue,
+                tint = echoAccentColor(),
                 modifier = Modifier.size(28.dp),
             )
         }
@@ -2500,9 +2492,19 @@ internal fun TransportControls(
 
 @Composable
 internal fun PlaybackProgress(positionMs: Long, durationMs: Long, light: Boolean = false) {
-    val foreground = if (light) Color.White else EchoAccent
-    val secondary = if (light) Color.White.copy(alpha = 0.66f) else Color.White.copy(alpha = 0.6f)
-    val trackColor = if (light) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.14f)
+    val scheme = MaterialTheme.colorScheme
+    val dark = LocalEchoDarkTheme.current
+    val foreground = if (light) Color.White else echoAccentColor()
+    val secondary = when {
+        light -> Color.White.copy(alpha = 0.70f)
+        dark -> Color.White.copy(alpha = 0.62f)
+        else -> scheme.onSurfaceVariant
+    }
+    val trackColor = when {
+        light -> Color.White.copy(alpha = 0.18f)
+        dark -> Color.White.copy(alpha = 0.12f)
+        else -> scheme.outlineVariant.copy(alpha = 0.90f)
+    }
     val fraction = progressFraction(positionMs, durationMs).coerceIn(0f, 1f)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(

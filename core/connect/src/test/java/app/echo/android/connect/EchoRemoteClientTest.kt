@@ -245,6 +245,71 @@ class EchoRemoteClientTest {
         assertEquals(5, client.library.value.tracks.size)
         assertEquals(5, client.library.value.totalCount)
         assertEquals(3, transport.libraryTrackCalls)
+        // 流式拉取完成后必须清掉"继续加载中"标记
+        assertFalse(client.library.value.isLoadingMore)
+        client.disconnect()
+    }
+
+    @Test
+    fun playlistTracksLoadedDuringStreamingRefreshSurviveLaterPublishes() = runBlocking {
+        val pageBlocker = CompletableDeferred<Unit>()
+        val transport = FakeEchoLinkTransport(
+            libraryPageSize = 2,
+            libraryTotalCount = 8,
+            trackPageBlockers = mapOf(2 to pageBlocker),
+            playlistTracks = mapOf("pl" to listOf(remoteTrack("pl-track"))),
+        )
+        val client = EchoRemoteClient(this, transport, connectRetryDelayMs = 0)
+        client.connect(endpoint, refreshLibraryOnConnect = false)
+        delay(20)
+
+        // 首页发布后第 2 页被卡住:模拟流式刷新进行中用户点开歌单
+        client.refreshLibrary()
+        delay(20)
+        client.refreshPlaylistTracks(EchoRemotePlaylist("pl", "PL", null, 1))
+        delay(20)
+        assertEquals(listOf("pl-track"), client.library.value.playlistTracks["pl"]?.map { it.id })
+
+        // 流式刷新的后续发布不得清掉已加载的歌单曲目
+        pageBlocker.complete(Unit)
+        delay(40)
+        assertFalse(client.library.value.isLoadingMore)
+        assertEquals(8, client.library.value.tracks.size)
+        assertEquals(listOf("pl-track"), client.library.value.playlistTracks["pl"]?.map { it.id })
+        client.disconnect()
+    }
+
+    @Test
+    fun streamingRefreshKeepsTheLoadingPlaylistIndicator() = runBlocking {
+        val pageBlocker = CompletableDeferred<Unit>()
+        val playlistBlocker = CompletableDeferred<Unit>()
+        val transport = FakeEchoLinkTransport(
+            libraryPageSize = 2,
+            libraryTotalCount = 4,
+            trackPageBlockers = mapOf(2 to pageBlocker),
+            playlistBlockers = mapOf("pl" to playlistBlocker),
+            playlistTracks = mapOf("pl" to listOf(remoteTrack("pl-track"))),
+        )
+        val client = EchoRemoteClient(this, transport, connectRetryDelayMs = 0)
+        client.connect(endpoint, refreshLibraryOnConnect = false)
+        delay(20)
+
+        client.refreshLibrary()
+        delay(20)
+        client.refreshPlaylistTracks(EchoRemotePlaylist("pl", "PL", null, 1))
+        delay(20)
+        assertEquals("pl", client.library.value.loadingPlaylistId)
+
+        // 歌单仍在加载时流式刷新完成:加载指示器不得凭空消失
+        pageBlocker.complete(Unit)
+        delay(40)
+        assertFalse(client.library.value.isLoadingMore)
+        assertEquals("pl", client.library.value.loadingPlaylistId)
+
+        playlistBlocker.complete(Unit)
+        delay(20)
+        assertNull(client.library.value.loadingPlaylistId)
+        assertEquals(listOf("pl-track"), client.library.value.playlistTracks["pl"]?.map { it.id })
         client.disconnect()
     }
 
@@ -335,6 +400,7 @@ private class FakeEchoLinkTransport(
     private val libraryTotalCount: Int = 0,
     private val pairingBlocker: CompletableDeferred<Unit>? = null,
     private val trackBlockers: Map<String, CompletableDeferred<Unit>> = emptyMap(),
+    private val trackPageBlockers: Map<Int, CompletableDeferred<Unit>> = emptyMap(),
     private val statusDelayAfterFirstMs: Long = 0L,
     private val playlistBlockers: Map<String, CompletableDeferred<Unit>> = emptyMap(),
     private val playlistTracks: Map<String, List<EchoRemoteTrack>> = emptyMap(),
@@ -400,6 +466,7 @@ private class FakeEchoLinkTransport(
         pageSize: Int,
     ): EchoLinkTrackPage {
         trackBlockers[query]?.await()
+        trackPageBlockers[page]?.await()
         libraryTrackCalls += 1
         val start = (page - 1) * libraryPageSize
         if (start >= libraryTotalCount) {

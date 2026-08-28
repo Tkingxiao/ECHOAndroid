@@ -125,6 +125,7 @@ internal fun EchoLibraryPage(
         onShuffleArtist = { artist -> viewModel.shuffleArtist(artist.artistKey) },
         onPlayFolder = { folder -> viewModel.playFolder(folder.folderKey) },
         onPlayPlaylist = { playlist -> viewModel.playPlaylist(playlist.id) },
+        onShufflePlaylist = { playlist -> viewModel.shufflePlaylist(playlist.id) },
         onCreatePlaylist = { name -> viewModel.createLocalPlaylist(name) },
         onRenamePlaylist = { playlist, name -> viewModel.renameLocalPlaylist(playlist.id, name) },
         onDeletePlaylist = { playlist ->
@@ -162,10 +163,10 @@ private fun playLinkedEchoTracks(
 ) {
     val startTrack = tracks.getOrNull(startIndex.coerceAtLeast(0)) ?: return
     if (pcHandoffEnabled) {
-        val current = viewModel.playbackStatus.value
-        val currentLinkedId = current.track?.id
+        val currentLinkedId = viewModel.playbackStatus.value.track?.id
         val positionMs = if (startTrack.id != null && currentLinkedId == "echo-link:${startTrack.id}") {
-            current.positionMs
+            // status 不再携带实时进度,交接位置从 playbackPosition 读取
+            viewModel.playbackPosition.value.positionMs
         } else {
             0L
         }

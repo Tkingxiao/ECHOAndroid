@@ -2,6 +2,8 @@ package app.echo.android.model.connect
 
 data class EchoRemoteLibraryState(
     val isLoading: Boolean = false,
+    /** 首页已展示,后续页仍在后台流式拉取中 */
+    val isLoadingMore: Boolean = false,
     val query: String = "",
     val tracks: List<EchoRemoteTrack> = emptyList(),
     val playlists: List<EchoRemotePlaylist> = emptyList(),

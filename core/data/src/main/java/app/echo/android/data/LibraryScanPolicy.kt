@@ -50,6 +50,22 @@ object LibraryScanPolicy {
 
     fun shouldStampLastSeenOnUnchangedRow(): Boolean = false
 
+    /**
+     * 增量扫描的轻量比对:MediaStore 行的 (DATE_MODIFIED, SIZE) 与库内快照一致即视为未变,
+     * 跳过全列拉取与指纹重算。文件内容/元数据变更都会改 mtime 或 size;
+     * 例外是 MediaStore 重新归组 albumId(artworkUri 变化)不改文件,该情况在文件下次被触碰时补上。
+     * 两个字段都为 0 视为快照不可信,退回全量路径。
+     */
+    fun isMediaStoreRowUnchanged(
+        existing: TrackFingerprint?,
+        dateModifiedSeconds: Long,
+        sizeBytes: Long,
+    ): Boolean =
+        existing?.fingerprint != null &&
+            (dateModifiedSeconds > 0L || sizeBytes > 0L) &&
+            existing.dateModifiedSeconds == dateModifiedSeconds &&
+            existing.sizeBytes == sizeBytes
+
     fun unseenIds(existingIds: Collection<String>, seenIds: Set<String>): List<String> =
         existingIds.distinct().filterNot(seenIds::contains)
 
@@ -139,7 +155,9 @@ object LibraryScanPolicy {
     }
 
     fun removableStorageRelativePath(volumeLabel: String, path: String?): String? {
-        val safeVolume = volumeLabel.replace(':', '_').trim().ifBlank { RemovableVolumeFallback }
+        // MediaStore 卷名固定小写,SAF documentId 里的卷 UUID 通常大写:
+        // 统一小写,否则同一张卡会在文件夹视图里分裂成两个目录树
+        val safeVolume = volumeLabel.replace(':', '_').trim().lowercase().ifBlank { RemovableVolumeFallback }
         val cleanPath = path?.replace('\\', '/')?.trim('/')
         return normalizeRelativePathPrefix(
             listOf("Removable", safeVolume, cleanPath)
@@ -151,6 +169,47 @@ object LibraryScanPolicy {
     fun shouldScanAllMediaStoreVolumes(sdkInt: Int, relativePathPrefix: String?): Boolean =
         sdkInt >= 29 && relativePathPrefix.isNullOrBlank()
 
+    /** 一个 MediaStore 集合(卷)对应的库内行范围,用于把删除限定在本次真正扫过的卷。 */
+    fun mediaStoreVolumeScope(volumeName: String?): MediaStoreVolumeScope {
+        val volume = volumeName?.trim().orEmpty()
+        return when {
+            // Q 之前的单一 external 集合、Q+ 的合并 external 视图:覆盖所有卷
+            volume.isEmpty() || volume.equals(MediaStoreExternalVolume, ignoreCase = true) ->
+                MediaStoreVolumeScope.AllVolumes
+            isPrimaryMediaStoreVolume(volume) -> MediaStoreVolumeScope.PrimaryVolume
+            else -> MediaStoreVolumeScope.RemovableVolume(
+                removableStorageRelativePath(volume, null) ?: RemovableRootPrefix,
+            )
+        }
+    }
+
+    fun mediaStoreRowWithinVolumeScopes(
+        relativePath: String?,
+        scopes: Collection<MediaStoreVolumeScope>,
+    ): Boolean = scopes.any { scope ->
+        when (scope) {
+            MediaStoreVolumeScope.AllVolumes -> true
+            MediaStoreVolumeScope.PrimaryVolume ->
+                relativePath == null || !relativePath.startsWith(RemovableRootPrefix, ignoreCase = true)
+            is MediaStoreVolumeScope.RemovableVolume ->
+                relativePath?.startsWith(scope.relativePathPrefix, ignoreCase = true) == true
+        }
+    }
+
+    /**
+     * 本地文件跨来源(mediastore/saf)的同一性钥匙:目录 + 大小 + mtime。
+     * 任一字段不可信(空/0)时返回 null,表示放弃去重判定。
+     */
+    fun localFileDuplicateKey(
+        relativePath: String?,
+        sizeBytes: Long,
+        dateModifiedSeconds: Long,
+    ): String? {
+        val dir = relativePath?.replace('\\', '/')?.trim('/')?.takeIf { it.isNotBlank() } ?: return null
+        if (sizeBytes <= 0L || dateModifiedSeconds <= 0L) return null
+        return "${dir.lowercase()}|$sizeBytes|$dateModifiedSeconds"
+    }
+
     fun shouldReuseUnchangedDocumentFingerprint(
         existingContentUri: String,
         incomingContentUri: String,
@@ -158,14 +217,32 @@ object LibraryScanPolicy {
         incomingSizeBytes: Long,
         existingDateModifiedSeconds: Long,
         incomingDateModifiedSeconds: Long,
+        existingRelativePath: String? = null,
+        incomingRelativePath: String? = null,
     ): Boolean =
         existingContentUri.isNotBlank() &&
             existingContentUri == incomingContentUri &&
             existingSizeBytes == incomingSizeBytes &&
-            existingDateModifiedSeconds == incomingDateModifiedSeconds
+            existingDateModifiedSeconds == incomingDateModifiedSeconds &&
+            // 指纹包含 relativePath:路径归一化(如卷名大小写)后必须走 Update 重写行
+            existingRelativePath == incomingRelativePath
 
     fun mediaStoreSampleRateColumnAvailable(sdkInt: Int): Boolean =
         sdkInt >= MediaStoreSampleRateSdkInt
+
+    /**
+     * ALBUM_ARTIST 是 API 30 才正式进入 MediaStore 音频列的;
+     * Android 8~10 的 provider 查询该列可能直接抛 IllegalArgumentException,
+     * 旧设备不放进投影,专辑归组回退到 artist。
+     */
+    fun mediaStoreAlbumArtistColumnAvailable(sdkInt: Int): Boolean =
+        sdkInt >= MediaStoreAlbumArtistSdkInt
+
+    fun isUnsupportedMediaStoreSampleRateColumn(error: Throwable): Boolean {
+        if (error !is IllegalArgumentException) return false
+        val message = error.message.orEmpty()
+        return message.contains("sample_rate", ignoreCase = true)
+    }
 
     fun preferredSampleRateHz(
         mediaStoreSampleRateHz: Int?,
@@ -212,9 +289,11 @@ object LibraryScanPolicy {
 
     const val SafSourceId = "saf"
     const val MediaStoreSampleRateSdkInt = 31
+    const val MediaStoreAlbumArtistSdkInt = 30
     const val MediaStorePrimaryVolume = "external_primary"
     const val MediaStoreExternalVolume = "external"
     const val RemovableVolumeFallback = "removable"
+    const val RemovableRootPrefix = "Removable/"
     const val DefaultProgressStride = 100
     const val DefaultProgressMinIntervalMs = 400L
     const val IncrementalSummaryKeyLimit = 400
@@ -251,9 +330,23 @@ enum class LibraryScanRowAction {
     RememberSeen,
 }
 
+/** MediaStore 卷在删除判定里的行范围:只有本次完整扫过的卷才允许删其缺失行。 */
+sealed interface MediaStoreVolumeScope {
+    /** 覆盖所有卷:Q 之前的单一 external 集合,或 Q+ 的合并 external 视图 */
+    data object AllVolumes : MediaStoreVolumeScope
+
+    /** 主卷(内置存储):relativePath 不带 Removable/ 前缀的行 */
+    data object PrimaryVolume : MediaStoreVolumeScope
+
+    /** 单个可移动卷:relativePath 以 Removable/<卷名>/ 开头的行 */
+    data class RemovableVolume(val relativePathPrefix: String) : MediaStoreVolumeScope
+}
+
 data class MediaStoreScanOutcome(
     val scannedCount: Int,
     val querySucceeded: Boolean,
+    /** 本次所有查询都成功的卷。查询失败/游标为 null 的卷不在列,其行不得被当作缺失删除。 */
+    val completeVolumeScopes: List<MediaStoreVolumeScope> = emptyList(),
 )
 
 data class RemoteSyncVisit(

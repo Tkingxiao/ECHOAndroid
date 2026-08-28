@@ -8,6 +8,77 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LibraryScanPolicyTest {
+    private fun fingerprint(
+        fingerprint: String? = "fp",
+        sizeBytes: Long = 1_024L,
+        dateModifiedSeconds: Long = 1_700_000_000L,
+    ) = TrackFingerprint(
+        id = "mediastore:1",
+        contentUri = "content://media/1",
+        sampleRateHz = 44_100,
+        fingerprint = fingerprint,
+        sizeBytes = sizeBytes,
+        dateModifiedSeconds = dateModifiedSeconds,
+    )
+
+    @Test
+    fun unchangedMediaStoreRowMatchesSnapshotSizeAndMtime() {
+        assertTrue(
+            LibraryScanPolicy.isMediaStoreRowUnchanged(
+                existing = fingerprint(),
+                dateModifiedSeconds = 1_700_000_000L,
+                sizeBytes = 1_024L,
+            ),
+        )
+    }
+
+    @Test
+    fun changedMtimeOrSizeIsNotUnchanged() {
+        assertFalse(
+            LibraryScanPolicy.isMediaStoreRowUnchanged(
+                existing = fingerprint(),
+                dateModifiedSeconds = 1_700_000_001L,
+                sizeBytes = 1_024L,
+            ),
+        )
+        assertFalse(
+            LibraryScanPolicy.isMediaStoreRowUnchanged(
+                existing = fingerprint(),
+                dateModifiedSeconds = 1_700_000_000L,
+                sizeBytes = 2_048L,
+            ),
+        )
+    }
+
+    @Test
+    fun newRowOrMissingFingerprintIsNotUnchanged() {
+        assertFalse(
+            LibraryScanPolicy.isMediaStoreRowUnchanged(
+                existing = null,
+                dateModifiedSeconds = 1_700_000_000L,
+                sizeBytes = 1_024L,
+            ),
+        )
+        assertFalse(
+            LibraryScanPolicy.isMediaStoreRowUnchanged(
+                existing = fingerprint(fingerprint = null),
+                dateModifiedSeconds = 1_700_000_000L,
+                sizeBytes = 1_024L,
+            ),
+        )
+    }
+
+    @Test
+    fun zeroedSnapshotFallsBackToFullFetch() {
+        assertFalse(
+            LibraryScanPolicy.isMediaStoreRowUnchanged(
+                existing = fingerprint(sizeBytes = 0L, dateModifiedSeconds = 0L),
+                dateModifiedSeconds = 0L,
+                sizeBytes = 0L,
+            ),
+        )
+    }
+
     @Test
     fun emptyScanWithExistingRowsDoesNotDelete() {
         assertFalse(
@@ -143,12 +214,13 @@ class LibraryScanPolicyTest {
         assertEquals("1D0C-1A0E" to "Music", LibraryScanPolicy.splitDocumentTreeId("1D0C-1A0E:Music"))
         assertEquals("1D0C-1A0E" to "", LibraryScanPolicy.splitDocumentTreeId("1D0C-1A0E:"))
         assertEquals("Music/", LibraryScanPolicy.documentTreeRelativePath("primary", "Music"))
+        // SAF documentId 里的卷 UUID 是大写,MediaStore 卷名是小写:统一小写对齐
         assertEquals(
-            "Removable/1D0C-1A0E/Music/",
+            "Removable/1d0c-1a0e/Music/",
             LibraryScanPolicy.documentTreeRelativePath("1D0C-1A0E", "Music"),
         )
         assertEquals(
-            "Removable/1D0C-1A0E/",
+            "Removable/1d0c-1a0e/",
             LibraryScanPolicy.documentTreeRelativePath("1D0C-1A0E", ""),
         )
         assertNull(LibraryScanPolicy.documentTreeRelativePath("primary", ""))
@@ -161,11 +233,11 @@ class LibraryScanPolicyTest {
             LibraryScanPolicy.mediaStoreRelativePathForVolume("external_primary", "Music/"),
         )
         assertEquals(
-            "Removable/1D0C-1A0E/Music/",
+            "Removable/1d0c-1a0e/Music/",
             LibraryScanPolicy.mediaStoreRelativePathForVolume("1D0C-1A0E", "Music/"),
         )
         assertEquals(
-            "Removable/1D0C-1A0E/",
+            "Removable/1d0c-1a0e/",
             LibraryScanPolicy.mediaStoreRelativePathForVolume("1D0C-1A0E", null),
         )
         assertEquals(
@@ -197,7 +269,7 @@ class LibraryScanPolicyTest {
             ),
         )
         assertEquals(
-            "Removable/1D0C-1A0E/Music/",
+            "Removable/1d0c-1a0e/Music/",
             LibraryScanPolicy.legacyDataRelativePath(
                 dataPath = "/storage/1D0C-1A0E/Music/song.flac",
                 primaryStorageRoot = "/storage/emulated/0",
@@ -257,10 +329,117 @@ class LibraryScanPolicyTest {
     }
 
     @Test
+    fun volumeScopeLimitsDeletionToScannedVolumes() {
+        val primary = LibraryScanPolicy.mediaStoreVolumeScope("external_primary")
+        val sdCard = LibraryScanPolicy.mediaStoreVolumeScope("1d0c-1a0e")
+        val merged = LibraryScanPolicy.mediaStoreVolumeScope("external")
+        val legacy = LibraryScanPolicy.mediaStoreVolumeScope(null)
+
+        assertEquals(MediaStoreVolumeScope.PrimaryVolume, primary)
+        assertEquals(MediaStoreVolumeScope.RemovableVolume("Removable/1d0c-1a0e/"), sdCard)
+        assertEquals(MediaStoreVolumeScope.AllVolumes, merged)
+        assertEquals(MediaStoreVolumeScope.AllVolumes, legacy)
+
+        // 只扫了主卷:SD 卡的行不允许被当作缺失删除
+        assertTrue(LibraryScanPolicy.mediaStoreRowWithinVolumeScopes("Music/", listOf(primary)))
+        assertTrue(LibraryScanPolicy.mediaStoreRowWithinVolumeScopes(null, listOf(primary)))
+        assertFalse(
+            LibraryScanPolicy.mediaStoreRowWithinVolumeScopes(
+                "Removable/1d0c-1a0e/Music/",
+                listOf(primary),
+            ),
+        )
+        // 历史行可能带大写卷名:归属判断不区分大小写
+        assertTrue(
+            LibraryScanPolicy.mediaStoreRowWithinVolumeScopes(
+                "Removable/1D0C-1A0E/Music/",
+                listOf(sdCard),
+            ),
+        )
+        assertFalse(LibraryScanPolicy.mediaStoreRowWithinVolumeScopes("Music/", listOf(sdCard)))
+        assertTrue(
+            LibraryScanPolicy.mediaStoreRowWithinVolumeScopes(
+                "Removable/1d0c-1a0e/Music/",
+                listOf(merged),
+            ),
+        )
+        // 没有任何完整扫过的卷:什么都不能删
+        assertFalse(LibraryScanPolicy.mediaStoreRowWithinVolumeScopes("Music/", emptyList()))
+    }
+
+    @Test
+    fun duplicateKeyMatchesAcrossSourcesIgnoringVolumeCase() {
+        assertEquals(
+            LibraryScanPolicy.localFileDuplicateKey("Removable/1D0C-1A0E/Music/", 1_024L, 99L),
+            LibraryScanPolicy.localFileDuplicateKey("Removable/1d0c-1a0e/Music", 1_024L, 99L),
+        )
+        assertNull(LibraryScanPolicy.localFileDuplicateKey(null, 1_024L, 99L))
+        assertNull(LibraryScanPolicy.localFileDuplicateKey("  ", 1_024L, 99L))
+        assertNull(LibraryScanPolicy.localFileDuplicateKey("Music/", 0L, 99L))
+        assertNull(LibraryScanPolicy.localFileDuplicateKey("Music/", 1_024L, 0L))
+    }
+
+    @Test
+    fun changedRelativePathIsUpdateNotFingerprintReuse() {
+        // 指纹包含 relativePath:路径归一化(卷名大小写迁移)后必须重写行
+        assertFalse(
+            LibraryScanPolicy.shouldReuseUnchangedDocumentFingerprint(
+                existingContentUri = "content://tree/doc/1",
+                incomingContentUri = "content://tree/doc/1",
+                existingSizeBytes = 1_024L,
+                incomingSizeBytes = 1_024L,
+                existingDateModifiedSeconds = 99L,
+                incomingDateModifiedSeconds = 99L,
+                existingRelativePath = "Removable/1D0C-1A0E/Music/",
+                incomingRelativePath = "Removable/1d0c-1a0e/Music/",
+            ),
+        )
+        assertTrue(
+            LibraryScanPolicy.shouldReuseUnchangedDocumentFingerprint(
+                existingContentUri = "content://tree/doc/1",
+                incomingContentUri = "content://tree/doc/1",
+                existingSizeBytes = 1_024L,
+                incomingSizeBytes = 1_024L,
+                existingDateModifiedSeconds = 99L,
+                incomingDateModifiedSeconds = 99L,
+                existingRelativePath = "Removable/1d0c-1a0e/Music/",
+                incomingRelativePath = "Removable/1d0c-1a0e/Music/",
+            ),
+        )
+    }
+
+    @Test
     fun sampleRateColumnIsAvailableFromAndroid12() {
         assertFalse(LibraryScanPolicy.mediaStoreSampleRateColumnAvailable(30))
         assertTrue(LibraryScanPolicy.mediaStoreSampleRateColumnAvailable(31))
         assertTrue(LibraryScanPolicy.mediaStoreSampleRateColumnAvailable(36))
+    }
+
+    @Test
+    fun albumArtistColumnIsAvailableFromAndroid11() {
+        assertFalse(LibraryScanPolicy.mediaStoreAlbumArtistColumnAvailable(26))
+        assertFalse(LibraryScanPolicy.mediaStoreAlbumArtistColumnAvailable(29))
+        assertTrue(LibraryScanPolicy.mediaStoreAlbumArtistColumnAvailable(30))
+        assertTrue(LibraryScanPolicy.mediaStoreAlbumArtistColumnAvailable(36))
+    }
+
+    @Test
+    fun unsupportedSampleRateColumnDetectsProviderError() {
+        assertTrue(
+            LibraryScanPolicy.isUnsupportedMediaStoreSampleRateColumn(
+                IllegalArgumentException("Invalid column sample_rate"),
+            ),
+        )
+        assertFalse(
+            LibraryScanPolicy.isUnsupportedMediaStoreSampleRateColumn(
+                IllegalArgumentException("Invalid column album_artist"),
+            ),
+        )
+        assertFalse(
+            LibraryScanPolicy.isUnsupportedMediaStoreSampleRateColumn(
+                RuntimeException("Invalid column sample_rate"),
+            ),
+        )
     }
 
     @Test

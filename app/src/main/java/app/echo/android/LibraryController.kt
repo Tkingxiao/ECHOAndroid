@@ -124,7 +124,9 @@ internal class LibraryController(
     private var lastRecommendedKeys: List<String> = emptyList()
     val recommendedAlbums: Flow<List<AlbumSummary>> =
         combine(
-            repository.observeAlbumListenStats().holdDuringLibraryMutation(),
+            repository.observeAlbumListenStats()
+                .debounce(400.milliseconds)
+                .holdDuringLibraryMutation(),
             recommendationSalt,
         ) { rows, salt ->
             val keys = LibraryHomeRecommendationPolicy.resolveAlbumKeys(

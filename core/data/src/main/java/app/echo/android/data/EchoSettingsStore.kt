@@ -19,8 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
@@ -30,8 +28,6 @@ private val Context.echoSettings by preferencesDataStore(name = "echo-settings")
 private val Context.echoPlaybackResumeSettings by preferencesDataStore(name = "echo-playback-resume")
 private val PlaybackResumeKey = stringPreferencesKey("playback_resume")
 private const val DefaultNeteaseAudioQuality = "lossless"
-private const val RemotePlaybackAuthSnapshotTimeoutMillis = 1_000L
-
 data class EchoAppSettings(
     val preferOffload: Boolean = true,
     val lastOutputRoute: String = "system",
@@ -173,14 +169,6 @@ class EchoSettingsStore(
 
     fun startupAppSettingsSnapshot(): EchoAppSettings =
         context.readEchoStartupThemeSnapshot().toAppSettings()
-
-    fun remotePlaybackAuthSettingsSnapshot(
-        timeoutMillis: Long = RemotePlaybackAuthSnapshotTimeoutMillis,
-    ): EchoAppSettings? = runBlocking(Dispatchers.IO) {
-        withTimeoutOrNull(timeoutMillis) {
-            appSettings.first()
-        }
-    }
 
     fun cacheStartupThemeSnapshot(
         settings: EchoAppSettings,

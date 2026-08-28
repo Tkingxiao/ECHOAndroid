@@ -25,10 +25,13 @@ import app.echo.android.design.PageChrome
 import app.echo.android.model.playback.EchoEqualizerState
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.OpraHeadphoneCorrectionState
+import app.echo.android.model.playback.PlaybackPositionState
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun DiagnosticsScreen(
     status: EchoPlaybackStatus,
+    positionFlow: StateFlow<PlaybackPositionState>,
     equalizerState: EchoEqualizerState,
     opraState: OpraHeadphoneCorrectionState,
     onEqualizerEnabledChange: (Boolean) -> Unit,
@@ -87,6 +90,7 @@ fun DiagnosticsScreen(
             UsbOutputPanel(status = status)
             CurrentStreamPanel(
                 status = status,
+                positionFlow = positionFlow,
                 lastCommand = lastCommand,
                 requestToken = diagnostics.requestToken,
             )

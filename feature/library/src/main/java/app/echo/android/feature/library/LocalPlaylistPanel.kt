@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,7 +38,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.paging.compose.LazyPagingItems
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoHomeMist
@@ -49,8 +47,6 @@ import app.echo.android.design.EchoTextButton
 import app.echo.android.design.EmptyState
 import app.echo.android.design.echoString
 import app.echo.android.model.library.EchoPlaylist
-import app.echo.android.model.library.EchoTrack
-import app.echo.android.model.library.EchoTrackMetadataUpdate
 
 @Composable
 internal fun LocalPlaylistPanel(
@@ -160,104 +156,6 @@ internal fun LocalPlaylistPanel(
 }
 
 @Composable
-internal fun PlaylistDetailPage(
-    playlist: EchoPlaylist,
-    tracks: LazyPagingItems<EchoTrack>,
-    onBack: () -> Unit,
-    onPlayAll: () -> Unit,
-    onPlayTrack: (EchoTrack) -> Unit,
-    onRenamePlaylist: (String) -> Unit,
-    onDeletePlaylist: () -> Unit,
-    onRemoveTrack: (EchoTrack) -> Unit,
-    onMoveTrack: (fromIndex: Int, toIndex: Int) -> Unit,
-    onUpdateTrackMetadata: ((EchoTrackMetadataUpdate) -> Unit)? = null,
-    onImportLyrics: ((EchoTrack) -> Unit)? = null,
-    onPickArtwork: ((EchoTrack) -> Unit)? = null,
-    onAddToPlaylist: ((EchoTrack) -> Unit)? = null,
-    onPlayNext: ((EchoTrack) -> Unit)? = null,
-    onEnqueue: ((EchoTrack) -> Unit)? = null,
-    showAudioInfoTags: Boolean = true,
-    modifier: Modifier = Modifier,
-) {
-    var renaming by remember { mutableStateOf(false) }
-    var deleting by remember { mutableStateOf(false) }
-    Column(modifier = modifier.fillMaxSize()) {
-        LibraryDetailPage(
-            title = playlistDisplayName(playlist),
-            subtitle = playlistCaption(playlist),
-            tracks = tracks,
-            onBack = onBack,
-            onPlayAll = onPlayAll,
-            onPlayTrack = onPlayTrack,
-            onUpdateTrackMetadata = onUpdateTrackMetadata,
-            onImportLyrics = onImportLyrics,
-            onPickArtwork = onPickArtwork,
-            onAddToPlaylist = onAddToPlaylist,
-            onPlayNext = onPlayNext,
-            onEnqueue = onEnqueue,
-            onRemoveFromPlaylist = onRemoveTrack.takeIf { playlist.canRemoveTracks },
-            onMoveTrack = onMoveTrack.takeIf { playlist.canEdit },
-            showAudioInfoTags = showAudioInfoTags,
-            headerActions = {
-                if (playlist.canEdit) {
-                    EchoTextButton(
-                        text = echoString(en = "Rename", zh = "重命名", ja = "名前を変更"),
-                        onClick = { renaming = true },
-                    )
-                    EchoTextButton(
-                        text = echoString(en = "Delete", zh = "删除", ja = "削除"),
-                        onClick = { deleting = true },
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
-    if (renaming) {
-        PlaylistNameDialog(
-            title = echoString(en = "Rename playlist", zh = "重命名歌单", ja = "プレイリスト名を変更"),
-            confirmLabel = echoString(en = "Save", zh = "保存", ja = "保存"),
-            initialName = playlist.name,
-            onDismiss = { renaming = false },
-            onConfirm = { name ->
-                onRenamePlaylist(name)
-                renaming = false
-            },
-        )
-    }
-    if (deleting) {
-        AlertDialog(
-            onDismissRequest = { deleting = false },
-            title = { Text(echoString(en = "Delete playlist", zh = "删除歌单", ja = "プレイリストを削除")) },
-            text = {
-                Text(
-                    echoString(
-                        en = "Delete “${playlist.name}”?",
-                        zh = "删除「${playlist.name}」？",
-                        ja = "「${playlist.name}」を削除しますか？",
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeletePlaylist()
-                        deleting = false
-                    },
-                ) {
-                    Text(echoString(en = "Delete", zh = "删除", ja = "削除"))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = false }) {
-                    Text(echoString(en = "Cancel", zh = "取消", ja = "キャンセル"))
-                }
-            },
-        )
-    }
-}
-
-@Composable
 internal fun AddToPlaylistDialog(
     playlists: List<EchoPlaylist>,
     onDismiss: () -> Unit,
@@ -324,7 +222,7 @@ internal fun AddToPlaylistDialog(
 }
 
 @Composable
-private fun PlaylistNameDialog(
+internal fun PlaylistNameDialog(
     title: String,
     confirmLabel: String,
     initialName: String,
@@ -358,36 +256,6 @@ private fun PlaylistNameDialog(
             }
         },
     )
-}
-
-@Composable
-private fun playlistDisplayName(playlist: EchoPlaylist): String =
-    if (playlist.isLikedSongs) {
-        echoString(en = "Liked songs", zh = "喜欢的歌曲", ja = "お気に入り")
-    } else {
-        playlist.name
-    }
-
-@Composable
-private fun playlistCaption(playlist: EchoPlaylist): String {
-    val count = playlist.trackCount
-    return when {
-        playlist.isLikedSongs -> echoString(
-            en = "$count tracks · Liked songs",
-            zh = "$count 首 · 喜欢的歌曲",
-            ja = "$count 曲 · お気に入り",
-        )
-        playlist.canEdit -> echoString(
-            en = "$count tracks · Local playlist",
-            zh = "$count 首 · 本地歌单",
-            ja = "$count 曲 · ローカルプレイリスト",
-        )
-        else -> echoString(
-            en = "$count tracks · Navidrome",
-            zh = "$count 首 · Navidrome",
-            ja = "$count 曲 · Navidrome",
-        )
-    }
 }
 
 @Composable

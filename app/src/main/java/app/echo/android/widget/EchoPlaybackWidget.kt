@@ -5,7 +5,6 @@ package app.echo.android.widget
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -86,7 +85,7 @@ private fun EchoPlaybackWidgetContent(
     Row(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(Color(0xE6181923))
+            .background(Color(0xE619191D))
             .cornerRadius(20.dp)
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .clickable(actionStartActivity(launchIntent)),
@@ -215,9 +214,12 @@ private fun loadWidgetArtwork(
         connection.readTimeout = 2_500
         connection.instanceFollowRedirects = true
         connection.inputStream.use { input ->
-            val data = input.readBytes()
-            if (data.size > 2 * 1024 * 1024) return@runCatching null
-            BitmapFactory.decodeByteArray(data, 0, data.size)
+            // 限长下载 + 按 widget 尺寸降采样,避免大图整包进堆再全分辨率解码
+            EchoPlaybackArtwork.decodeCapped(
+                input = input,
+                maxEdgePx = EchoPlaybackArtwork.WidgetMaxEdgePx,
+                maxBytes = 2 * 1024 * 1024,
+            )
         }
     }.getOrNull()
 }

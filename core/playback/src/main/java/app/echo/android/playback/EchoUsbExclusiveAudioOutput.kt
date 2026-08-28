@@ -240,7 +240,11 @@ internal class EchoUsbExclusiveAudioOutput(
         currentOutputConfig: AudioOutputProvider.OutputConfig,
         newFormatConfig: AudioOutputProvider.FormatConfig,
         newOutputConfig: AudioOutputProvider.OutputConfig,
-    ): Boolean = false
+    ): Boolean =
+        // Keeping the same USB session across a track transition is what makes
+        // gapless playback possible: rebuilding it re-claims the streaming
+        // interface and re-programs the clock, which is audible.
+        !released && !session.isDisconnected() && newOutputConfig == currentOutputConfig
 
     private fun isBigEndian(encoding: Int): Boolean =
         encoding == C.ENCODING_PCM_16BIT_BIG_ENDIAN ||

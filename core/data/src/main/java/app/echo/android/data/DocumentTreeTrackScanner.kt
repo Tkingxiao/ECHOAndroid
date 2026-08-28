@@ -21,6 +21,7 @@ class DocumentTreeTrackScanner(
         relativePathPrefix: String,
         batchSize: Int = DefaultBatchSize,
         existingTracks: Map<String, TrackFingerprint> = emptyMap(),
+        mediaStoreDuplicateKeys: Set<String> = emptySet(),
         readSampleRate: Boolean = true,
         onBatch: suspend (List<LibraryTrackEntity>) -> Unit,
         onProgress: suspend (scannedCount: Int, currentTrack: LibraryTrackEntity?) -> Unit,
@@ -83,6 +84,18 @@ class DocumentTreeTrackScanner(
             }
             for (row in audioRows) {
                 coroutineContext.ensureActive()
+                val duplicateKey = LibraryScanPolicy.localFileDuplicateKey(
+                    relativePath = row.relativePath,
+                    sizeBytes = row.sizeBytes,
+                    dateModifiedSeconds = row.lastModifiedMs.toEpochSeconds(),
+                )
+                if (duplicateKey != null && duplicateKey in mediaStoreDuplicateKeys) {
+                    // MediaStore 已收录同一文件,不再建 saf 行;计入 scanned,
+                    // 让历史遗留的 saf 重复行在清理阶段被当作缺失删除
+                    scannedCount += 1
+                    onProgress(scannedCount, null)
+                    continue
+                }
                 runCatching {
                     row.documentUri.toTrackEntity(
                         documentId = row.documentId,
@@ -136,6 +149,8 @@ class DocumentTreeTrackScanner(
                 incomingSizeBytes = sizeBytes,
                 existingDateModifiedSeconds = existingTrack.dateModifiedSeconds,
                 incomingDateModifiedSeconds = dateModifiedSeconds,
+                existingRelativePath = existingTrack.relativePath,
+                incomingRelativePath = relativePath,
             )
         ) {
             return LibraryTrackEntity(

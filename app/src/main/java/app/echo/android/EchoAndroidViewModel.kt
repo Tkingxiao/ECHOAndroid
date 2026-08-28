@@ -96,12 +96,8 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
     private val subsonicEndpointRef = AtomicReference<SubsonicEndpoint?>(null)
     val initialAppSettings: EchoAppSettings = settingsStore.startupAppSettingsSnapshot()
 
-    init {
-        settingsStore.remotePlaybackAuthSettingsSnapshot()?.let { authSettings ->
-            applyRemotePlaybackCredentials(authSettings, allowClearIfEmpty = false)
-            subsonicEndpointRef.set(subsonicEndpointFrom(authSettings))
-        }
-    }
+    // 远程播放凭据由下方 appSettings 收集器在首次发射时应用(applyRemotePlaybackCredentials +
+    // notifyRemotePlaybackAuthReady 门控恢复播放),不在构造期用 runBlocking 同步预读,避免阻塞主线程。
 
     private val libraryController = LibraryController(
         repository = repository,
@@ -447,6 +443,19 @@ class EchoAndroidViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             val queue = libraryController.playlistTracksForPlayback(playlistId)
             if (queue.isNotEmpty()) playbackController.playQueue(queue, 0)
+        }
+    }
+
+    fun shufflePlaylist(playlistId: String) {
+        viewModelScope.launch {
+            val queue = libraryController.playlistTracksForPlayback(playlistId)
+            if (queue.isNotEmpty()) {
+                playbackController.playQueue(
+                    queue = queue,
+                    startIndex = queue.indices.random(),
+                    intent = PlaybackQueueReplaceIntent.Shuffle,
+                )
+            }
         }
     }
 

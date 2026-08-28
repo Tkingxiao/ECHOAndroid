@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,13 +88,16 @@ private data class DetailGlassColors(
 private fun rememberDetailGlassColors(): DetailGlassColors {
     val scheme = MaterialTheme.colorScheme
     val dark = LocalEchoDarkTheme.current
-    return DetailGlassColors(
-        surface = if (dark) scheme.surface.copy(alpha = 0.62f) else scheme.surface.copy(alpha = 0.78f),
-        elevatedSurface = if (dark) scheme.surfaceVariant.copy(alpha = 0.34f) else scheme.surface.copy(alpha = 0.82f),
-        border = if (dark) scheme.outlineVariant.copy(alpha = 0.34f) else scheme.outlineVariant.copy(alpha = 0.46f),
-        content = scheme.onSurface.copy(alpha = if (dark) 0.94f else 0.90f),
-        muted = scheme.onSurfaceVariant.copy(alpha = if (dark) 0.72f else 0.76f),
-    )
+    // 列表行会高频调用,真正 remember 避免每次重组都分配
+    return remember(scheme, dark) {
+        DetailGlassColors(
+            surface = if (dark) scheme.surface.copy(alpha = 0.62f) else scheme.surface.copy(alpha = 0.78f),
+            elevatedSurface = if (dark) scheme.surfaceVariant.copy(alpha = 0.34f) else scheme.surface.copy(alpha = 0.82f),
+            border = if (dark) scheme.outlineVariant.copy(alpha = 0.34f) else scheme.outlineVariant.copy(alpha = 0.46f),
+            content = scheme.onSurface.copy(alpha = if (dark) 0.94f else 0.90f),
+            muted = scheme.onSurfaceVariant.copy(alpha = if (dark) 0.72f else 0.76f),
+        )
+    }
 }
 
 @Composable
@@ -543,7 +547,7 @@ private fun AlbumDetailLightBackground(
                         Brush.verticalGradient(
                             0f to Color.White.copy(alpha = 0.26f),
                             0.42f to Color.White.copy(alpha = 0.16f),
-                            1f to Color(0xFFE5F5FA).copy(alpha = 0.12f),
+                            1f to Color(0xFFF5E8EC).copy(alpha = 0.12f),
                         )
                     },
                 ),
@@ -1059,20 +1063,23 @@ private fun AlbumTrackRow(
         onEnqueue = onEnqueue,
         modifier = Modifier.fillMaxWidth(),
     ) { pressModifier ->
+        val dark = LocalEchoDarkTheme.current
+        // 每行的渐变按 (主题, 表面色, 强调色) 记忆,滚动/重组时不再重复分配 Brush
+        val rowBrush = remember(dark, colors.surface, accent) {
+            Brush.linearGradient(
+                listOf(
+                    if (dark) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.76f),
+                    colors.surface,
+                    accent.copy(alpha = if (dark) 0.10f else 0.05f),
+                ),
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            if (LocalEchoDarkTheme.current) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.76f),
-                            colors.surface,
-                            accent.copy(alpha = if (LocalEchoDarkTheme.current) 0.10f else 0.05f),
-                        ),
-                    ),
-                )
+                .background(rowBrush)
                 .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(16.dp))
                 .then(pressModifier)
                 .padding(horizontal = 14.dp, vertical = 12.dp),

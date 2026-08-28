@@ -1,9 +1,10 @@
 package app.echo.android.ui.shell
 
 import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import app.echo.android.EchoTab
+import app.echo.android.design.EchoMotion
 import app.echo.android.model.settings.EchoEffectivePerformanceMode
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
@@ -33,10 +34,9 @@ internal val EchoPagerPage.dockTab: EchoTab?
         EchoPagerPage.Settings -> null
     }
 
-private val RouteMotionEasing = CubicBezierEasing(0.18f, 0.86f, 0.20f, 1f)
-private const val ROUTE_MOTION_BASE_DURATION_MS = 150
-private const val ROUTE_MOTION_DISTANCE_DURATION_MS = 18
-private const val ROUTE_MOTION_MAX_DURATION_MS = 220
+private const val ROUTE_MOTION_BASE_DURATION_MS = 420
+private const val ROUTE_MOTION_DISTANCE_DURATION_MS = 48
+private const val ROUTE_MOTION_MAX_DURATION_MS = 560
 
 internal fun routeMotionSpec(
     fromPage: Int,
@@ -47,7 +47,12 @@ internal fun routeMotionSpec(
     val duration = (ROUTE_MOTION_BASE_DURATION_MS + (distance - 1) * ROUTE_MOTION_DISTANCE_DURATION_MS)
         .coerceAtMost(ROUTE_MOTION_MAX_DURATION_MS)
         .let { motionDuration(it, effectivePerformanceMode) }
-    return tween(durationMillis = duration, easing = RouteMotionEasing)
+    // 弹簧:甩动松手继承手指速度,导航中途重定向也不会出现速度跳变
+    return spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = EchoMotion.silkStiffness(duration),
+        visibilityThreshold = 0.5f,
+    )
 }
 
 internal fun motionDuration(defaultMs: Int, effectivePerformanceMode: EchoEffectivePerformanceMode): Int =

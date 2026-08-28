@@ -1,8 +1,6 @@
 package app.echo.android.playback
 
-import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
-import app.echo.android.model.playback.PlaybackPositionState
 
 enum class PlaybackQueueReplaceIntent {
     PlayAll,
@@ -23,6 +21,21 @@ object PlaybackSessionPolicy {
         if (hasPendingPlay) return false
         if (!restoreCompleted && queueEmpty) return false
         return true
+    }
+
+    /**
+     * USB 独占切轨时是否需要静音过渡。仅当会话无法无缝复用（未在流式输出、
+     * 采样率未知或即将变化，需要重建 USB 会话）时才静音，否则保持 gapless。
+     */
+    fun shouldMuteUsbTransition(
+        exclusiveStreaming: Boolean,
+        streamingSampleRateHz: Int?,
+        nextTrackSampleRateHz: Int?,
+    ): Boolean {
+        if (!exclusiveStreaming) return true
+        val current = streamingSampleRateHz?.takeIf { it > 0 } ?: return true
+        val next = nextTrackSampleRateHz?.takeIf { it > 0 } ?: return true
+        return next != current
     }
 
     fun restoredVolumeAfterUsbMute(capturedVolume: Float, fallbackVolume: Float): Float {
@@ -91,13 +104,4 @@ object PlaybackSessionPolicy {
         playbackStateIdle: Boolean,
         mediaItemCount: Int,
     ): Boolean = mediaItemCount > 0 && shouldPrepareBeforePlay(hasPlayerError, playbackStateIdle)
-
-    fun playbackStatusWithLivePosition(
-        status: EchoPlaybackStatus,
-        position: PlaybackPositionState,
-    ): EchoPlaybackStatus =
-        status.copy(
-            positionMs = position.positionMs,
-            durationMs = if (position.durationMs > 0L) position.durationMs else status.durationMs,
-        )
 }

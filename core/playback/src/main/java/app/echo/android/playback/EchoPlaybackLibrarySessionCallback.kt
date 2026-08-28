@@ -46,8 +46,10 @@ internal class EchoPlaybackLibrarySessionCallback(
             applyButtons(player)
             return
         }
-        scope.launch(Dispatchers.IO) {
-            currentFavorite = catalog().isFavorite(mediaId)
+        scope.launch {
+            currentFavorite = withContext(Dispatchers.IO) {
+                catalog().isFavorite(mediaId)
+            }
             applyButtons(player)
         }
     }
@@ -225,7 +227,9 @@ internal class EchoPlaybackLibrarySessionCallback(
     ): ListenableFuture<SessionResult> {
         return when (customCommand.customAction) {
             EchoPlaybackSessionCommands.TOGGLE_FAVORITE -> scope.future {
-                val mediaId = session.player.currentMediaItem?.mediaId
+                val mediaId = withContext(Dispatchers.Main.immediate) {
+                    session.player.currentMediaItem?.mediaId
+                }
                 if (mediaId.isNullOrBlank() || !EchoPlaybackLibraryIds.isTrackMediaId(mediaId)) {
                     SessionResult(SessionResult.RESULT_ERROR_INVALID_STATE)
                 } else {
@@ -272,10 +276,12 @@ internal class EchoPlaybackLibrarySessionCallback(
     }
 
     private fun applyButtons(player: Player?) {
-        val mediaSession = session() ?: return
-        val buttons = currentButtons(player)
-        mediaSession.setCustomLayout(buttons)
-        mediaSession.setMediaButtonPreferences(buttons)
+        scope.launch(Dispatchers.Main.immediate) {
+            val mediaSession = session() ?: return@launch
+            val buttons = currentButtons(player)
+            mediaSession.setCustomLayout(buttons)
+            mediaSession.setMediaButtonPreferences(buttons)
+        }
     }
 }
 

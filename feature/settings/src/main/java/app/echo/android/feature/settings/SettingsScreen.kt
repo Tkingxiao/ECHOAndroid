@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.echo.android.design.EchoGlassPanel
 import app.echo.android.design.EchoHapticKind
 import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.LocalEchoEffectivePerformanceMode
@@ -656,7 +657,7 @@ private fun LastFmSettingsPanel(
 private fun settingsPanelColor(): Color {
     val scheme = MaterialTheme.colorScheme
     return if (LocalEchoDarkTheme.current) {
-        Color(0xFF2C2E35).copy(alpha = 0.58f)
+        EchoGlassPanel.copy(alpha = 0.58f)
     } else {
         scheme.surface.copy(alpha = 0.72f)
     }
@@ -673,7 +674,7 @@ private fun settingsRowColor(selected: Boolean = false): Color {
 
 @Composable
 private fun settingsControlColor(): Color =
-    if (LocalEchoDarkTheme.current) Color(0xFFD3A9B5) else MaterialTheme.colorScheme.primary
+    MaterialTheme.colorScheme.primary
 
 @Composable
 private fun settingsControlSurfaceColor(active: Boolean): Color {

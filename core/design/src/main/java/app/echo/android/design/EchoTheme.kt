@@ -22,17 +22,16 @@ import androidx.compose.ui.unit.sp
 import app.echo.android.model.settings.EchoEffectivePerformanceMode
 
 object EchoColors {
-    // 深色模式走干净 graphite 底色，控制色用低饱和粉灰，避免蓝紫玻璃堆出脏感。
+    // Graphite surfaces with dusty-rose controls. Keep accents warm so glass doesn't pick up leftover blue.
     val Night = Color(0xFF19191D)
     val Ink = Color(0xFF222327)
     val Slate = Color(0xFF2B2C31)
-    val DeepBlue = Color(0xFF176BBD)
+    val Rose = Color(0xFF9B5B6A)
     val Brass = Color(0xFFE1A33A)
     val Coral = Color(0xFFD7675D)
     val Sky = Color(0xFFD3A9B5)
-    val RoonBlue = Color(0xFF2F9CFF)
-    val Paper = Color(0xFFF1F1F3)
-    val Mist = Color(0xFFEEF0F6)
+    val Paper = Color(0xFFF3F1F2)
+    val Mist = Color(0xFFF1EEEF)
     val Smoke = Color(0xFFA8A8AE)
 }
 
@@ -53,19 +52,19 @@ private val EchoDarkScheme = darkColorScheme(
 )
 
 private val EchoLightScheme = lightColorScheme(
-    primary = EchoColors.DeepBlue,
+    primary = EchoColors.Rose,
     onPrimary = Color(0xFFFFFFFF),
-    secondary = EchoColors.RoonBlue,
-    onSecondary = Color(0xFFFFFFFF),
+    secondary = EchoColors.Sky,
+    onSecondary = Color(0xFF251B20),
     tertiary = Color(0xFF9B6200),
     background = EchoColors.Paper,
-    onBackground = Color(0xFF171822),
+    onBackground = Color(0xFF17161A),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF171822),
+    onSurface = Color(0xFF17161A),
     surfaceVariant = EchoColors.Mist,
     onSurfaceVariant = EchoColors.Ink,
-    outline = Color(0xFF747887),
-    outlineVariant = Color(0xFFDDE0EA),
+    outline = Color(0xFF7A7578),
+    outlineVariant = Color(0xFFE3DFE1),
 )
 
 val LocalEchoDensityScale = staticCompositionLocalOf { 1f }

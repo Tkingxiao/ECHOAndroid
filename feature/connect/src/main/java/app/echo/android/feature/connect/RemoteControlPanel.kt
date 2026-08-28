@@ -36,10 +36,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.echo.android.design.EchoAccent
 import app.echo.android.design.EchoArtworkImage
 import app.echo.android.design.EchoArtworkSize
-import app.echo.android.design.EchoAccentText
 import app.echo.android.design.EchoDarkGlassBorder
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoGlassInk
@@ -136,12 +134,12 @@ internal fun ServiceStatusPill(
     val background = when {
         locked -> if (dark) EchoGlassInk.copy(alpha = 0.50f) else scheme.surfaceVariant.copy(alpha = 0.52f)
         active -> Color(0xFF35C28E).copy(alpha = if (dark) 0.28f else 0.22f)
-        else -> EchoAccent.copy(alpha = if (dark) 0.28f else 0.22f)
+        else -> scheme.primary.copy(alpha = if (dark) 0.28f else 0.22f)
     }
     val foreground = when {
         locked -> scheme.onSurfaceVariant
         active -> Color(0xFF1A9B68)
-        else -> EchoAccentText
+        else -> scheme.primary
     }
     Surface(
         shape = RoundedCornerShape(20.dp),

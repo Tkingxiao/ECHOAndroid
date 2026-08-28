@@ -20,6 +20,8 @@ class MediaStoreTrackScanner(
 ) {
     private val appContext = context.applicationContext
     private val contentResolver: ContentResolver = appContext.contentResolver
+    private var includeSampleRateColumn =
+        LibraryScanPolicy.mediaStoreSampleRateColumnAvailable(Build.VERSION.SDK_INT)
 
     suspend fun scanAudio(
         batchSize: Int = DefaultBatchSize,
@@ -27,6 +29,7 @@ class MediaStoreTrackScanner(
         existingTracks: Map<String, TrackFingerprint> = emptyMap(),
         readSampleRate: Boolean = true,
         onTotalCount: suspend (Int?) -> Unit = {},
+        onUnchangedIds: suspend (List<String>) -> Unit = {},
         onBatch: suspend (List<LibraryTrackEntity>) -> Unit,
         onProgress: suspend (scannedCount: Int, currentTrack: LibraryTrackEntity?) -> Unit,
     ): MediaStoreScanOutcome {
@@ -48,35 +51,93 @@ class MediaStoreTrackScanner(
             batch.clear()
         }
 
+        suspend fun consumeFullListing(listing: Cursor, collection: MediaStoreCollection) {
+            val columns = MediaStoreColumns.from(listing)
+            while (listing.moveToNext()) {
+                coroutineContext.ensureActive()
+                val track = runCatching {
+                    listing.toAudioRow(collection, columns)
+                        .toTrackEntity(existingTracks, readSampleRate)
+                }.onFailure { error ->
+                    Log.w(TAG, "Skipping unreadable MediaStore audio row.", error)
+                }.getOrNull() ?: continue
+                batch += track
+                scannedCount += 1
+                onProgress(scannedCount, track)
+                if (batch.size >= safeBatchSize) {
+                    flushBatch()
+                }
+            }
+        }
+
+        // 只有全部查询成功的卷才算"完整扫过":null 游标(卷 provider 短暂不可用等)
+        // 会让该卷缺席 seenIds,若仍计入完整卷,清理阶段就会把整卷曲目误删
+        val completeVolumeScopes = ArrayList<MediaStoreVolumeScope>()
         for (collection in collections) {
             coroutineContext.ensureActive()
-            val cursor = contentResolver.query(
-                collection.uri,
-                projection(),
-                selection,
-                selectionArgs,
-                null,
-            ) ?: continue
+            val volumeScope = LibraryScanPolicy.mediaStoreVolumeScope(collection.volumeName)
+            if (existingTracks.isEmpty()) {
+                // 首扫:直接全列拉取
+                val cursor = queryAudioListing(collection, selection, selectionArgs) ?: continue
+                querySucceeded = true
+                cursor.use { listing ->
+                    estimatedTotal += listing.count.coerceAtLeast(0)
+                    onTotalCount(estimatedTotal.takeIf { it > 0 })
+                    consumeFullListing(listing, collection)
+                }
+                completeVolumeScopes += volumeScope
+                continue
+            }
+            // 增量:先用 _ID/DATE_MODIFIED/SIZE 三列轻量游标与库内快照比对,
+            // 未变行只上报 id(供删除检测),只有变化/新增行才做全列拉取和指纹重算。
+            val probe = queryChangeProbe(collection, selection, selectionArgs) ?: continue
             querySucceeded = true
-            cursor.use { listing ->
+            val changedMediaIds = ArrayList<Long>()
+            probe.use { listing ->
                 estimatedTotal += listing.count.coerceAtLeast(0)
                 onTotalCount(estimatedTotal.takeIf { it > 0 })
-                val columns = MediaStoreColumns.from(listing)
+                val idIndex = listing.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val modifiedIndex = listing.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
+                val sizeIndex = listing.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                val unchangedIds = ArrayList<String>()
                 while (listing.moveToNext()) {
                     coroutineContext.ensureActive()
-                    val track = runCatching {
-                        listing.toAudioRow(collection, columns)
-                            .toTrackEntity(existingTracks, readSampleRate)
-                    }.onFailure { error ->
-                        Log.w(TAG, "Skipping unreadable MediaStore audio row.", error)
-                    }.getOrNull() ?: continue
-                    batch += track
-                    scannedCount += 1
-                    onProgress(scannedCount, track)
-                    if (batch.size >= safeBatchSize) {
-                        flushBatch()
+                    val mediaId = listing.getLong(idIndex)
+                    val trackId = "${LibraryScanPolicy.MediaStoreNativeIdPrefix}$mediaId"
+                    val unchanged = LibraryScanPolicy.isMediaStoreRowUnchanged(
+                        existing = existingTracks[trackId],
+                        dateModifiedSeconds = listing.getLongOrNull(modifiedIndex) ?: 0L,
+                        sizeBytes = listing.getLongOrNull(sizeIndex) ?: 0L,
+                    )
+                    if (unchanged) {
+                        unchangedIds += trackId
+                        scannedCount += 1
+                    } else {
+                        changedMediaIds += mediaId
                     }
                 }
+                if (unchangedIds.isNotEmpty()) {
+                    onUnchangedIds(unchangedIds)
+                    onProgress(scannedCount, null)
+                }
+            }
+            var volumeComplete = true
+            for (chunk in changedMediaIds.chunked(IdChunkSize)) {
+                coroutineContext.ensureActive()
+                val placeholders = chunk.joinToString(",") { "?" }
+                val chunkSelection =
+                    "$selection AND ${MediaStore.Audio.Media._ID} IN ($placeholders)"
+                val chunkArgs = (selectionArgs ?: emptyArray()) +
+                    chunk.map(Long::toString)
+                val cursor = queryAudioListing(collection, chunkSelection, chunkArgs)
+                if (cursor == null) {
+                    volumeComplete = false
+                    continue
+                }
+                cursor.use { listing -> consumeFullListing(listing, collection) }
+            }
+            if (volumeComplete) {
+                completeVolumeScopes += volumeScope
             }
         }
         if (!querySucceeded) {
@@ -84,7 +145,11 @@ class MediaStoreTrackScanner(
         }
         flushBatch()
         onProgress(scannedCount, null)
-        return MediaStoreScanOutcome(scannedCount = scannedCount, querySucceeded = true)
+        return MediaStoreScanOutcome(
+            scannedCount = scannedCount,
+            querySucceeded = true,
+            completeVolumeScopes = completeVolumeScopes,
+        )
     }
 
     private fun Cursor.toAudioRow(
@@ -100,7 +165,9 @@ class MediaStoreTrackScanner(
             title = getStringOrNull(columns.titleIndex)?.takeIf { it.isNotBlank() } ?: "未知曲目",
             artist = getStringOrNull(columns.artistIndex)?.takeIf { it.isNotBlank() } ?: "未知艺术家",
             album = getStringOrNull(columns.albumIndex)?.takeIf { it.isNotBlank() },
-            albumArtist = getStringOrNull(columns.albumArtistIndex)?.takeIf { it.isNotBlank() },
+            albumArtist = columns.albumArtistIndex
+                ?.let { getStringOrNull(it) }
+                ?.takeIf { it.isNotBlank() },
             albumId = albumId,
             durationMs = getLongOrNull(columns.durationIndex) ?: 0L,
             trackNumber = rawTrack?.rem(1000)?.takeIf { it > 0 },
@@ -224,7 +291,7 @@ class MediaStoreTrackScanner(
         val titleIndex: Int,
         val artistIndex: Int,
         val albumIndex: Int,
-        val albumArtistIndex: Int,
+        val albumArtistIndex: Int?,
         val albumIdIndex: Int,
         val durationIndex: Int,
         val trackIndex: Int,
@@ -244,7 +311,9 @@ class MediaStoreTrackScanner(
                     titleIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE),
                     artistIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST),
                     albumIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM),
-                    albumArtistIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ARTIST),
+                    // API 30 之前不在投影里;个别 OEM provider 也可能不返回,统一容错
+                    albumArtistIndex = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
+                        .takeIf { it >= 0 },
                     albumIdIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID),
                     durationIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION),
                     trackIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK),
@@ -299,23 +368,85 @@ class MediaStoreTrackScanner(
         }
     }
 
-    private fun projection(): Array<String> =
-        when {
-            LibraryScanPolicy.mediaStoreSampleRateColumnAvailable(Build.VERSION.SDK_INT) -> SProjection
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> QProjection
-            else -> LegacyProjection
+    // 注意:异常必须上抛(与全量查询一致),吞掉会让该卷被当成空卷而触发误删
+    private fun queryChangeProbe(
+        collection: MediaStoreCollection,
+        selection: String,
+        selectionArgs: Array<String>?,
+    ): Cursor? =
+        contentResolver.query(
+            collection.uri,
+            ChangeProbeProjection,
+            selection,
+            selectionArgs,
+            null,
+        )
+
+    private fun queryAudioListing(
+        collection: MediaStoreCollection,
+        selection: String,
+        selectionArgs: Array<String>?,
+    ): Cursor? {
+        return try {
+            contentResolver.query(
+                collection.uri,
+                projection(),
+                selection,
+                selectionArgs,
+                null,
+            )
+        } catch (error: IllegalArgumentException) {
+            if (
+                !includeSampleRateColumn ||
+                !LibraryScanPolicy.isUnsupportedMediaStoreSampleRateColumn(error)
+            ) {
+                throw error
+            }
+            Log.w(TAG, "MediaStore sample_rate column is unavailable; retrying without it.", error)
+            includeSampleRateColumn = false
+            contentResolver.query(
+                collection.uri,
+                projection(),
+                selection,
+                selectionArgs,
+                null,
+            )
         }
+    }
+
+    private fun projection(): Array<String> {
+        var columns = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            QProjection
+        } else {
+            LegacyProjection
+        }
+        if (LibraryScanPolicy.mediaStoreAlbumArtistColumnAvailable(Build.VERSION.SDK_INT)) {
+            columns = columns + MediaStore.Audio.Media.ALBUM_ARTIST
+        }
+        if (includeSampleRateColumn) {
+            columns = columns + SampleRateColumn
+        }
+        return columns
+    }
 
     private companion object {
         const val DefaultBatchSize = 500
+
+        // SQLite 绑定变量上限 999,留余量
+        const val IdChunkSize = 500
         const val TAG = "MediaStoreTrackScanner"
+
+        val ChangeProbeProjection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.DATE_MODIFIED,
+            MediaStore.Audio.Media.SIZE,
+        )
 
         val BaseProjection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ALBUM_ARTIST,
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.TRACK,
@@ -330,8 +461,6 @@ class MediaStoreTrackScanner(
             MediaStore.MediaColumns.VOLUME_NAME
 
         const val SampleRateColumn = "sample_rate"
-
-        val SProjection = QProjection + SampleRateColumn
 
         @Suppress("DEPRECATION")
         val LegacyProjection = BaseProjection + MediaStore.Audio.Media.DATA

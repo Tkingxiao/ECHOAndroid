@@ -15,17 +15,12 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -37,11 +32,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -69,6 +66,7 @@ import app.echo.android.connect.EchoRemoteClient
 import app.echo.android.model.playback.EchoLinkPlaybackUri
 import app.echo.android.design.EchoArtworkRequestHeadersRegistry
 import app.echo.android.design.EchoMobileTheme
+import app.echo.android.design.EchoMotion
 import app.echo.android.design.LocalEchoWidthSizeClass
 import app.echo.android.feature.connect.ConnectScreen
 import app.echo.android.feature.home.SearchScreen
@@ -119,7 +117,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
-private val DockMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
 private val LyricsDocumentMimeTypes = arrayOf("text/*", "application/xml", "application/octet-stream", "*/*")
 private val ArtworkDocumentMimeTypes = arrayOf("image/*", "application/octet-stream", "*/*")
 private val FontDocumentMimeTypes = arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream", "*/*")
@@ -395,12 +392,20 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     var selectedTab by remember { mutableIntStateOf(EchoTab.Now.ordinal) }
     var bottomDockExpanded by remember { mutableStateOf(true) }
     var nowPlayingExpanded by remember { mutableStateOf(false) }
+    var nowPlayingBackProgress by remember { mutableFloatStateOf(0f) }
+    val nowPlayingBackRecoveryJob = remember { arrayOfNulls<Job>(1) }
+    // 在设置 expanded=true 的同一帧归零返回进度,避免重开首帧带着残留位移渲染
+    fun expandNowPlaying() {
+        nowPlayingBackRecoveryJob[0]?.cancel()
+        nowPlayingBackProgress = 0f
+        nowPlayingExpanded = true
+    }
     var lyricsLaunchToken by remember { mutableIntStateOf(0) }
     var queueSheetVisible by remember { mutableStateOf(false) }
     val openLyricsRequest by EchoLaunchActions.openLyrics.collectAsStateWithLifecycle()
     LaunchedEffect(openLyricsRequest) {
         if (openLyricsRequest) {
-            nowPlayingExpanded = true
+            expandNowPlaying()
             lyricsLaunchToken += 1
             viewModel.setShowLyricsControlDeck(true)
             EchoLaunchActions.consumeOpenLyrics()
@@ -410,7 +415,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
     LaunchedEffect(incomingAudioUris) {
         if (incomingAudioUris.isNotEmpty()) {
             viewModel.playIncomingAudio(incomingAudioUris)
-            nowPlayingExpanded = true
+            expandNowPlaying()
             EchoLaunchActions.consumeIncomingAudio()
         }
     }
@@ -622,9 +627,28 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
         searchQuery = ""
     }
     EchoOverlayBackHandler(enabled = queueSheetVisible) { queueSheetVisible = false }
-    EchoOverlayBackHandler(enabled = nowPlayingExpanded && !queueSheetVisible) {
-        nowPlayingExpanded = false
-    }
+    EchoOverlayBackHandler(
+        enabled = nowPlayingExpanded && !queueSheetVisible,
+        onProgress = {
+            nowPlayingBackRecoveryJob[0]?.cancel()
+            nowPlayingBackProgress = it
+        },
+        onCancel = {
+            // 取消返回手势时弹簧回弹,而非瞬间跳回原位
+            nowPlayingBackRecoveryJob[0]?.cancel()
+            nowPlayingBackRecoveryJob[0] = appScope.launch {
+                animate(
+                    initialValue = nowPlayingBackProgress,
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = 420f,
+                    ),
+                ) { value, _ -> nowPlayingBackProgress = value }
+            }
+        },
+        onDismiss = { nowPlayingExpanded = false },
+    )
     EchoOverlayBackHandler(enabled = !nowPlayingExpanded && libraryDetailOpen) {
         closeLibraryDetail()
     }
@@ -652,7 +676,15 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     state = tabPagerState,
                     userScrollEnabled = !libraryDetailOpen ||
                         LocalEchoWidthSizeClass.current.prefersLibrarySplit,
-                    beyondViewportPageCount = 0,
+                    beyondViewportPageCount = if (effectivePerformanceMode.isLightweight) 0 else 1,
+                    flingBehavior = PagerDefaults.flingBehavior(
+                        state = tabPagerState,
+                        snapAnimationSpec = routeMotionSpec(
+                            fromPage = tabPagerState.currentPage,
+                            toPage = tabPagerState.currentPage,
+                            effectivePerformanceMode = effectivePerformanceMode,
+                        ),
+                    ),
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -868,7 +900,14 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                             }
 
                             EchoPagerPage.Connect -> {
-                            DisposableEffect(Unit) {
+                            // 只有真正停留在 Connect 页才启动 LAN 发现;
+                            // 邻页预组合(beyondViewportPageCount=1)不应常驻 NSD 扫描
+                            val connectPageSettled =
+                                tabPagerState.settledPage == EchoPagerPage.Connect.ordinal
+                            DisposableEffect(connectPageSettled) {
+                                if (!connectPageSettled) {
+                                    return@DisposableEffect onDispose {}
+                                }
                                 viewModel.startEchoLinkDiscovery()
                                 onDispose { viewModel.stopEchoLinkDiscovery() }
                             }
@@ -933,6 +972,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                                 val opraState by viewModel.opraState.collectAsStateWithLifecycle()
                                 DiagnosticsScreen(
                                     status = playbackStatus,
+                                    positionFlow = viewModel.playbackPosition,
                                     equalizerState = equalizerState,
                                     opraState = opraState,
                                     onEqualizerEnabledChange = viewModel::setEqualizerEnabled,
@@ -961,7 +1001,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     onHideDock = { bottomDockExpanded = false },
                     onShowDock = { bottomDockExpanded = true },
                     onSelectTab = { selectDockTab(EchoTab.entries[it]) },
-                    onExpand = { nowPlayingExpanded = true },
+                    onExpand = { expandNowPlaying() },
                     onOpenQueue = { queueSheetVisible = true },
                     onNext = viewModel::skipNext,
                     onPrevious = viewModel::skipPrevious,
@@ -974,27 +1014,18 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                 enter = if (effectivePerformanceMode.isLightweight) {
                     fadeIn(tween(durationMillis = motionDuration(90, effectivePerformanceMode)))
                 } else {
-                    slideInVertically(tween(durationMillis = motionDuration(420, effectivePerformanceMode), easing = DockMotionEasing)) { height -> height } +
-                        fadeIn(
-                            tween(
-                                durationMillis = motionDuration(240, effectivePerformanceMode),
-                                delayMillis = if (effectivePerformanceMode.isLightweight) 0 else 40,
-                            ),
-                        ) +
-                        scaleIn(
-                            initialScale = 0.985f,
-                            animationSpec = tween(durationMillis = motionDuration(420, effectivePerformanceMode), easing = DockMotionEasing),
-                        )
+                    EchoMotion.nowPlayingEnter(
+                        enterMs = motionDuration(520, effectivePerformanceMode),
+                        fadeMs = motionDuration(260, effectivePerformanceMode),
+                    )
                 },
                 exit = if (effectivePerformanceMode.isLightweight) {
                     fadeOut(tween(durationMillis = motionDuration(90, effectivePerformanceMode)))
                 } else {
-                    slideOutVertically(tween(durationMillis = motionDuration(360, effectivePerformanceMode), easing = DockMotionEasing)) { height -> height } +
-                        fadeOut(tween(durationMillis = motionDuration(220, effectivePerformanceMode), easing = DockMotionEasing)) +
-                        scaleOut(
-                            targetScale = 0.965f,
-                            animationSpec = tween(durationMillis = motionDuration(360, effectivePerformanceMode), easing = DockMotionEasing),
-                        )
+                    EchoMotion.nowPlayingExit(
+                        exitMs = motionDuration(380, effectivePerformanceMode),
+                        fadeMs = motionDuration(200, effectivePerformanceMode),
+                    )
                 },
             ) {
                 EchoNowPlayingHost(
@@ -1003,6 +1034,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     appSettings = appSettings,
                     lyricsFontFamily = lyricsFontFamily,
                     onDismiss = { nowPlayingExpanded = false },
+                    predictiveBackProgress = { nowPlayingBackProgress },
                     onOpenQueue = { queueSheetVisible = true },
                     onImportLyrics = { lyricsImportLauncher.launch(LyricsDocumentMimeTypes) },
                     onOpenArtist = {
@@ -1034,10 +1066,18 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     openLyricsRequestId = lyricsLaunchToken,
                 )
             }
-            if (queueSheetVisible) {
-                val playbackQueue by viewModel.playbackQueue.collectAsStateWithLifecycle()
-                PlaybackQueueSheet(
-                    visible = true,
+            // 队列 sheet 关闭时不收集队列流,避免曲目切换/队列变更触发根作用域重组;
+            // 关闭后保留最后一次快照,退出动画期间内容不跳变
+            val playbackQueue by produceState(
+                initialValue = viewModel.playbackQueue.value,
+                key1 = queueSheetVisible,
+            ) {
+                if (queueSheetVisible) {
+                    viewModel.playbackQueue.collect { value = it }
+                }
+            }
+            PlaybackQueueSheet(
+                    visible = queueSheetVisible,
                     status = playbackStatus,
                     queueState = playbackQueue,
                     onDismiss = { queueSheetVisible = false },
@@ -1053,9 +1093,25 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                         selectDockTab(EchoTab.Library)
                     },
                     modifier = Modifier.fillMaxSize(),
-                )
-            }
-            if (searchVisible) {
+            )
+            AnimatedVisibility(
+                visible = searchVisible,
+                enter = if (effectivePerformanceMode.isLightweight) {
+                    fadeIn(tween(durationMillis = motionDuration(90, effectivePerformanceMode)))
+                } else {
+                    EchoMotion.overlayEnter(
+                        enterMs = motionDuration(EchoMotion.OverlayMs, effectivePerformanceMode),
+                        fadeMs = motionDuration(EchoMotion.OverlayFadeMs, effectivePerformanceMode),
+                    )
+                },
+                exit = if (effectivePerformanceMode.isLightweight) {
+                    fadeOut(tween(durationMillis = motionDuration(90, effectivePerformanceMode)))
+                } else {
+                    EchoMotion.overlayExit(
+                        exitMs = motionDuration(EchoMotion.OverlayExitMs, effectivePerformanceMode),
+                    )
+                },
+            ) {
                 val localSearchResults by produceState(
                     initialValue = LocalHomeSearchResults(),
                     key1 = searchQuery,
@@ -1116,8 +1172,18 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     },
                 )
             }
-            EchoLinkQrScannerFallback(
+            AnimatedVisibility(
                 visible = echoLinkFallbackScannerVisible,
+                enter = EchoMotion.overlayEnter(
+                    enterMs = motionDuration(EchoMotion.OverlayMs, effectivePerformanceMode),
+                    fadeMs = motionDuration(EchoMotion.OverlayFadeMs, effectivePerformanceMode),
+                ),
+                exit = EchoMotion.overlayExit(
+                    exitMs = motionDuration(EchoMotion.OverlayExitMs, effectivePerformanceMode),
+                ),
+            ) {
+            EchoLinkQrScannerFallback(
+                visible = true,
                 onResult = { rawValue ->
                     val endpoint = EchoPairingParser.parse(rawValue)
                     if (endpoint != null) {
@@ -1138,6 +1204,7 @@ fun EchoAppRoot(viewModel: EchoAndroidViewModel) {
                     echoLinkScanMessage = message
                 },
             )
+            }
 
             val permissionEntries = remember(
                 permissionActivity,
@@ -1290,13 +1357,18 @@ private fun rememberSystemPowerSaveMode(): Boolean {
 @Composable
 private fun EchoOverlayBackHandler(
     enabled: Boolean,
+    onProgress: (Float) -> Unit = {},
+    onCancel: () -> Unit = { onProgress(0f) },
     onDismiss: () -> Unit,
 ) {
     PredictiveBackHandler(enabled = enabled) { progress ->
         try {
-            progress.collect { }
+            progress.collect { backEvent ->
+                onProgress(backEvent.progress)
+            }
             onDismiss()
         } catch (_: CancellationException) {
+            onCancel()
         }
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -58,6 +59,8 @@ import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.EchoRepeatMode
 import app.echo.android.model.playback.OpraHeadphoneCorrectionProduct
 import app.echo.android.model.playback.OpraHeadphoneCorrectionState
+import app.echo.android.model.playback.PlaybackPositionState
+import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -836,9 +839,14 @@ internal fun FlowChip(label: String, selected: Boolean, modifier: Modifier = Mod
 @Composable
 internal fun CurrentStreamPanel(
     status: EchoPlaybackStatus,
+    positionFlow: StateFlow<PlaybackPositionState>,
     lastCommand: String,
     requestToken: Long,
 ) {
+    // status 不再携带实时进度;在面板叶子处收集进度流,避免整页跟随 tick 重组。
+    val position by positionFlow.collectAsState()
+    val positionMs = position.positionMs
+    val durationMs = if (position.durationMs > 0L) position.durationMs else status.durationMs
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -851,7 +859,7 @@ internal fun CurrentStreamPanel(
             EchoSectionTitle(stringResource(R.string.diag_current_stream), status.track?.album ?: stringResource(R.string.diag_no_track))
             DiagnosticLine(stringResource(R.string.diag_track), status.track?.title ?: stringResource(R.string.diag_none))
             DiagnosticLine(stringResource(R.string.diag_artist), status.track?.artist ?: stringResource(R.string.diag_none))
-            DiagnosticLine(stringResource(R.string.diag_progress), "${formatDuration(status.positionMs)} / ${formatDuration(status.durationMs)}")
+            DiagnosticLine(stringResource(R.string.diag_progress), "${formatDuration(positionMs)} / ${formatDuration(durationMs)}")
             DiagnosticLine(
                 stringResource(R.string.diag_mode),
                 "${repeatModeLabel(status.repeatMode)} · ${if (status.shuffleEnabled) stringResource(R.string.diag_shuffle_on) else stringResource(R.string.diag_order_play)}",

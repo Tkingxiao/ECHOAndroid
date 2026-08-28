@@ -1,5 +1,11 @@
 package app.echo.android.feature.connect
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,13 +53,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.echo.android.connect.EchoLinkDiscoveryPolicy
 import app.echo.android.design.EchoDarkGlassBorder
+import app.echo.android.design.EchoMotion
 import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoGlassCyan
 import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassPanel
 import app.echo.android.design.EchoGlassViolet
-import app.echo.android.design.EchoHomeBlue
 import app.echo.android.design.EchoHomeMist
+import app.echo.android.design.echoAccentColor
+import app.echo.android.design.echoOnAccentColor
 import app.echo.android.design.EchoSectionTitle
 import app.echo.android.design.EchoTextButton
 import app.echo.android.design.LocalEchoDarkTheme
@@ -288,13 +296,13 @@ fun ConnectScreen(
                         modifier = Modifier
                             .size(46.dp)
                             .clip(RoundedCornerShape(13.dp))
-                            .background(EchoHomeBlue),
+                            .background(echoAccentColor()),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             Icons.Rounded.Devices,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = echoOnAccentColor(),
                             modifier = Modifier.size(25.dp),
                         )
                     }
@@ -388,7 +396,7 @@ fun ConnectScreen(
                     )
                     if (connected) {
                         TextButton(onClick = onDisconnect) {
-                            Text(echoString(en = "Disconnect", zh = "断开", ja = "切断"), color = EchoHomeBlue)
+                            Text(echoString(en = "Disconnect", zh = "断开", ja = "切断"), color = echoAccentColor())
                         }
                     } else if (hasSavedPc) {
                         TextButton(
@@ -398,7 +406,7 @@ fun ConnectScreen(
                                 onForgetPc()
                             },
                         ) {
-                            Text(echoString(en = "Forget", zh = "忘记", ja = "解除"), color = EchoHomeBlue)
+                            Text(echoString(en = "Forget", zh = "忘记", ja = "解除"), color = echoAccentColor())
                         }
                     }
                 }
@@ -481,7 +489,7 @@ private fun PcPairingInputs(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(
-                                if (selected) EchoHomeBlue.copy(alpha = 0.18f)
+                                if (selected) echoAccentColor().copy(alpha = 0.18f)
                                 else scheme.surface.copy(alpha = 0.35f),
                             )
                             .clickable { onSelectLanDevice(device) }
@@ -492,7 +500,7 @@ private fun PcPairingInputs(
                         Icon(
                             Icons.Rounded.Devices,
                             contentDescription = null,
-                            tint = EchoHomeBlue,
+                            tint = echoAccentColor(),
                             modifier = Modifier.size(18.dp),
                         )
                         Column(Modifier.weight(1f)) {
@@ -630,7 +638,7 @@ private fun LinkedLibraryDefaultRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(
-                if (checked) EchoHomeBlue.copy(alpha = if (dark) 0.18f else 0.10f)
+                if (checked) echoAccentColor().copy(alpha = if (dark) 0.18f else 0.10f)
                 else if (dark) EchoGlassPanel.copy(alpha = 0.44f) else scheme.surfaceVariant.copy(alpha = 0.24f),
             )
             .border(
@@ -750,7 +758,7 @@ private fun RemoteSourcesPanel(
                     listOf(
                         if (dark) Color.White.copy(alpha = 0.08f) else scheme.surface.copy(alpha = 0.70f),
                         if (dark) EchoGlassPanel.copy(alpha = 0.58f) else scheme.surface.copy(alpha = 0.70f),
-                        EchoHomeBlue.copy(alpha = if (dark) 0.20f else 0.12f),
+                        echoAccentColor().copy(alpha = if (dark) 0.20f else 0.12f),
                         if (dark) EchoGlassViolet.copy(alpha = 0.13f) else EchoHomeMist.copy(alpha = 0.28f),
                     ),
                 ),
@@ -773,10 +781,10 @@ private fun RemoteSourcesPanel(
                     modifier = Modifier
                         .size(46.dp)
                         .clip(RoundedCornerShape(13.dp))
-                        .background(EchoHomeBlue),
+                        .background(echoAccentColor()),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Rounded.CloudQueue, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
+                    Icon(Icons.Rounded.CloudQueue, contentDescription = null, tint = echoOnAccentColor(), modifier = Modifier.size(25.dp))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
@@ -821,7 +829,14 @@ private fun RemoteSourcesPanel(
                     modifier = Modifier.size(24.dp),
                 )
             }
-            if (expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(tween(durationMillis = EchoMotion.ExpandMs, easing = EchoMotion.Silk)) +
+                    fadeIn(tween(durationMillis = 240, easing = EchoMotion.Silk)),
+                exit = shrinkVertically(tween(durationMillis = 240, easing = EchoMotion.SilkExit)) +
+                    fadeOut(tween(durationMillis = 140, easing = EchoMotion.SilkExit)),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 RemoteSourceProviderSection(
                     title = "Subsonic / Navidrome",
                     subtitle = echoString(
@@ -874,6 +889,7 @@ private fun RemoteSourcesPanel(
                     onCancel = onCancel,
                     onClear = onClearWebDav,
                 )
+                }
             }
         }
     }
@@ -959,7 +975,7 @@ private fun RemoteSourceProviderSection(
                     .width(4.dp)
                     .height(if (expanded) 38.dp else 30.dp)
                     .clip(RoundedCornerShape(99.dp))
-                    .background(if (ready) EchoHomeBlue else if (dark) Color.White.copy(alpha = 0.20f) else scheme.outlineVariant.copy(alpha = 0.82f)),
+                    .background(if (ready) echoAccentColor() else if (dark) Color.White.copy(alpha = 0.20f) else scheme.outlineVariant.copy(alpha = 0.82f)),
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
@@ -996,7 +1012,14 @@ private fun RemoteSourceProviderSection(
                 )
             }
         }
-        if (expanded) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(tween(durationMillis = EchoMotion.ExpandMs, easing = EchoMotion.Silk)) +
+                fadeIn(tween(durationMillis = 240, easing = EchoMotion.Silk)),
+            exit = shrinkVertically(tween(durationMillis = 240, easing = EchoMotion.SilkExit)) +
+                fadeOut(tween(durationMillis = 140, easing = EchoMotion.SilkExit)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteTextInput(
                 label = serverLabel,
                 value = serverUrl,
@@ -1043,6 +1066,7 @@ private fun RemoteSourceProviderSection(
                     modifier = Modifier.weight(1f),
                     onClick = onClear,
                 )
+            }
             }
         }
     }

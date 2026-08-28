@@ -286,40 +286,79 @@ class EchoRemoteClient internal constructor(
         }
         val generation = ++libraryRefreshGeneration
         libraryRefreshJob?.cancel()
+        // 流式分页:首页 + 歌单到达即发布(不再等最多 40 页全部拉完才显示),
+        // 后续页在后台续拉,每 PublishEveryPages 页合并发布一次,期间 isLoadingMore=true。
         libraryRefreshJob = scope.launch {
-            runSuspendCatching {
-                val trackPage = fetchAllTrackPages(target, query)
+            fun isCurrentRefresh(): Boolean =
+                endpoint?.id == target.id && generation == libraryRefreshGeneration
+
+            val firstFetch = runSuspendCatching {
+                val trackPage = transport.fetchTracks(target, query, page = 1, pageSize = PcLibraryPageSize)
                 val playlistPage = transport.fetchPlaylists(target, query, PcLibraryPageSize)
                 trackPage to playlistPage
             }
-                .onSuccess { (trackPage, playlistPage) ->
-                    if (
-                        endpoint?.id == target.id &&
-                        generation == libraryRefreshGeneration
-                    ) {
-                        _library.value = EchoRemoteLibraryState(
-                            isLoading = false,
-                            query = query,
-                            tracks = trackPage.tracks,
-                            playlists = playlistPage.playlists,
-                            playlistTracks = playlistPage.playlists
-                                .filter { it.tracks.isNotEmpty() }
-                                .associate { it.id to it.tracks },
-                            totalCount = trackPage.totalCount,
-                            error = null,
-                        )
+            val (firstPage, playlistPage) = firstFetch.getOrElse { error ->
+                if (isCurrentRefresh()) {
+                    _library.update {
+                        it.copy(isLoading = false, query = query, error = error.userMessage())
                     }
                 }
-                .onFailure { error ->
-                    if (
-                        endpoint?.id == target.id &&
-                        generation == libraryRefreshGeneration
-                    ) {
-                        _library.update {
-                            it.copy(isLoading = false, query = query, error = error.userMessage())
-                        }
-                    }
+                return@launch
+            }
+            if (!isCurrentRefresh()) return@launch
+
+            val loadedTracks = ArrayList(firstPage.tracks)
+            var totalCount = firstPage.totalCount.coerceAtLeast(loadedTracks.size)
+            val playlistTracks = playlistPage.playlists
+                .filter { it.tracks.isNotEmpty() }
+                .associate { it.id to it.tracks }
+
+            fun publish(isLoadingMore: Boolean, error: String? = null) {
+                // 流式拉取期间用户可能并发点开歌单:基于当前状态合并,保留
+                // refreshPlaylistTracks 写入的曲目与 loadingPlaylistId,不能整体覆盖
+                _library.update { current ->
+                    current.copy(
+                        isLoading = false,
+                        isLoadingMore = isLoadingMore,
+                        query = query,
+                        tracks = loadedTracks.toList(),
+                        playlists = playlistPage.playlists,
+                        playlistTracks = playlistTracks + current.playlistTracks,
+                        totalCount = totalCount,
+                        error = error ?: current.error,
+                    )
                 }
+            }
+
+            var hasMore = firstPage.tracks.isNotEmpty() && loadedTracks.size < totalCount
+            publish(isLoadingMore = hasMore)
+
+            var page = 2
+            var pagesSincePublish = 0
+            while (hasMore && page <= MaxLibraryPages) {
+                val pageResult = runSuspendCatching {
+                    transport.fetchTracks(target, query, page, PcLibraryPageSize)
+                }.getOrElse { error ->
+                    if (isCurrentRefresh()) {
+                        publish(isLoadingMore = false, error = error.userMessage())
+                    }
+                    return@launch
+                }
+                if (!isCurrentRefresh()) return@launch
+                if (pageResult.tracks.isEmpty()) break
+                loadedTracks += pageResult.tracks
+                totalCount = pageResult.totalCount.coerceAtLeast(loadedTracks.size)
+                hasMore = loadedTracks.size < totalCount
+                pagesSincePublish += 1
+                if (pagesSincePublish >= PublishEveryPages && hasMore) {
+                    publish(isLoadingMore = true)
+                    pagesSincePublish = 0
+                }
+                page += 1
+            }
+            if (isCurrentRefresh()) {
+                publish(isLoadingMore = false)
+            }
         }
     }
 
@@ -604,28 +643,6 @@ class EchoRemoteClient internal constructor(
         }
     }
 
-    private suspend fun fetchAllTrackPages(
-        target: EchoRemoteEndpoint,
-        query: String,
-    ): EchoLinkTrackPage {
-        val tracks = mutableListOf<EchoRemoteTrack>()
-        var totalCount = 0
-        var page = 1
-        while (page <= MaxLibraryPages) {
-            val pageResult = transport.fetchTracks(target, query, page, PcLibraryPageSize)
-            totalCount = pageResult.totalCount
-            if (pageResult.tracks.isEmpty()) {
-                break
-            }
-            tracks += pageResult.tracks
-            if (tracks.size >= totalCount) {
-                break
-            }
-            page += 1
-        }
-        return EchoLinkTrackPage(tracks = tracks, totalCount = totalCount.coerceAtLeast(tracks.size))
-    }
-
     private fun markReconnecting(target: EchoRemoteEndpoint, error: Throwable?) {
         if (endpoint?.id != null && endpoint?.id != target.id) return
         endpoint = target
@@ -675,6 +692,9 @@ class EchoRemoteClient internal constructor(
         const val PcLibraryPageSize = 500
         const val PcPlaylistTrackPageSize = 500
         const val MaxLibraryPages = 40
+
+        // 流式拉取时每拉取多少页向 UI 合并发布一次,限制下游 catalog 重建次数
+        const val PublishEveryPages = 2
         const val PhoneStreamConcurrency = 4
     }
 }

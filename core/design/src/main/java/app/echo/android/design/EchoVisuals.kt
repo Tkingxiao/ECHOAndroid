@@ -66,26 +66,32 @@ import kotlinx.coroutines.withContext
 
 val EchoContentMaxWidth = 560.dp
 
-// === 榛樿涓婚锛氬共鍑€钃濋潚 + 涓€х偔鐏般€傚涓婚鍒囨崲鏃舵敼杩欎竴缁勫嵆鍙?===
-val EchoAccent = Color(0xFF2F9CFF)
-val EchoAccentText = Color(0xFF5BB8FF)
-val EchoAccentDeep = Color(0xFF176BBD)
-val EchoBgTop = Color(0xFFF8FBFF)
-val EchoBgMid = Color(0xFFF1F5FB)
-val EchoBgBottom = Color(0xFFEAF0F8)
+// Dusty rose + graphite. Change this set when adding more themes.
+val EchoAccent = Color(0xFFD3A9B5)
+val EchoAccentText = Color(0xFFE4C4CC)
+val EchoAccentDeep = Color(0xFF9B5B6A)
+val EchoBgTop = Color(0xFFF8F6F7)
+val EchoBgMid = Color(0xFFF3F1F2)
+val EchoBgBottom = Color(0xFFEDEBED)
 val RoonInk = Color(0xFF25242A)
 val RoonMuted = Color(0xFF6D6D73)
-val EchoHomeBlue = Color(0xFF2F9CFF)
-val EchoHomeBlueDeep = Color(0xFF176BBD)
-val EchoHomeMist = Color(0xFFEFF4FA)
-val EchoGlassBorder = Color(0xFFE1E8F2)
-val EchoSoftLine = Color(0xFFD5E0EC)
+val EchoHomeBlue = EchoAccent
+val EchoHomeBlueDeep = EchoAccentDeep
+val EchoHomeMist = Color(0xFFF4F1F2)
+val EchoGlassBorder = Color(0xFFE6E3E5)
+val EchoSoftLine = Color(0xFFDCD8DA)
 val EchoGlassNight = Color(0xFF17171B)
 val EchoGlassInk = Color(0xFF202126)
 val EchoGlassPanel = Color(0xFF2A2B30)
 val EchoGlassViolet = Color(0xFF252329)
 val EchoGlassCyan = Color(0xFF2D2E33)
 val EchoDarkGlassBorder = Color.White.copy(alpha = 0.08f)
+
+@Composable
+fun echoAccentColor(): Color = MaterialTheme.colorScheme.primary
+
+@Composable
+fun echoOnAccentColor(): Color = MaterialTheme.colorScheme.onPrimary
 
 @Composable
 fun GlassSurface(
@@ -124,7 +130,7 @@ fun echoGlassContainerBrush(
         } else {
             listOf(
                 Color.White.copy(alpha = 0.98f),
-                Color(0xFFF6F9FD),
+                Color(0xFFF6F4F5),
                 EchoHomeMist.copy(alpha = 0.92f),
             )
         },
@@ -149,7 +155,7 @@ fun echoGlassRowBrush(
             listOf(
                 Color.White.copy(alpha = 0.98f),
                 EchoHomeMist.copy(alpha = 0.82f),
-                if (selected) accent.copy(alpha = 0.08f) else Color(0xFFF6F8FC),
+                if (selected) accent.copy(alpha = 0.08f) else Color(0xFFF6F4F5),
             )
         },
     )
@@ -283,7 +289,7 @@ fun PageChrome(
                 listOf(
                     Color.White.copy(alpha = 0.36f),
                     EchoHomeMist.copy(alpha = 0.28f),
-                    Color(0xFFEAF2FF).copy(alpha = 0.22f),
+                    EchoHomeMist.copy(alpha = 0.22f),
                 ),
             )
         }

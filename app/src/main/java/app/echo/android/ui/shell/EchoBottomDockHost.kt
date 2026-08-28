@@ -8,7 +8,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -29,16 +29,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.echo.android.BottomDock
 import app.echo.android.EchoAndroidViewModel
 import app.echo.android.EchoTab
+import app.echo.android.design.EchoMotion
 import app.echo.android.design.LocalEchoContentMaxWidth
 import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassNight
 import app.echo.android.design.EchoGlassPanel
+import app.echo.android.design.EchoHomeMist
 import app.echo.android.feature.player.MiniPlayer
 import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.PlaybackPositionState
 import app.echo.android.model.settings.EchoEffectivePerformanceMode
 
-private val DockMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
+private val DockMotionEasing = EchoMotion.Silk
 
 @Composable
 internal fun EchoBottomDockHost(
@@ -59,12 +61,18 @@ internal fun EchoBottomDockHost(
     onPrevious: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
-    val dockTabProgress = (
-        pagerState.currentPage +
-            pagerState.currentPageOffsetFraction -
-            EchoPagerPage.Now.ordinal
-        ).coerceIn(0f, EchoTab.entries.lastIndex.toFloat())
+    // 传 State 引用而非值:进度 tick 不重组整个底栏,由 MiniPlayer 进度条绘制期读取
+    val playbackPosition = viewModel.playbackPosition.collectAsStateWithLifecycle()
+    // 以 lambda 延迟读取 pager 偏移,滑动时只更新指示条自身,不重组整个底栏
+    val dockTabProgress = remember(pagerState) {
+        {
+            (
+                pagerState.currentPage +
+                    pagerState.currentPageOffsetFraction -
+                    EchoPagerPage.Now.ordinal
+                ).coerceIn(0f, EchoTab.entries.lastIndex.toFloat())
+        }
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -85,16 +93,16 @@ internal fun EchoBottomDockHost(
                             easing = DockMotionEasing,
                         ),
                     ) +
-                        slideInVertically(tween(durationMillis = motionDuration(460, effectivePerformanceMode), easing = DockMotionEasing)) { height -> height / 3 } +
+                        slideInVertically(EchoMotion.silkOffset(motionDuration(460, effectivePerformanceMode))) { height -> height / 3 } +
                         scaleIn(
                             initialScale = 0.96f,
-                            animationSpec = tween(durationMillis = motionDuration(460, effectivePerformanceMode), easing = DockMotionEasing),
+                            animationSpec = EchoMotion.silkFloat(motionDuration(460, effectivePerformanceMode)),
                         )
                     val exit = fadeOut(tween(durationMillis = motionDuration(150, effectivePerformanceMode), easing = DockMotionEasing)) +
-                        slideOutVertically(tween(durationMillis = motionDuration(260, effectivePerformanceMode), easing = DockMotionEasing)) { height -> height / 5 } +
+                        slideOutVertically(EchoMotion.silkOffset(motionDuration(260, effectivePerformanceMode))) { height -> height / 5 } +
                         scaleOut(
                             targetScale = 0.985f,
-                            animationSpec = tween(durationMillis = motionDuration(260, effectivePerformanceMode), easing = DockMotionEasing),
+                            animationSpec = EchoMotion.silkFloat(motionDuration(260, effectivePerformanceMode)),
                         )
                     enter togetherWith exit
                 }
@@ -108,6 +116,7 @@ internal fun EchoBottomDockHost(
                     darkTheme = darkTheme,
                     selectedTab = selectedTab,
                     selectedTabProgress = dockTabProgress,
+                    selectedTabProgressLive = pagerState.isScrollInProgress,
                     onPlayPause = onPlayPause,
                     onHideDock = onHideDock,
                     onSelectTab = onSelectTab,
@@ -139,10 +148,11 @@ internal fun EchoBottomDockHost(
 @Composable
 private fun ExpandedBottomControls(
     status: EchoPlaybackStatus,
-    positionState: PlaybackPositionState,
+    positionState: State<PlaybackPositionState>,
     darkTheme: Boolean,
     selectedTab: Int,
-    selectedTabProgress: Float,
+    selectedTabProgress: () -> Float,
+    selectedTabProgressLive: Boolean,
     onPlayPause: () -> Unit,
     onHideDock: () -> Unit,
     onSelectTab: (Int) -> Unit,
@@ -166,8 +176,8 @@ private fun ExpandedBottomControls(
                 Brush.verticalGradient(
                     listOf(
                         Color.Transparent,
-                        Color(0xFFEAF2FF).copy(alpha = 0.78f),
-                        Color(0xFFEAF2FF).copy(alpha = 0.98f),
+                        EchoHomeMist.copy(alpha = 0.78f),
+                        EchoHomeMist.copy(alpha = 0.98f),
                     ),
                 )
             },
@@ -190,6 +200,7 @@ private fun ExpandedBottomControls(
         BottomDock(
             selectedTab = selectedTab,
             selectedTabProgress = selectedTabProgress,
+            progressLive = selectedTabProgressLive,
             onLightSurface = !darkTheme,
             onSelectTab = onSelectTab,
             modifier = Modifier.fillMaxWidth(),
@@ -200,7 +211,7 @@ private fun ExpandedBottomControls(
 @Composable
 private fun CompactBottomControls(
     status: EchoPlaybackStatus,
-    positionState: PlaybackPositionState,
+    positionState: State<PlaybackPositionState>,
     darkTheme: Boolean,
     onPlayPause: () -> Unit,
     onShowDock: () -> Unit,
@@ -226,7 +237,7 @@ private fun CompactBottomControls(
                     Brush.verticalGradient(
                         listOf(
                             Color.Transparent,
-                            Color(0xFFEAF2FF).copy(alpha = 0.82f),
+                            EchoHomeMist.copy(alpha = 0.82f),
                         ),
                     )
                 },

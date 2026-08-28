@@ -45,7 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.ArtworkTile
-import app.echo.android.design.EchoAccent
+import app.echo.android.design.echoAccentColor
 import app.echo.android.design.echoString
 
 @Composable
@@ -180,16 +180,18 @@ private fun SearchResultsList(
             )
         }
     } else {
-        val trackResults = searchResults.filter { it.type == SearchResultType.Track }
-        val albumResults = searchResults.filter { it.type == SearchResultType.Album }
-        val artistResults = searchResults.filter { it.type == SearchResultType.Artist }
+        // 一次分组并 remember,避免每次重组扫三遍结果列表
+        val grouped = remember(searchResults) { searchResults.groupBy { it.type } }
+        val trackResults = grouped[SearchResultType.Track].orEmpty()
+        val albumResults = grouped[SearchResultType.Album].orEmpty()
+        val artistResults = grouped[SearchResultType.Artist].orEmpty()
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
         ) {
             if (trackResults.isNotEmpty()) {
-                item {
+                item(key = "header-tracks") {
                     Text(
                         text = echoString(en = "Songs", zh = "歌曲", ja = "曲"),
                         color = homeBodyColor().copy(alpha = 0.4f),
@@ -197,7 +199,7 @@ private fun SearchResultsList(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
                     )
                 }
-                items(trackResults) { result ->
+                items(trackResults, key = { "track-${it.id}" }) { result ->
                     SearchResultItemFull(
                         result = result,
                         onClick = onResultClick,
@@ -208,7 +210,7 @@ private fun SearchResultsList(
             }
 
             if (albumResults.isNotEmpty()) {
-                item {
+                item(key = "header-albums") {
                     if (trackResults.isNotEmpty()) {
                         Spacer(Modifier.height(16.dp))
                     }
@@ -219,13 +221,13 @@ private fun SearchResultsList(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
                     )
                 }
-                items(albumResults) { result ->
+                items(albumResults, key = { "album-${it.id}" }) { result ->
                     SearchResultItemFull(result = result, onClick = onResultClick)
                 }
             }
 
             if (artistResults.isNotEmpty()) {
-                item {
+                item(key = "header-artists") {
                     Spacer(Modifier.height(16.dp))
                     Text(
                         text = echoString(en = "Artists", zh = "艺术家", ja = "アーティスト"),
@@ -234,7 +236,7 @@ private fun SearchResultsList(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
                     )
                 }
-                items(artistResults) { result ->
+                items(artistResults, key = { "artist-${it.id}" }) { result ->
                     SearchResultItemFull(result = result, onClick = onResultClick)
                 }
             }
@@ -283,7 +285,7 @@ private fun SearchResultItemFull(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(if (result.type == SearchResultType.Artist) CircleShape else RoundedCornerShape(8.dp)),
-                accent = EchoAccent,
+                accent = echoAccentColor(),
                 showSignal = false,
                 cornerRadius = if (result.type == SearchResultType.Artist) 24.dp else 8.dp,
                 elevation = 0.dp,

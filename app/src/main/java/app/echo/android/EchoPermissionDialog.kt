@@ -1,10 +1,6 @@
 package app.echo.android
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,9 +37,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.echo.android.design.EchoMotion
+import app.echo.android.design.EchoGlassBorder
 import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassNight
 import app.echo.android.design.EchoGlassPanel
+import app.echo.android.design.EchoHomeMist
 import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.echoDarkGlassBorder
 
@@ -57,13 +56,13 @@ fun EchoPermissionDialog(
 ) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn() + scaleIn(initialScale = 0.95f),
-        exit = fadeOut() + scaleOut(targetScale = 0.95f),
+        enter = EchoMotion.dialogEnter(),
+        exit = EchoMotion.dialogExit(),
     ) {
         val dark = LocalEchoDarkTheme.current
         val scheme = MaterialTheme.colorScheme
         val surfaceColor = if (dark) EchoGlassPanel.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.96f)
-        val borderColor = if (dark) echoDarkGlassBorder() else BorderStroke(1.dp, Color(0xFFE1E8F2))
+        val borderColor = if (dark) echoDarkGlassBorder() else BorderStroke(1.dp, EchoGlassBorder)
 
         Box(
             modifier = Modifier
@@ -180,7 +179,7 @@ private fun PermissionRow(
     dark: Boolean,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val rowBg = if (dark) EchoGlassInk.copy(alpha = 0.45f) else Color(0xFFF4F8FF)
+    val rowBg = if (dark) EchoGlassInk.copy(alpha = 0.45f) else EchoHomeMist
     val checkColor = if (dark) Color(0xFF6DD4A0) else Color(0xFF2E8B57)
 
     Row(

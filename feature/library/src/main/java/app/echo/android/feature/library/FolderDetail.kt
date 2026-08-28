@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +52,8 @@ import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoAccent
 import app.echo.android.design.EchoAccentDeep
 import app.echo.android.design.EchoContentMaxWidth
+import app.echo.android.design.echoAccentColor
+import app.echo.android.design.echoOnAccentColor
 
 import app.echo.android.design.EchoGlassInk
 import app.echo.android.design.EchoGlassPanel
@@ -84,13 +87,16 @@ private data class FolderDetailColors(
 private fun rememberFolderDetailColors(): FolderDetailColors {
     val scheme = MaterialTheme.colorScheme
     val dark = LocalEchoDarkTheme.current
-    return FolderDetailColors(
-        surface = if (dark) EchoGlassPanel.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.94f),
-        elevatedSurface = if (dark) EchoGlassInk.copy(alpha = 0.86f) else Color.White.copy(alpha = 0.98f),
-        border = if (dark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.92f),
-        content = if (dark) Color.White.copy(alpha = 0.96f) else RoonInk,
-        muted = if (dark) Color.White.copy(alpha = 0.74f) else RoonMuted,
-    )
+    // 列表行会高频调用,真正 remember 避免每次重组都分配
+    return remember(scheme, dark) {
+        FolderDetailColors(
+            surface = if (dark) EchoGlassPanel.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.94f),
+            elevatedSurface = if (dark) EchoGlassInk.copy(alpha = 0.86f) else Color.White.copy(alpha = 0.98f),
+            border = if (dark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.92f),
+            content = if (dark) Color.White.copy(alpha = 0.96f) else RoonInk,
+            muted = if (dark) Color.White.copy(alpha = 0.74f) else RoonMuted,
+        )
+    }
 }
 
 @Composable
@@ -324,7 +330,7 @@ private fun FolderHero(
             ArtworkTile(
                 artworkUri = artworkUri,
                 modifier = Modifier.size(104.dp),
-                accent = EchoAccent,
+                accent = echoAccentColor(),
                 showSignal = artworkUri.isNullOrBlank(),
                 cornerRadius = 18.dp,
                 elevation = 14.dp,
@@ -353,16 +359,16 @@ private fun FolderHero(
                 .fillMaxWidth()
                 .height(52.dp)
                 .clip(RoundedCornerShape(26.dp))
-                .background(Brush.horizontalGradient(listOf(EchoAccent, EchoAccentDeep)))
+                .background(echoAccentColor())
                 .clickable(onClick = onPlayAll),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+            Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = echoOnAccentColor(), modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 echoString(en = "Play this folder", zh = "播放这个文件夹", ja = "このフォルダーを再生"),
-                color = Color.White,
+                color = echoOnAccentColor(),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
             )
@@ -498,7 +504,7 @@ private fun FolderTrackRow(
             ArtworkTile(
                 artworkUri = track.artworkUri,
                 modifier = Modifier.size(58.dp),
-                accent = EchoAccent,
+                accent = echoAccentColor(),
                 cornerRadius = 10.dp,
                 elevation = 4.dp,
                 placeholderIconSize = 27.dp,

@@ -25,8 +25,10 @@ internal fun EchoNowPlayingHost(
     onImportLyricsFont: () -> Unit,
     modifier: Modifier = Modifier,
     openLyricsRequestId: Int = 0,
+    predictiveBackProgress: () -> Float = { 0f },
 ) {
-    val playbackPosition by viewModel.playbackPosition.collectAsStateWithLifecycle()
+    // 传 State 引用而非值:进度 tick 不在宿主层触发重组,由页内叶子订阅
+    val playbackPosition = viewModel.playbackPosition.collectAsStateWithLifecycle()
     val lyricsState by viewModel.lyricsState.collectAsStateWithLifecycle()
     val favoriteTrackIds by viewModel.favoriteTrackIds.collectAsStateWithLifecycle(emptySet())
     val isCurrentTrackFavorite = playbackStatus.track?.id?.let { it in favoriteTrackIds } == true
@@ -90,6 +92,7 @@ internal fun EchoNowPlayingHost(
         isCurrentTrackFavorite = isCurrentTrackFavorite,
         onToggleFavorite = { viewModel.toggleFavorite() },
         openLyricsRequestId = openLyricsRequestId,
+        predictiveBackProgress = predictiveBackProgress,
         modifier = modifier.fillMaxSize(),
     )
 }

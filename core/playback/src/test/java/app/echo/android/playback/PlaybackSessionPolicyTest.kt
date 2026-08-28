@@ -66,6 +66,60 @@ class PlaybackSessionPolicyTest {
     }
 
     @Test
+    fun usbTransitionStaysGaplessWhenSampleRateUnchanged() {
+        assertFalse(
+            PlaybackSessionPolicy.shouldMuteUsbTransition(
+                exclusiveStreaming = true,
+                streamingSampleRateHz = 44100,
+                nextTrackSampleRateHz = 44100,
+            ),
+        )
+    }
+
+    @Test
+    fun usbTransitionMutesWhenSampleRateChanges() {
+        assertTrue(
+            PlaybackSessionPolicy.shouldMuteUsbTransition(
+                exclusiveStreaming = true,
+                streamingSampleRateHz = 44100,
+                nextTrackSampleRateHz = 96000,
+            ),
+        )
+    }
+
+    @Test
+    fun usbTransitionMutesWhenSessionNotStreamingOrRateUnknown() {
+        assertTrue(
+            PlaybackSessionPolicy.shouldMuteUsbTransition(
+                exclusiveStreaming = false,
+                streamingSampleRateHz = 44100,
+                nextTrackSampleRateHz = 44100,
+            ),
+        )
+        assertTrue(
+            PlaybackSessionPolicy.shouldMuteUsbTransition(
+                exclusiveStreaming = true,
+                streamingSampleRateHz = null,
+                nextTrackSampleRateHz = 44100,
+            ),
+        )
+        assertTrue(
+            PlaybackSessionPolicy.shouldMuteUsbTransition(
+                exclusiveStreaming = true,
+                streamingSampleRateHz = 44100,
+                nextTrackSampleRateHz = null,
+            ),
+        )
+        assertTrue(
+            PlaybackSessionPolicy.shouldMuteUsbTransition(
+                exclusiveStreaming = true,
+                streamingSampleRateHz = 44100,
+                nextTrackSampleRateHz = 0,
+            ),
+        )
+    }
+
+    @Test
     fun usbUnmuteDoesNotRestoreZero() {
         assertEquals(0.75f, PlaybackSessionPolicy.restoredVolumeAfterUsbMute(0f, 0.75f))
         assertEquals(0.4f, PlaybackSessionPolicy.restoredVolumeAfterUsbMute(0.4f, 1f), 0.0001f)
@@ -276,24 +330,5 @@ class PlaybackSessionPolicyTest {
         )
         assertEquals(2, PlaybackSessionPolicy.queueStartIndex(listOf("a", "b", "c"), "c"))
         assertEquals(0, PlaybackSessionPolicy.queueStartIndex(listOf("a", "b"), "missing"))
-    }
-
-    @Test
-    fun tickerPositionIsCopiedOntoPlaybackStatus() {
-        val status = app.echo.android.model.playback.EchoPlaybackStatus(positionMs = 0L, durationMs = 10_000L)
-        val live = app.echo.android.model.playback.PlaybackPositionState(
-            positionMs = 12_500L,
-            durationMs = 180_000L,
-        )
-        val merged = PlaybackSessionPolicy.playbackStatusWithLivePosition(status, live)
-        assertEquals(12_500L, merged.positionMs)
-        assertEquals(180_000L, merged.durationMs)
-        assertEquals(
-            12_500L,
-            PlaybackSessionPolicy.playbackStatusWithLivePosition(
-                status.copy(positionMs = 3_000L),
-                live.copy(durationMs = 0L),
-            ).positionMs,
-        )
     }
 }

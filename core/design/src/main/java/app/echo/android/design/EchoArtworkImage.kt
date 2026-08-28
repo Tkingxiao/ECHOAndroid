@@ -47,7 +47,7 @@ fun EchoArtworkImage(
     artworkUri: String?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(16.dp),
+    shape: Shape = RoundedCornerShape(14.dp),
     sizeClass: EchoArtworkSize = EchoArtworkSize.Thumbnail,
 ) {
     EchoArtworkImage(
@@ -67,7 +67,7 @@ internal fun EchoArtworkImage(
     artworkUri: String?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(16.dp),
+    shape: Shape = RoundedCornerShape(14.dp),
     sizeClass: EchoArtworkSize = EchoArtworkSize.Thumbnail,
     accent: Color = EchoAccent,
     showSignal: Boolean = false,
@@ -148,12 +148,12 @@ private fun EchoArtworkPlaceholder(
     val dark = LocalEchoDarkTheme.current
     val motifSize = iconSize ?: sizeClass.defaultMotifSize(showSignal)
     val baseColors = if (dark) {
-        listOf(Color(0xFF20232B), Color(0xFF161A22), Color(0xFF0F1218))
+        listOf(Color(0xFF202126), Color(0xFF16161A), Color(0xFF101014))
     } else {
-        listOf(Color(0xFFEAF0F8), Color(0xFFF8F2F5), Color.White)
+        listOf(Color(0xFFF3F0F2), Color(0xFFF8F2F5), Color.White)
     }
     val primaryGlow = if (dark) scheme.primary.copy(alpha = 0.34f) else accent.copy(alpha = 0.30f)
-    val secondaryGlow = if (dark) Color(0xFF8FA6B4).copy(alpha = 0.18f) else Color(0xFFB7C8D9).copy(alpha = 0.24f)
+    val secondaryGlow = if (dark) Color(0xFFB8A3AA).copy(alpha = 0.18f) else Color(0xFFD4C0C6).copy(alpha = 0.24f)
     Box(Modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             val width = size.width
@@ -211,7 +211,7 @@ private fun EchoArtworkPlaceholder(
                 style = Stroke(width = (minSide * 0.035f).coerceAtLeast(1.5f)),
             )
             drawCircle(
-                color = if (dark) Color(0xFF121720).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.82f),
+                color = if (dark) Color(0xFF121214).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.82f),
                 radius = motifRadius * 0.22f,
                 center = recordCenter,
             )

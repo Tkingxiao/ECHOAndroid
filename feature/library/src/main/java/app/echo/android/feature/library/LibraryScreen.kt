@@ -1,15 +1,6 @@
 package app.echo.android.feature.library
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -83,11 +74,18 @@ import androidx.paging.PagingData
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import app.echo.android.design.ArtworkTile
+import app.echo.android.design.EchoColors
+import app.echo.android.design.EchoMotion
 import app.echo.android.design.EchoContentMaxWidth
+import app.echo.android.design.EchoDarkGlassBorder
 import app.echo.android.design.EchoGlassBorder
+import app.echo.android.design.EchoGlassInk
+import app.echo.android.design.EchoGlassNight
+import app.echo.android.design.EchoGlassPanel
 import app.echo.android.design.EchoHomeMist
 import app.echo.android.design.EchoPanel
 import app.echo.android.design.EmptyState
+import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.LocalEchoWidthSizeClass
 import app.echo.android.design.PageChrome
 import app.echo.android.design.echoString
@@ -112,7 +110,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
-private val LibraryFolderMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
 private val LinkedLibraryHeaderTopPadding = 10.dp
 private val LinkedLibraryHeaderRowHeight = 56.dp
 private val LinkedLibraryHeaderBottomSpacing = 8.dp
@@ -225,15 +222,41 @@ private sealed interface LibraryDetailTransitionTarget {
         val artist: ArtistSummary,
         val tracks: LazyPagingItems<EchoTrack>,
     ) : LibraryDetailTransitionTarget
-}
 
-private sealed interface LibraryFolderTransitionTarget {
-    object Browser : LibraryFolderTransitionTarget
-
-    data class Detail(
+    data class FolderDetail(
         val folder: FolderSummary,
         val tracks: LazyPagingItems<EchoTrack>,
-    ) : LibraryFolderTransitionTarget
+    ) : LibraryDetailTransitionTarget
+
+    data class PlaylistDetail(
+        val playlist: EchoPlaylist,
+        val tracks: LazyPagingItems<EchoTrack>,
+    ) : LibraryDetailTransitionTarget
+}
+
+/**
+ * 互联曲库的详情过渡目标。数据随目标一起捕获,
+ * 保证 AnimatedContent 退场的旧页面渲染的仍是自己的内容。
+ */
+private sealed interface LinkedLibraryDetailTarget {
+    object Browser : LinkedLibraryDetailTarget
+
+    data class Album(
+        val album: AlbumSummary,
+        val tracks: List<EchoRemoteTrack>,
+    ) : LinkedLibraryDetailTarget
+
+    data class Artist(
+        val artist: ArtistSummary,
+        val tracks: List<EchoRemoteTrack>,
+    ) : LinkedLibraryDetailTarget
+
+    data class Playlist(
+        val playlist: EchoRemotePlaylist,
+        val tracks: List<EchoRemoteTrack>,
+        val isLoading: Boolean,
+        val error: String?,
+    ) : LinkedLibraryDetailTarget
 }
 
 @Composable
@@ -284,6 +307,7 @@ fun LibraryScreen(
     onShuffleArtist: (ArtistSummary) -> Unit,
     onPlayFolder: (FolderSummary) -> Unit,
     onPlayPlaylist: (EchoPlaylist) -> Unit,
+    onShufflePlaylist: (EchoPlaylist) -> Unit,
     onCreatePlaylist: (String) -> Unit,
     onRenamePlaylist: (EchoPlaylist, String) -> Unit,
     onDeletePlaylist: (EchoPlaylist) -> Unit,
@@ -504,7 +528,15 @@ fun LibraryScreen(
                         onSortModeChange = onTrackSortModeChange,
                     )
                     Box(modifier = Modifier.weight(1f)) {
-                        when (selectedMode) {
+                        AnimatedContent(
+                            targetState = selectedMode,
+                            transitionSpec = {
+                                EchoMotion.tabSwitch(targetState.ordinal > initialState.ordinal)
+                            },
+                            label = "library-mode-transition",
+                            modifier = Modifier.fillMaxSize(),
+                        ) { mode ->
+                        when (mode) {
                             LibraryViewMode.Songs -> {
                                 val trackItems = tracks.collectAsLazyPagingItems()
                                 val showInitialTrackLoading =
@@ -596,6 +628,7 @@ fun LibraryScreen(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
+                        }
                     }
                 }
             }
@@ -673,6 +706,7 @@ fun LibraryScreen(
                         tracks = playlistDetailTracks,
                         onBack = onCloseDetail,
                         onPlayAll = { onPlayPlaylist(livePlaylist) },
+                        onShuffle = { onShufflePlaylist(livePlaylist) },
                         onPlayTrack = { track ->
                             onPlayTrack(track, LibraryPlaybackOrigin.Playlist(livePlaylist.id))
                         },
@@ -689,7 +723,6 @@ fun LibraryScreen(
                         onAddToPlaylist = { track -> addToPlaylistTrack = track },
                         onPlayNext = playNext,
                         onEnqueue = enqueueTrack,
-                        showAudioInfoTags = showTrackAudioInfoTags,
                         modifier = Modifier.fillMaxSize(),
                     )
                     else -> LibrarySplitPlaceholder()
@@ -701,11 +734,20 @@ fun LibraryScreen(
     // 详情页走全屏沉浸式页面，不套用曲库的 PageChrome
     val activeAlbumDetail = selectedAlbum
     val activeArtistDetail = selectedArtist
+    val activeFolderDetail = selectedFolder
+    val activePlaylistDetail = selectedPlaylist
     val detailTransitionTarget = when {
         activeAlbumDetail != null && albumDetailTracks != null ->
             LibraryDetailTransitionTarget.AlbumDetail(activeAlbumDetail, albumDetailTracks)
         activeArtistDetail != null && artistDetailTracks != null ->
             LibraryDetailTransitionTarget.ArtistDetail(activeArtistDetail, artistDetailTracks)
+        activeFolderDetail != null && folderDetailTracks != null ->
+            LibraryDetailTransitionTarget.FolderDetail(activeFolderDetail, folderDetailTracks)
+        activePlaylistDetail != null && playlistDetailTracks != null -> {
+            val livePlaylist = playlists.firstOrNull { it.id == activePlaylistDetail.id }
+                ?: activePlaylistDetail
+            LibraryDetailTransitionTarget.PlaylistDetail(livePlaylist, playlistDetailTracks)
+        }
         else -> LibraryDetailTransitionTarget.Browser
     }
 
@@ -716,37 +758,15 @@ fun LibraryScreen(
                 LibraryDetailTransitionTarget.Browser -> "library-browser"
                 is LibraryDetailTransitionTarget.AlbumDetail -> "album:${target.album.albumKey}"
                 is LibraryDetailTransitionTarget.ArtistDetail -> "artist:${target.artist.artistKey}"
+                is LibraryDetailTransitionTarget.FolderDetail -> "folder:${target.folder.folderKey}"
+                is LibraryDetailTransitionTarget.PlaylistDetail -> "playlist:${target.playlist.id}"
             }
         },
         transitionSpec = {
             if (targetState != LibraryDetailTransitionTarget.Browser) {
-                val enter = slideInHorizontally(tween(durationMillis = 380, easing = LibraryFolderMotionEasing)) { it / 4 } +
-                    fadeIn(tween(durationMillis = 220, easing = LibraryFolderMotionEasing)) +
-                    scaleIn(
-                        initialScale = 0.985f,
-                        animationSpec = tween(durationMillis = 380, easing = LibraryFolderMotionEasing),
-                    )
-                val exit = slideOutHorizontally(tween(durationMillis = 240, easing = LibraryFolderMotionEasing)) { -it / 10 } +
-                    fadeOut(tween(durationMillis = 150, easing = LibraryFolderMotionEasing)) +
-                    scaleOut(
-                        targetScale = 0.992f,
-                        animationSpec = tween(durationMillis = 240, easing = LibraryFolderMotionEasing),
-                    )
-                enter togetherWith exit
+                EchoMotion.pagePush()
             } else {
-                val enter = slideInHorizontally(tween(durationMillis = 300, delayMillis = 35, easing = LibraryFolderMotionEasing)) { -it / 7 } +
-                    fadeIn(tween(durationMillis = 190, delayMillis = 55, easing = LibraryFolderMotionEasing)) +
-                    scaleIn(
-                        initialScale = 0.992f,
-                        animationSpec = tween(durationMillis = 300, delayMillis = 35, easing = LibraryFolderMotionEasing),
-                    )
-                val exit = slideOutHorizontally(tween(durationMillis = 320, easing = LibraryFolderMotionEasing)) { it / 3 } +
-                    fadeOut(tween(durationMillis = 180, easing = LibraryFolderMotionEasing)) +
-                    scaleOut(
-                        targetScale = 0.985f,
-                        animationSpec = tween(durationMillis = 320, easing = LibraryFolderMotionEasing),
-                    )
-                enter togetherWith exit
+                EchoMotion.pagePop()
             }
         },
         label = "library-detail-transition",
@@ -787,105 +807,47 @@ fun LibraryScreen(
                 onEnqueue = enqueueTrack,
                 modifier = Modifier.fillMaxSize(),
             )
-            LibraryDetailTransitionTarget.Browser -> {
-
-                val activeFolderDetail = selectedFolder
-                val activePlaylistDetail = selectedPlaylist
-                val folderTransitionTarget =
-                    if (activeFolderDetail != null && folderDetailTracks != null) {
-                        LibraryFolderTransitionTarget.Detail(activeFolderDetail, folderDetailTracks)
-                    } else {
-                        LibraryFolderTransitionTarget.Browser
-                    }
-                if (activePlaylistDetail != null && playlistDetailTracks != null) {
-                    val livePlaylist = playlists.firstOrNull { it.id == activePlaylistDetail.id }
-                        ?: activePlaylistDetail
-                    PlaylistDetailPage(
-                        playlist = livePlaylist,
-                        tracks = playlistDetailTracks,
-                        onBack = onCloseDetail,
-                        onPlayAll = { onPlayPlaylist(livePlaylist) },
-                        onPlayTrack = { track ->
-                            onPlayTrack(track, LibraryPlaybackOrigin.Playlist(livePlaylist.id))
-                        },
-                        onRenamePlaylist = { name -> onRenamePlaylist(livePlaylist, name) },
-                        onDeletePlaylist = {
-                            onDeletePlaylist(livePlaylist)
-                            onCloseDetail()
-                        },
-                        onRemoveTrack = { track -> onRemoveTrackFromPlaylist(livePlaylist, track) },
-                        onMoveTrack = { from, to -> onReorderPlaylistTracks(livePlaylist, from, to) },
-                        onUpdateTrackMetadata = onUpdateTrackMetadata,
-                        onImportLyrics = onImportLyricsForTrack,
-                        onPickArtwork = onPickTrackArtwork,
-                        onAddToPlaylist = { track -> addToPlaylistTrack = track },
-                        onPlayNext = playNext,
-                        onEnqueue = enqueueTrack,
-                        showAudioInfoTags = showTrackAudioInfoTags,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    return@AnimatedContent
-                }
-
-                AnimatedContent(
-                    targetState = folderTransitionTarget,
-                    contentKey = { target ->
-                        when (target) {
-                            LibraryFolderTransitionTarget.Browser -> "folder-browser"
-                            is LibraryFolderTransitionTarget.Detail -> target.folder.folderKey
-                        }
-                    },
-                    transitionSpec = {
-                        if (targetState is LibraryFolderTransitionTarget.Detail) {
-                            val enter = slideInHorizontally(
-                                tween(durationMillis = 300, delayMillis = 24, easing = LibraryFolderMotionEasing),
-                            ) { it / 7 } +
-                                fadeIn(tween(durationMillis = 180, delayMillis = 36, easing = LibraryFolderMotionEasing))
-                            val exit = slideOutHorizontally(
-                                tween(durationMillis = 180, easing = LibraryFolderMotionEasing),
-                            ) { -it / 28 } +
-                                fadeOut(tween(durationMillis = 110, easing = LibraryFolderMotionEasing))
-                            (enter togetherWith exit).apply {
-                                targetContentZIndex = 1f
-                            }
-                        } else {
-                            val enter = slideInHorizontally(
-                                tween(durationMillis = 180, delayMillis = 36, easing = LibraryFolderMotionEasing),
-                            ) { -it / 30 } +
-                                fadeIn(tween(durationMillis = 150, delayMillis = 30, easing = LibraryFolderMotionEasing))
-                            val exit = slideOutHorizontally(
-                                tween(durationMillis = 190, easing = LibraryFolderMotionEasing),
-                            ) { it / 7 } +
-                                fadeOut(tween(durationMillis = 120, easing = LibraryFolderMotionEasing))
-                            (enter togetherWith exit).apply {
-                                targetContentZIndex = -1f
-                            }
-                        }
-                    },
-                    label = "library-folder-detail-transition",
-                    modifier = Modifier.fillMaxSize(),
-                ) { target ->
-                    when (target) {
-                        is LibraryFolderTransitionTarget.Detail -> FolderDetailPage(
-                            folder = target.folder,
-                            tracks = target.tracks,
-                            onBack = onCloseDetail,
-                            onPlayAll = { onPlayFolder(target.folder) },
-                            onPlayTrack = { track ->
-                                onPlayTrack(track, LibraryPlaybackOrigin.Folder(target.folder.folderKey))
-                            },
-                            onUpdateTrackMetadata = onUpdateTrackMetadata,
-                            onImportLyrics = onImportLyricsForTrack,
-                            onPickArtwork = onPickTrackArtwork,
-                            onAddToPlaylist = { track -> addToPlaylistTrack = track },
-                            onPlayNext = playNext,
-                            onEnqueue = enqueueTrack,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                        LibraryFolderTransitionTarget.Browser -> LocalBrowserPane()
-                    }
-                }
-            }
+            is LibraryDetailTransitionTarget.FolderDetail -> FolderDetailPage(
+                folder = target.folder,
+                tracks = target.tracks,
+                onBack = onCloseDetail,
+                onPlayAll = { onPlayFolder(target.folder) },
+                onPlayTrack = { track ->
+                    onPlayTrack(track, LibraryPlaybackOrigin.Folder(target.folder.folderKey))
+                },
+                onUpdateTrackMetadata = onUpdateTrackMetadata,
+                onImportLyrics = onImportLyricsForTrack,
+                onPickArtwork = onPickTrackArtwork,
+                onAddToPlaylist = { track -> addToPlaylistTrack = track },
+                onPlayNext = playNext,
+                onEnqueue = enqueueTrack,
+                modifier = Modifier.fillMaxSize(),
+            )
+            is LibraryDetailTransitionTarget.PlaylistDetail -> PlaylistDetailPage(
+                playlist = target.playlist,
+                tracks = target.tracks,
+                onBack = onCloseDetail,
+                onPlayAll = { onPlayPlaylist(target.playlist) },
+                onShuffle = { onShufflePlaylist(target.playlist) },
+                onPlayTrack = { track ->
+                    onPlayTrack(track, LibraryPlaybackOrigin.Playlist(target.playlist.id))
+                },
+                onRenamePlaylist = { name -> onRenamePlaylist(target.playlist, name) },
+                onDeletePlaylist = {
+                    onDeletePlaylist(target.playlist)
+                    onCloseDetail()
+                },
+                onRemoveTrack = { track -> onRemoveTrackFromPlaylist(target.playlist, track) },
+                onMoveTrack = { from, to -> onReorderPlaylistTracks(target.playlist, from, to) },
+                onUpdateTrackMetadata = onUpdateTrackMetadata,
+                onImportLyrics = onImportLyricsForTrack,
+                onPickArtwork = onPickTrackArtwork,
+                onAddToPlaylist = { track -> addToPlaylistTrack = track },
+                onPlayNext = playNext,
+                onEnqueue = enqueueTrack,
+                modifier = Modifier.fillMaxSize(),
+            )
+            LibraryDetailTransitionTarget.Browser -> LocalBrowserPane()
         }
     }
     }
@@ -932,12 +894,13 @@ private fun LibrarySourceMenu(
     var expanded by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
     val accent = rememberLibraryControlColor()
+    val dark = LocalEchoDarkTheme.current
     Box(modifier = modifier) {
         Surface(
             modifier = Modifier.clickable { expanded = true },
             shape = RoundedCornerShape(8.dp),
-            color = scheme.surface.copy(alpha = 0.50f),
-            border = BorderStroke(1.dp, EchoGlassBorder),
+            color = if (dark) EchoGlassPanel.copy(alpha = 0.74f) else scheme.surface.copy(alpha = 0.50f),
+            border = BorderStroke(1.dp, if (dark) EchoDarkGlassBorder else EchoGlassBorder),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -1049,7 +1012,7 @@ private fun LibrarySourceScanButton(
                     zh = "切换曲库来源；长按扫描歌曲",
                     ja = "ライブラリのソースを切り替え。長押しで曲をスキャン",
                 ),
-                tint = if (scanState.error != null) Color(0xFFE0796E) else scheme.onSurface,
+                tint = if (scanState.error != null) EchoColors.Coral else scheme.onSurface,
                 modifier = Modifier
                     .padding(horizontal = 10.dp, vertical = 7.dp)
                     .size(20.dp),
@@ -1189,6 +1152,8 @@ private fun LinkedEchoLibraryPage(
         includeArtists,
         includePlaylists,
     ) {
+        // 输入防抖:按键会重启本协程,连续输入只保留最后一次全量 filter/sort/拼音构建
+        if (normalizedQuery.isNotEmpty()) delay(200)
         value = withContext(Dispatchers.Default) {
             LinkedLibraryCatalog.build(
                 tracks = tracks,
@@ -1260,42 +1225,69 @@ private fun LinkedEchoLibraryPage(
         }
     }
 
-    if (selectedAlbum != null) {
-        LinkedAlbumTracksPage(
+    val linkedDetailTarget = when {
+        selectedAlbum != null -> LinkedLibraryDetailTarget.Album(
             album = selectedAlbum,
             tracks = selectedAlbumTracks,
-            onBack = onCloseAlbum,
-            onPlayLinkedTrack = onPlayLinkedTrack,
-            onPlayLinkedQueue = onPlayLinkedQueue,
-            modifier = modifier,
         )
-        return
-    }
-    if (selectedArtist != null) {
-        LinkedArtistTracksPage(
+        selectedArtist != null -> LinkedLibraryDetailTarget.Artist(
             artist = selectedArtist,
             tracks = selectedArtistTracks,
-            onBack = onCloseArtist,
-            onPlayLinkedTrack = onPlayLinkedTrack,
-            onPlayLinkedQueue = onPlayLinkedQueue,
-            modifier = modifier,
         )
-        return
-    }
-    if (selectedPlaylist != null) {
-        LinkedPlaylistTracksPage(
+        selectedPlaylist != null -> LinkedLibraryDetailTarget.Playlist(
             playlist = selectedPlaylist,
             tracks = state.playlistTracks[selectedPlaylist.id].orEmpty(),
             isLoading = state.loadingPlaylistId == selectedPlaylist.id,
             error = state.error,
-            onBack = onClosePlaylist,
-            onPlayLinkedTrack = onPlayLinkedTrack,
-            onPlayLinkedQueue = onPlayLinkedQueue,
-            modifier = modifier,
         )
-        return
+        else -> LinkedLibraryDetailTarget.Browser
     }
-
+    AnimatedContent(
+        targetState = linkedDetailTarget,
+        contentKey = { target ->
+            when (target) {
+                LinkedLibraryDetailTarget.Browser -> "browser"
+                is LinkedLibraryDetailTarget.Album -> "album:${target.album.albumKey}"
+                is LinkedLibraryDetailTarget.Artist -> "artist:${target.artist.artistKey}"
+                is LinkedLibraryDetailTarget.Playlist -> "playlist:${target.playlist.id}"
+            }
+        },
+        transitionSpec = {
+            if (targetState == LinkedLibraryDetailTarget.Browser) EchoMotion.pagePop() else EchoMotion.pagePush()
+        },
+        label = "linked-library-detail",
+        modifier = modifier,
+    ) { target ->
+        if (target is LinkedLibraryDetailTarget.Album) {
+            LinkedAlbumTracksPage(
+                album = target.album,
+                tracks = target.tracks,
+                onBack = onCloseAlbum,
+                onPlayLinkedTrack = onPlayLinkedTrack,
+                onPlayLinkedQueue = onPlayLinkedQueue,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (target is LinkedLibraryDetailTarget.Artist) {
+            LinkedArtistTracksPage(
+                artist = target.artist,
+                tracks = target.tracks,
+                onBack = onCloseArtist,
+                onPlayLinkedTrack = onPlayLinkedTrack,
+                onPlayLinkedQueue = onPlayLinkedQueue,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (target is LinkedLibraryDetailTarget.Playlist) {
+            LinkedPlaylistTracksPage(
+                playlist = target.playlist,
+                tracks = target.tracks,
+                isLoading = target.isLoading,
+                error = target.error,
+                onBack = onClosePlaylist,
+                onPlayLinkedTrack = onPlayLinkedTrack,
+                onPlayLinkedQueue = onPlayLinkedQueue,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
     LinkedLibraryChrome(
         actions = {
             IconButton(onClick = { onRefresh(normalizedQuery) }, enabled = !state.isLoading) {
@@ -1315,7 +1307,7 @@ private fun LinkedEchoLibraryPage(
                 expandedWidth = 240.dp,
             )
         },
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
     ) {
         val errorMessage = state.error
         LinkedLibraryHeader(
@@ -1327,6 +1319,26 @@ private fun LinkedEchoLibraryPage(
             onSelectMode = onSelectMode,
             onSortModeChange = onSortModeChange,
         )
+        if (state.isLoadingMore) {
+            Text(
+                text = echoString(
+                    en = "Loading more from PC ECHO (${tracks.size}/${state.totalCount})...",
+                    zh = "正在继续读取 PC ECHO 曲库(${tracks.size}/${state.totalCount})...",
+                    ja = "PC ECHO ライブラリを継続読み込み中(${tracks.size}/${state.totalCount})...",
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+        }
+        AnimatedContent(
+            targetState = selectedMode,
+            transitionSpec = {
+                EchoMotion.tabSwitch(targetState.ordinal > initialState.ordinal)
+            },
+            label = "linked-library-mode",
+            modifier = Modifier.weight(1f),
+        ) { mode ->
         when {
             state.isLoading -> EmptyState(
                 echoString(
@@ -1336,7 +1348,7 @@ private fun LinkedEchoLibraryPage(
                 ),
             )
             !errorMessage.isNullOrBlank() -> EmptyState(errorMessage)
-            selectedMode == LinkedLibraryMode.Songs && sortedTracks.isEmpty() -> {
+            mode == LinkedLibraryMode.Songs && sortedTracks.isEmpty() -> {
                 EmptyState(
                     if (query.isBlank()) {
                         echoString(
@@ -1353,7 +1365,7 @@ private fun LinkedEchoLibraryPage(
                     },
                 )
             }
-            selectedMode == LinkedLibraryMode.Albums && albums.isEmpty() -> {
+            mode == LinkedLibraryMode.Albums && albums.isEmpty() -> {
                 EmptyState(
                     if (query.isBlank()) {
                         echoString(
@@ -1370,7 +1382,7 @@ private fun LinkedEchoLibraryPage(
                     },
                 )
             }
-            selectedMode == LinkedLibraryMode.Artists && artists.isEmpty() -> {
+            mode == LinkedLibraryMode.Artists && artists.isEmpty() -> {
                 EmptyState(
                     if (query.isBlank()) {
                         echoString(
@@ -1387,7 +1399,7 @@ private fun LinkedEchoLibraryPage(
                     },
                 )
             }
-            selectedMode == LinkedLibraryMode.Playlists && filteredPlaylists.isEmpty() -> {
+            mode == LinkedLibraryMode.Playlists && filteredPlaylists.isEmpty() -> {
                 EmptyState(
                     if (query.isBlank()) {
                         echoString(
@@ -1404,28 +1416,31 @@ private fun LinkedEchoLibraryPage(
                     },
                 )
             }
-            selectedMode == LinkedLibraryMode.Songs -> LinkedTrackList(
+            mode == LinkedLibraryMode.Songs -> LinkedTrackList(
                 tracks = sortedTracks,
                 onPlayLinkedTrack = onPlayLinkedTrack,
                 showAudioInfoTags = showTrackAudioInfoTags,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
             )
-            selectedMode == LinkedLibraryMode.Albums -> LinkedAlbumWall(
+            mode == LinkedLibraryMode.Albums -> LinkedAlbumWall(
                 albums = albums,
                 onOpenAlbum = onOpenAlbum,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
             )
-            selectedMode == LinkedLibraryMode.Artists -> LinkedArtistWall(
+            mode == LinkedLibraryMode.Artists -> LinkedArtistWall(
                 artists = artists,
                 onOpenArtist = onOpenArtist,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
             )
-            selectedMode == LinkedLibraryMode.Playlists -> LinkedPlaylistList(
+            mode == LinkedLibraryMode.Playlists -> LinkedPlaylistList(
                 playlists = filteredPlaylists,
                 onOpenPlaylist = onOpenPlaylist,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
             )
         }
+            }
+        }
+    }
     }
 }
 
@@ -1503,16 +1518,25 @@ private fun LinkedLibraryChrome(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val dark = LocalEchoDarkTheme.current
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.30f),
-                        EchoHomeMist.copy(alpha = 0.22f),
-                        Color.Transparent,
-                    ),
+                    if (dark) {
+                        listOf(
+                            EchoGlassNight.copy(alpha = 0.62f),
+                            EchoGlassInk.copy(alpha = 0.44f),
+                            Color.Transparent,
+                        )
+                    } else {
+                        listOf(
+                            Color.White.copy(alpha = 0.30f),
+                            EchoHomeMist.copy(alpha = 0.22f),
+                            Color.Transparent,
+                        )
+                    },
                 ),
             )
             .statusBarsPadding()
@@ -1598,11 +1622,12 @@ private fun LinkedPlaylistRow(
     onOpen: () -> Unit,
 ) {
     val accent = rememberLibraryControlColor()
+    val dark = LocalEchoDarkTheme.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(EchoHomeMist.copy(alpha = 0.46f))
+            .background(if (dark) EchoGlassPanel.copy(alpha = 0.50f) else EchoHomeMist.copy(alpha = 0.46f))
             .clickable(onClick = onOpen)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1635,7 +1660,7 @@ private fun LinkedPlaylistRow(
         Surface(
             modifier = Modifier.size(38.dp),
             color = accent.copy(alpha = 0.10f),
-            border = BorderStroke(1.dp, EchoGlassBorder),
+            border = BorderStroke(1.dp, if (dark) EchoDarkGlassBorder else EchoGlassBorder),
             shape = RoundedCornerShape(12.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {

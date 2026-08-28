@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -95,6 +96,8 @@ class EchoLibraryRepository(
 
     fun observeAlbumListenStats(): Flow<List<LibraryAlbumListenStatsRow>> =
         database.trackDao().observeAlbumListenStats()
+            // GROUP BY 大查询在任何 join 表失效时都会重跑;结果没变就不向下游发射
+            .distinctUntilChanged()
             .flowOn(Dispatchers.IO)
 
     fun pagedAlbums(
@@ -694,6 +697,8 @@ class EchoLibraryRepository(
                     totalCount = count
                     emitProgress(phase = LibraryScanPhase.QueryingMediaStore)
                 },
+                // 增量扫描中未变的行不再走全列拉取,只上报 id 供删除检测
+                onUnchangedIds = { ids -> seenIds.addAll(ids) },
                 onProgress = { count, currentTrack ->
                     scannedCount = count
                     val now = System.currentTimeMillis()
@@ -745,12 +750,23 @@ class EchoLibraryRepository(
                 dao = dao,
                 completeness = completeness,
                 missingIds = {
-                    val existingIds = if (relativePathLike == null) {
-                        dao.getIdsFromSource(source)
+                    val existingRows = if (relativePathLike == null) {
+                        dao.getIdPathsFromSource(source)
                     } else {
-                        dao.getIdsFromRelativePath(source, relativePathLike)
-                    }.filter(LibraryScanPolicy::isMediaStoreNativeId)
-                    LibraryScanPolicy.unseenIds(existingIds, seenIds)
+                        dao.getIdPathsFromRelativePath(source, relativePathLike)
+                    }
+                    // 只允许删"本次完整扫过的卷"里的行:SD 卡未挂载或该卷查询失败时,
+                    // 其曲目保持原样,防止整卷误删(连带用户元数据编辑丢失)
+                    val candidateIds = existingRows
+                        .filter { LibraryScanPolicy.isMediaStoreNativeId(it.id) }
+                        .filter {
+                            LibraryScanPolicy.mediaStoreRowWithinVolumeScopes(
+                                relativePath = it.relativePath,
+                                scopes = scanOutcome.completeVolumeScopes,
+                            )
+                        }
+                        .map { it.id }
+                    LibraryScanPolicy.unseenIds(candidateIds, seenIds)
                 },
             )
             rebuildSummariesIfNeeded(dao, changedSummaries + deletion.summaryKeys)
@@ -848,6 +864,20 @@ class EchoLibraryRepository(
                     )
                 ).associateBy(LibraryTrackEntity::id)
             val seenIds = HashSet<String>(existingFingerprints.size)
+            // 同一文件可能已被全库 MediaStore 扫描收录:按 目录+大小+mtime 识别重复,
+            // MediaStore 行优先(id 稳定、带专辑封面),重复的 SAF 行随本次清理删除
+            val mediaStoreDuplicateKeys = dao.getExistingMediaStoreFingerprintsInRelativePath(
+                source = LibrarySource.MediaStore.id,
+                relativePathLike = relativePathLike,
+            )
+                .filter { LibraryScanPolicy.isMediaStoreNativeId(it.id) }
+                .mapNotNullTo(HashSet()) {
+                    LibraryScanPolicy.localFileDuplicateKey(
+                        relativePath = it.relativePath,
+                        sizeBytes = it.sizeBytes,
+                        dateModifiedSeconds = it.dateModifiedSeconds,
+                    )
+                }
 
             emitProgress(phase = LibraryScanPhase.QueryingMediaStore)
             val scanOutcome = documentTreeScanner.scanAudioTree(
@@ -855,6 +885,7 @@ class EchoLibraryRepository(
                 relativePathPrefix = normalizedRelativePath,
                 batchSize = batchSize,
                 existingTracks = existingFingerprints,
+                mediaStoreDuplicateKeys = mediaStoreDuplicateKeys,
                 readSampleRate = !skipSampleRateRead,
                 onProgress = { count, currentTrack ->
                     scannedCount = count
@@ -1062,7 +1093,27 @@ class EchoLibraryRepository(
                 )
                 ingestSongs(bulkSongs, title = "search3")
             } else {
-                for (chunk in albums.chunked(SubsonicSyncPolicy.AlbumFetchConcurrency)) {
+                // 回退路径去 N+1:与本地库按 albumKey 比对,未变专辑跳过 getAlbum,
+                // 只把其本地曲目标记为 seen(轮换窗口内的照常强刷)
+                val fallbackPlan = SubsonicSyncPolicy.planAlbumFallbackSync(
+                    albums = albums,
+                    localTrackIdsByAlbumKey = dao.getTrackAlbumKeys(source)
+                        .groupBy({ it.albumKey }, { it.id }),
+                    refreshSalt = scanRunId,
+                )
+                if (fallbackPlan.skippedAlbumCount > 0) {
+                    seenIds.addAll(fallbackPlan.seenTrackIds)
+                    scannedCount += fallbackPlan.skippedTrackCount
+                    emitProgress(
+                        phase = LibraryScanPhase.QueryingMediaStore,
+                        currentTitle = echoText(
+                            en = "Skipped ${fallbackPlan.skippedAlbumCount} unchanged albums",
+                            zh = "已跳过 ${fallbackPlan.skippedAlbumCount} 张未变专辑",
+                            ja = "変更のないアルバム ${fallbackPlan.skippedAlbumCount} 枚をスキップ",
+                        ),
+                    )
+                }
+                for (chunk in fallbackPlan.albumsToFetch.chunked(SubsonicSyncPolicy.AlbumFetchConcurrency)) {
                     coroutineContext.ensureActive()
                     val chunkSongs = coroutineScope {
                         chunk.map { album ->

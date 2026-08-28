@@ -1,7 +1,7 @@
 package app.echo.android
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -34,10 +34,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,15 +54,21 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import app.echo.android.design.EchoAccent
+import app.echo.android.design.EchoHomeMist
+import app.echo.android.design.EchoMotion
 import app.echo.android.design.echoDarkGlassBorder
 import app.echo.android.design.LocalEchoDarkTheme
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.collectLatest
 
-private val DockItemMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
-private val DockGlassShape = RoundedCornerShape(31.dp)
+private val DockItemMotionEasing = EchoMotion.Silk
+private val DockGlassShape = RoundedCornerShape(28.dp)
 private val DockItemShape = RoundedCornerShape(22.dp)
-private val DockSelectedBlue = Color(0xFFD3A9B5)
+private val DockSelectedRose = EchoAccent
 
 enum class EchoTab(
     val icon: ImageVector,
@@ -84,10 +93,11 @@ private fun EchoTab.label(): String =
 @Composable
 fun BottomDock(
     selectedTab: Int,
-    selectedTabProgress: Float = selectedTab.toFloat(),
     onLightSurface: Boolean,
     onSelectTab: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    selectedTabProgress: () -> Float = { selectedTab.toFloat() },
+    progressLive: Boolean = false,
 ) {
     val dark = LocalEchoDarkTheme.current
     val density = LocalDensity.current
@@ -123,7 +133,7 @@ fun BottomDock(
                             ),
                         )
                     } else {
-                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.72f), Color(0xFFEAF2FF).copy(alpha = 0.86f)))
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.72f), EchoHomeMist.copy(alpha = 0.86f)))
                     },
                 )
                 .border(
@@ -174,17 +184,32 @@ fun BottomDock(
             }
             val tabWidth = maxWidth / tabCount
             val tabWidthPx = with(density) { tabWidth.toPx() }.coerceAtLeast(1f)
-            val dragProgress = (-dragOffsetX / tabWidthPx).coerceIn(-1f, 1f)
-            val targetIndicatorProgress = (selectedTabProgress + dragProgress)
-                .coerceIn(0f, EchoTab.entries.lastIndex.toFloat())
-            val indicatorProgress by animateFloatAsState(
-                targetValue = targetIndicatorProgress,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
-                label = "dock-selected-pill-position",
-            )
+            val maxIndicatorIndex = EchoTab.entries.lastIndex.toFloat()
+            val progressLiveState = rememberUpdatedState(progressLive)
+            val selectedTabProgressState = rememberUpdatedState(selectedTabProgress)
+            val indicatorAnim = remember { Animatable(selectedTabProgress().coerceIn(0f, maxIndicatorIndex)) }
+            // 手指驱动(pager 滑动 / dock 拖拽)时指示条 1:1 直跟,离散跳转(点按)才走弹簧,
+            // 避免弹簧追赶连续目标带来的滞后感。
+            LaunchedEffect(tabWidthPx) {
+                snapshotFlow {
+                    val dragProgress = (-dragOffsetX / tabWidthPx).coerceIn(-1f, 1f)
+                    val target = (selectedTabProgressState.value() + dragProgress)
+                        .coerceIn(0f, maxIndicatorIndex)
+                    target to (progressLiveState.value || dragOffsetX != 0f)
+                }.collectLatest { (target, live) ->
+                    if (live) {
+                        indicatorAnim.snapTo(target)
+                    } else if (target != indicatorAnim.targetValue || target != indicatorAnim.value) {
+                        indicatorAnim.animateTo(
+                            targetValue = target,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = 420f,
+                            ),
+                        )
+                    }
+                }
+            }
             val indicatorBrush = when {
                 onLightSurface -> Brush.horizontalGradient(
                     listOf(
@@ -194,7 +219,7 @@ fun BottomDock(
                 )
                 else -> Brush.horizontalGradient(
                     listOf(
-                        DockSelectedBlue.copy(alpha = 0.16f),
+                        DockSelectedRose.copy(alpha = 0.16f),
                         Color.White.copy(alpha = 0.05f),
                     ),
                 )
@@ -202,7 +227,7 @@ fun BottomDock(
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .offset(x = tabWidth * indicatorProgress)
+                    .offset { IntOffset(x = (tabWidthPx * indicatorAnim.value).roundToInt(), y = 0) }
                     .width(tabWidth)
                     .height(50.dp)
                     .padding(horizontal = 3.dp, vertical = 2.dp)
@@ -239,7 +264,7 @@ private fun DockItem(
     val scheme = MaterialTheme.colorScheme
     val targetIconColor = when {
         selected && onLightSurface -> scheme.onSurface
-        selected -> DockSelectedBlue
+        selected -> DockSelectedRose
         onLightSurface -> scheme.onSurfaceVariant
         else -> Color.White.copy(alpha = 0.70f)
     }
@@ -261,7 +286,10 @@ private fun DockItem(
     )
     val iconScale by animateFloatAsState(
         targetValue = if (selected) 1.04f else 0.90f,
-        animationSpec = tween(durationMillis = 220, easing = DockItemMotionEasing),
+        animationSpec = spring(
+            dampingRatio = 0.72f,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
         label = "dock-icon-scale",
     )
     Box(

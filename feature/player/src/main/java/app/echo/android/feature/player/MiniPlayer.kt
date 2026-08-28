@@ -2,7 +2,6 @@ package app.echo.android.feature.player
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -38,10 +37,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,7 +63,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.echo.android.design.ArtworkTile
 import app.echo.android.design.EchoAccent
+import app.echo.android.design.echoAccentColor
 import app.echo.android.design.EchoDarkGlassBorder
+import app.echo.android.design.EchoGlassBorder
+import app.echo.android.design.EchoMotion
 import app.echo.android.design.LocalEchoDarkTheme
 import app.echo.android.design.LocalEchoEffectivePerformanceMode
 import app.echo.android.design.echoString
@@ -71,8 +77,16 @@ import app.echo.android.model.playback.EchoPlaybackStatus
 import app.echo.android.model.playback.PlaybackPositionState
 import kotlinx.coroutines.launch
 
-private val MiniPlayerMotionEasing = CubicBezierEasing(0.16f, 1f, 0.30f, 1f)
-private val MiniPlayerGlassBlue = Color(0xFFD3A9B5)
+private val MiniPlayerMotionEasing = EchoMotion.Silk
+private val MiniPlayerGlassRose = EchoAccent
+private val MiniPlayerSwipeOutSpring = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = 640f,
+)
+private val MiniPlayerSwipeReturnSpring = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+)
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -80,7 +94,7 @@ fun MiniPlayer(
     status: EchoPlaybackStatus,
     onPlayPause: () -> Unit,
     modifier: Modifier = Modifier,
-    positionState: PlaybackPositionState? = null,
+    positionState: State<PlaybackPositionState>? = null,
     onHideDock: (() -> Unit)? = null,
     onShowDock: (() -> Unit)? = null,
     onOpenQueue: (() -> Unit)? = null,
@@ -97,8 +111,13 @@ fun MiniPlayer(
     val trackEntrance = remember { Animatable(1f) }
     var widthPx by remember { mutableStateOf(1f) }
     val canSwitch = onNext != null && onPrevious != null && status.track != null
-    val activePositionMs = positionState?.positionMs ?: status.positionMs
-    val activeDurationMs = positionState?.durationMs?.takeIf { it > 0L } ?: status.durationMs
+    // 进度经 State 引用传入,tick 不重组整卡:进度条用 progress lambda 在绘制期读值
+    val statusState = rememberUpdatedState(status)
+    val activeDurationMs by remember(positionState) {
+        derivedStateOf {
+            positionState?.value?.durationMs?.takeIf { it > 0L } ?: statusState.value.durationMs
+        }
+    }
     val compactDock = onShowDock != null || onOpenQueue != null
     val cornerRadius by animateDpAsState(
         targetValue = if (compactDock) 28.dp else 20.dp,
@@ -112,10 +131,10 @@ fun MiniPlayer(
     )
     val borderColor by animateColorAsState(
         targetValue = when {
-            dark && status.isPlaying -> MiniPlayerGlassBlue.copy(alpha = 0.18f)
+            dark && status.isPlaying -> MiniPlayerGlassRose.copy(alpha = 0.18f)
             dark -> Color.White.copy(alpha = 0.08f)
             status.isPlaying -> scheme.primary.copy(alpha = 0.22f)
-            else -> Color(0xFFE9E9EC)
+            else -> EchoGlassBorder
         },
         animationSpec = tween(durationMillis = miniPlayerMotionDuration(320, lightweight), easing = MiniPlayerMotionEasing),
         label = "mini-player-border",
@@ -163,8 +182,8 @@ fun MiniPlayer(
                         if (compactDock) {
                             listOf(
                                 Color.White,
-                                Color(0xFFFBFCFF),
-                                Color(0xFFF3F7FE),
+                                Color(0xFFFBF9FA),
+                                Color(0xFFF5F2F3),
                             )
                         } else {
                             listOf(
@@ -228,36 +247,54 @@ fun MiniPlayer(
                     .then(
                         if (canSwitch) {
                             Modifier.pointerInput(status.track?.id) {
+                                val velocityTracker = VelocityTracker()
+                                val flingThresholdPx = 780.dp.toPx()
                                 detectHorizontalDragGestures(
+                                    onDragStart = { velocityTracker.resetTracking() },
                                     onHorizontalDrag = { change, dragAmount ->
                                         change.consume()
+                                        velocityTracker.addPosition(change.uptimeMillis, change.position)
                                         scope.launch { offsetX.snapTo(offsetX.value + dragAmount) }
                                     },
                                     onDragEnd = {
+                                        val velocity = velocityTracker.calculateVelocity().x
                                         val threshold = widthPx * 0.24f
                                         val settled = offsetX.value
+                                        // 松手动画继承手指速度:够远或够快都切歌,弹簧全程速度连续
                                         scope.launch {
                                             when {
-                                                settled <= -threshold -> {
-                                                    offsetX.animateTo(-widthPx, tween(160))
+                                                settled <= -threshold || (velocity <= -flingThresholdPx && settled < 0f) -> {
+                                                    offsetX.animateTo(
+                                                        targetValue = -widthPx,
+                                                        animationSpec = MiniPlayerSwipeOutSpring,
+                                                        initialVelocity = velocity,
+                                                    )
                                                     haptics.tick()
                                                     onNext()
                                                     offsetX.snapTo(widthPx)
-                                                    offsetX.animateTo(0f, tween(300))
+                                                    offsetX.animateTo(0f, MiniPlayerSwipeReturnSpring)
                                                 }
-                                                settled >= threshold -> {
-                                                    offsetX.animateTo(widthPx, tween(160))
+                                                settled >= threshold || (velocity >= flingThresholdPx && settled > 0f) -> {
+                                                    offsetX.animateTo(
+                                                        targetValue = widthPx,
+                                                        animationSpec = MiniPlayerSwipeOutSpring,
+                                                        initialVelocity = velocity,
+                                                    )
                                                     haptics.tick()
                                                     onPrevious()
                                                     offsetX.snapTo(-widthPx)
-                                                    offsetX.animateTo(0f, tween(300))
+                                                    offsetX.animateTo(0f, MiniPlayerSwipeReturnSpring)
                                                 }
-                                                else -> offsetX.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                                else -> offsetX.animateTo(
+                                                    targetValue = 0f,
+                                                    animationSpec = MiniPlayerSwipeReturnSpring,
+                                                    initialVelocity = velocity,
+                                                )
                                             }
                                         }
                                     },
                                     onDragCancel = {
-                                        scope.launch { offsetX.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                                        scope.launch { offsetX.animateTo(0f, MiniPlayerSwipeReturnSpring) }
                                     },
                                 )
                             }
@@ -271,7 +308,7 @@ fun MiniPlayer(
                 ArtworkTile(
                     artworkUri = status.track?.artworkUri,
                     modifier = Modifier.size(if (compactDock) 42.dp else 40.dp),
-                    accent = EchoAccent,
+                    accent = echoAccentColor(),
                     showSignal = false,
                     cornerRadius = if (compactDock) 13.dp else 11.dp,
                     elevation = 2.dp,
@@ -303,14 +340,19 @@ fun MiniPlayer(
                         fontWeight = FontWeight.SemiBold,
                     )
                     LinearProgressIndicator(
-                        progress = { progressFraction(activePositionMs, activeDurationMs) },
+                        // 在绘制期读进度 State:tick 只重绘进度条,不触发任何重组
+                        progress = {
+                            val positionMs = positionState?.value?.positionMs
+                                ?: statusState.value.positionMs
+                            progressFraction(positionMs, activeDurationMs)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = if (compactDock) 2.dp else 1.dp)
                             .height(2.dp)
                             .clip(RoundedCornerShape(99.dp))
                             .graphicsLayer { alpha = progressAlpha },
-                        color = if (dark) MiniPlayerGlassBlue.copy(alpha = 0.62f) else scheme.primary,
+                        color = if (dark) MiniPlayerGlassRose.copy(alpha = 0.62f) else scheme.primary,
                         trackColor = if (dark) Color.White.copy(alpha = 0.14f) else scheme.outlineVariant.copy(alpha = 0.90f),
                     )
                 }
@@ -335,14 +377,14 @@ fun MiniPlayer(
                     Icon(
                         imageVector = Icons.Rounded.PlayArrow,
                         contentDescription = echoString(en = "Play or pause", zh = "播放或暂停", ja = "再生または一時停止"),
-                        tint = if (dark) MiniPlayerGlassBlue else scheme.primary,
+                        tint = if (dark) MiniPlayerGlassRose else scheme.primary,
                         modifier = Modifier
                             .size(24.dp)
                             .alpha(if (status.isPlaying) 0f else 1f),
                     )
                     if (status.isPlaying) {
                         PauseBarsIcon(
-                            tint = if (dark) MiniPlayerGlassBlue else scheme.primary,
+                            tint = if (dark) MiniPlayerGlassRose else scheme.primary,
                             height = 20.dp,
                             barWidth = 5.dp,
                             gap = 5.dp,
