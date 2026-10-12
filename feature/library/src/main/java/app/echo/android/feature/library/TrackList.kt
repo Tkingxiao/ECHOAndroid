@@ -6,7 +6,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import app.echo.android.design.echoClickable
 import app.echo.android.design.echoCombinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -370,7 +369,7 @@ private enum class TrackSheetMode {
     Editor,
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TrackContextMenu(
     track: EchoTrack,
@@ -1171,7 +1170,7 @@ private fun formatTrackSampleRate(hz: Int): String =
     if (hz % 1000 == 0) {
         "${hz / 1000}kHz"
     } else {
-        String.format("%.1fkHz", hz / 1000.0)
+        String.format(java.util.Locale.ROOT, "%.1fkHz", hz / 1000.0)
     }
 
 private fun String.toPositiveIntOrNull(): Int? =
